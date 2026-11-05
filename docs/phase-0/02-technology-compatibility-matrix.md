@@ -48,3 +48,10 @@ A reasonable validation target is Node 24.22.2 LTS; Next 16.4.5 with a matching 
 ## Phase 0.1 compatibility addendum (2026-11-05 UTC)
 
 The table above records the Phase 0 research boundary. Phase 0.1 additionally checked registry `latest` metadata for the remaining approved packages and official docs for TanStack Table server modes, Tiptap React alignment and Storybook/Next configuration. Snapshot observations, peer ranges, a TanStack Table registry/docs version discrepancy, a Storybook/Vite+ peer mismatch, native Sharp deployment requirements and other gates are recorded in [13](../phase-0.1/13-technology-compatibility-resolution.md). These observations do not constitute a pinned lockfile or a compatible, tested application stack. Exact package decisions remain `PROPOSED` and no compatibility result is `VALIDATED`.
+
+
+## Phase 0.2 P09 governance status
+
+P09.1–P09.17 are owner-approved and P09 is `DECISION_COMPLETE`. These decisions establish compatibility governance, not exact version selections or proof that candidate combinations work together. The evidence date and registry observations above remain a historical 2026-11-05 UTC snapshot; they were not refreshed as part of P09 closure. No package is `TECHNICALLY_VALIDATED`.
+
+The approved approach is core-first and feature-driven: pin Node and one package manager, keep Next.js as production framework/build authority, align React/React DOM/TypeScript to supported Next.js versions, govern Prisma CLI/Client/Migrate with PostgreSQL/provider as one set, and test Better Auth/Prisma adapter/CASL integration. Vite+ remains optional. Exact versions, manager selection, lockfile, clean install, build, generated Prisma Client, migrations, security checks and deployment tests remain Phase 0.3 requirements. See [P09 closure](../phase-0.2/p09-technology-stack-decision-closure.md) and [P09 backlog](../phase-0.2/p09-phase-0.3-validation-backlog.md).

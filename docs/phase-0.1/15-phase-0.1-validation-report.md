@@ -59,3 +59,10 @@ This continuation is documentation reconciliation only. It does not claim that t
 The earlier Phase 0.1 snapshot recorded P08 as proposed. That status is superseded by the owner decision stream P08.1–P08.93: all 93 decisions are OWNER_APPROVED and P08 is DECISION_COMPLETE. The decision packet is recorded in [P08 closure](../phase-0.2/p08-prisma-multi-schema-decision-closure.md), [decision matrix](../phase-0.2/p08-decision-matrix.md), [traceability matrix](../phase-0.2/p08-traceability-matrix.md) and [Phase 0.3 validation backlog](../phase-0.2/p08-phase-0.3-validation-backlog.md).
 
 This continuation is documentation reconciliation only. No Prisma schema, generated client, migration, database, provider capability, pool/failover behavior or technical test is asserted to exist or pass. P08 technical validation remains pending; G08 remains uncleared until applicable in-scope P0 evidence is produced. P09 exact package/runtime pins, P10 session semantics and G10 operational decisions remain separate gates. Phase 1 remains NOT READY.
+
+
+## Phase 0.2 P09 continuation
+
+The earlier Phase 0.1 snapshot recorded P09 as proposed. That status is superseded by P09.1–P09.17: all 17 decisions are OWNER_APPROVED and P09 is DECISION_COMPLETE. The packet is recorded in [P09 closure](../phase-0.2/p09-technology-stack-decision-closure.md), [decision matrix](../phase-0.2/p09-decision-matrix.md), [traceability](../phase-0.2/p09-traceability-matrix.md) and [Phase 0.3 backlog](../phase-0.2/p09-phase-0.3-validation-backlog.md).
+
+This is documentation reconciliation only. No exact Node/package-manager/package versions were selected, no package manifest or lockfile was created, and no install, build, lint, typecheck, Prisma generation/migration, auth integration, security scan, browser test or deployment validation was run. The 2026-11-05 registry observations remain historical, not a current certification. G09 is not cleared; P10 remains a separate owner-decision gate. Phase 1 remains NOT READY.
