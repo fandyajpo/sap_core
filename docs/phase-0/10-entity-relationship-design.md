@@ -1,0 +1,37 @@
+# Entity Relationship Design (Conceptual)
+
+This is a relationship inventory, not a physical ERD. It describes likely cardinality and ownership while leaving cross-schema FK policy open. Every edge must be reviewed for company/plant consistency, delete behavior, lifecycle and historical snapshot needs before Prisma models are authored.
+
+## Organization and reference relationships
+
+| Relationship | Owning data | Conceptual cardinality | Design note |
+|---|---|---|---|
+| Organization/company → plants | `core` | One company/organization may contain zero or more plants; each plant belongs to a governed parent context | Do not conflate legal entity, organizational unit and physical plant. Composite company/plant integrity needs an owner decision. |
+| User ↔ organization/company membership | Placement unresolved (`core` candidate) | Many-to-many through an effective membership/role assignment concept | Authentication user and ERP membership are separate concepts; membership is authorization input, not a Better Auth role. |
+| Business partner → customer/vendor role | `master_data` | Partner may have zero or more role profiles, subject to product decision | Prevent duplicate party identity while allowing distinct role-specific data; legal identity policy unresolved. |
+| Product/material → unit of measure | `master_data` | Product/material references a base or transaction unit; conversions may be effective-dated | Canonical unit and conversion/rounding policy must be chosen before constraints. |
+| Chart of accounts → finance usage | Baseline `master_data`, consumer `finance` | Finance entries/lines reference account identifiers | Candidate cross-schema edge. Owner conflict and FK policy unresolved; preserve account-at-posting semantics. |
+
+## Operational documents
+
+| Relationships | Owning schemas | Integrity/history intent |
+|---|---|---|
+| Requisition → lines; purchase order → lines; receipt → lines; vendor invoice → lines | `procurement` | Header-to-lines aggregate; ordered, received and invoiced quantities remain separate. Source links preserve conversion from request to commitment to observation/claim. |
+| Goods receipt → inventory movement | Procurement coordinates; inventory owns movement | Receipt command asks inventory owner to record an idempotent movement; do not write inventory tables directly from procurement. |
+| Storage location → stock balance; movement → source/destination locations | `inventory` | Balance is a projection keyed by approved stock dimensions; movements are append-oriented facts with traceable source. Transfers are linked source/destination movements or one explicit transfer aggregate per final design. |
+| Quotation → sales order → delivery → billing document | `sales` | Separate offer, accepted order, fulfillment and billing. Conversion links and snapshots preserve accepted terms. |
+| Sales delivery/order → inventory reservation/issue | Sales coordinates; inventory owns reservation/movement | Authoritative inventory contract at command time; concurrency and negative-stock policy remain open. |
+| Sales/procurement/production source → finance subledger/journal | Source module + `finance` | Finance owns accounting effects. Stable source identity, idempotency and correction links prevent duplicate posting. |
+| BOM revision → production order snapshot → confirmations | `production` | Released order references immutable revision/snapshot; confirmation records actual activity and input/output facts. |
+| Production confirmation → inventory consumption/output | Production coordinates; inventory owns movement | Single local transaction where feasible; otherwise recovery design is a separate decision. |
+| Journal entry → journal lines | `finance` | Entry line set posts atomically and balances under exact decimal arithmetic; posted fact is immutable and corrected by linked reversal/adjustment. |
+| Employee → department/position/attendance/payroll references | `human_resources` plus core org reference | HR owns sensitive data; access, relationship semantics and retention are owner-governed. |
+| Audit event / number range / workflow rule | `system` candidates | Audit points to actor/action/target; number allocation is transaction-safe; workflow decisions bind to reviewed document version. |
+
+## Referential integrity governance
+
+Use FKs for relationships explicitly approved by data governance and supported by the pinned Prisma/PostgreSQL configuration. Before approval, use module contracts with the owner rechecking the reference in the same transaction that commits the dependent fact. A FK does not grant read/write authorization. For company-scoped references, validate both target identity and same-company relationship; a simple FK to an ID may not prove company consistency. If composite keys or an alternate enforcement path are selected, document it for each relationship.
+
+## Delete and historical behavior
+
+Do not cascade-delete posted journal entries, inventory movements, approved source evidence, or audit records. Prefer restrict/soft lifecycle transitions only where an owner-defined lifecycle and retention policy requires them; soft delete is not audit history. Master-data deactivation must not erase historical document snapshots. Exact ON DELETE/UPDATE actions, uniqueness scopes, nullable keys and event retention remain unapproved until domain decisions are recorded.
