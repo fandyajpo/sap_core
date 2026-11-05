@@ -35,3 +35,8 @@ Single-business-fact changes use bounded PostgreSQL transactions. Multi-module l
 ## Deployment and environment assumptions
 
 No hosting provider or database instance has been selected or provisioned by this specification. Runtime and migration connection paths, secrets, observability backend, file storage, and email delivery must be configured and verified before production. Next.js owns its supported build/deploy path; Vite+ is not presumed to replace it.
+
+
+## P06 Finance ownership boundary
+
+The owner-approved P06 decision assigns the CoA, account identity and account governance solely to Finance. Other modules use Finance contracts or controlled read models and do not mutate Finance-owned tables. Company CoAs remain independent; plant scope follows its company. This decision does not add a broker, microservice or a physical schema design. See [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md) and its [consumer/validation traceability](../phase-0.2/p06-traceability-matrix.md).

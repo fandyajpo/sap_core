@@ -36,7 +36,7 @@ Prisma Postgres documentation distinguishes pooled application connections from 
 
 ## Cross-schema governance
 
-Ownership remains with the referenced module regardless of FK. Prisma/PostgreSQL documentation supports cross-schema relations in specified configurations, but project policy requires explicit approval. Until data-governance owners approve a relationship, do not silently add cross-schema FKs; define an owner contract and transaction-level validation instead. Candidate examples needing a decision include company/plant, master references, auth adapter records and finance/master-data chart-of-accounts links.
+Ownership remains with the referenced module regardless of FK. Prisma/PostgreSQL documentation supports cross-schema relations in specified configurations, but project policy requires explicit approval. Until data-governance owners approve a relationship, do not silently add cross-schema FKs; define an owner contract and transaction-level validation instead. Candidate examples needing a decision include company/plant, master references and auth adapter records. CoA ownership is resolved by P06 in favor of Finance; account consumers use Finance contracts/read models, while any physical relation remains governed by P05 and Phase 0.3 tests.
 
 ## Operational non-claims
 

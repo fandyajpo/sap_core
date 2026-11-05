@@ -35,3 +35,8 @@ Use append-oriented audit evidence with minimized sensitive data and explicit ac
 ## Version caveat
 
 PostgreSQL semantics here are aligned to official PostgreSQL 17 docs, matching Prisma Postgres's reviewed provider page. Confirm actual engine version. Prisma mappings, supported multi-schema syntax and migration commands must match the locked CLI/client. None of these standards have been validated against a live schema.
+
+
+## P06 Finance CoA integrity boundary
+
+The owner-approved logical invariants include company-scoped account-code uniqueness, immutable account identity and company ownership, acyclic company-controlled hierarchy, non-overlapping effective revisions/versions, and company/account/currency/period consistency. Posted journal lines remain immutable. These requirements do not prescribe columns, indexes, exclusion constraints, triggers or a physical hierarchy strategy; validate the enforcement design and generated SQL in [Phase 0.3](../phase-0.2/p06-phase-0.3-validation-backlog.md) before implementation.

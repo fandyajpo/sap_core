@@ -1,34 +1,27 @@
-# Chart-of-Accounts Ownership
+# Chart-of-Accounts Ownership — P06 Closure Reference
 
-**Recommendation: `finance` owns the chart of accounts. Decision status: `PROPOSED`.** The Phase 0 `master_data.chart_of_accounts` placement remains historical and in force until the finance and master-data owners explicitly approve a superseding decision. See [P06](01-decision-register.md#register).
+**Current decision:** `OWNER_APPROVED` by Phase 0.2 P06. **Sole owner:** `finance`. **Scope:** company-owned; plants use the company's chart. See the [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md), [decision matrix](../phase-0.2/p06-decision-matrix.md) and [Phase 0.3 validation backlog](../phase-0.2/p06-phase-0.3-validation-backlog.md).
 
-## Evaluation
+## Supersession record
 
-| Option | Strengths | Costs / risks |
+This Phase 0.1 document originally recommended Finance ownership with `PROPOSED` status and retained the Phase 0 `master_data` placement pending approval. That recommendation is superseded. The project owner explicitly selected P06.1–P06.26 in the Phase 0.2 decision discussion. Current architecture assigns all authoritative CoA definitions, account identity/records, classification, hierarchy, lifecycle and governance to Finance. `master_data` does not own or duplicate CoA/account definitions. This decision is documentation-level owner approval; it is not technical validation, a physical model, or an instruction to migrate a database. No database exists in this repository.
+
+## Current architectural direction
+
+- Each company owns its independent CoA; it has one active primary chart for posting in the relevant period. Plants use their company's chart and have no independent CoA.
+- Platform and organization templates are Finance-governed initialization sources only. Applying one copies into independent company-owned account records, records source/version provenance, and does not propagate later template edits.
+- Consolidation uses a separate chart and versioned/effective-dated account mapping. It does not merge or share company CoAs or rewrite original journals.
+- Account ID and company ownership are immutable. Controlled revisions, CoA version transition, account lifecycle, reporting mappings, posting eligibility and reporting snapshots follow the decisions in P06.1–P06.26.
+- Finance is the sole write owner. Consumers use Finance application contracts or permission-controlled read models; Finance's authoritative posting validation is not replaced by a caller-side check.
+- Better Auth identity, Core membership/company scope and CASL authorization remain P02–P04 shared platform concerns. P06 introduces no Finance-specific login, tenant or authorization model.
+
+## Historical option evaluation (retained as rationale)
+
+| Former option | Historical consideration | P06 outcome |
 |---|---|---|
-| `master_data` | Fits Phase 0's accepted context and the skills guidance that treats a chart as reusable reference data; makes it visible to consumers as a master-data reference. | Accounting semantics, chart structure, account eligibility, posting controls and effective change are finance-owned. A general master-data module may appear to own accounting policy or permit edits that affect posting. Finance then depends on another module for a core accounting fact. |
-| `finance` | Aligns ownership with accounting control: chart lifecycle, account classification, posting eligibility, control-account rules and historical use are governed by finance. Finance can version/activate accounts and enforce posting contracts without handing accounting decisions to master data. | Other modules need a narrow finance reference/query contract; a chart may be reused across companies or supplied from an external accounting setup, which must not be assumed. Consumers must not write finance-owned records. |
+| `master_data` ownership | The Phase 0 context classified the chart as reusable reference data, but this could blur accounting governance and posting eligibility. | Superseded. No authoritative CoA/account definitions belong in `master_data`. |
+| `finance` ownership | Aligns chart structure, account eligibility, lifecycle, posting controls and historical use with the accounting owner. Consumers need narrow owner contracts. | Selected and `OWNER_APPROVED`. |
 
-**Preferred direction:** place the authoritative chart and account records in `finance`. `master_data` may own reusable non-accounting descriptive references where genuinely shared, but not the accounting chart's posting semantics. This recommendation follows the financial-accounting ownership boundary and the user's stated preference; neither is an owner approval to move the historical entity.
+## Validation boundary
 
-## Scope and lifecycle decisions still required
-
-Owners must decide whether a chart is scoped to one legal company, an organization/group, a company assignment to a shared chart, or a reusable template plus company-specific accounts. Do not infer country-specific account numbering, mandatory account categories, statutory layouts, fiscal periods or consolidation policy. Decide:
-
-- chart/account key scope and natural-key uniqueness;
-- whether accounts are parent/child, and allowed hierarchy depth/rollups;
-- account type/normal balance and posting eligibility policy;
-- effective dates, versioning, inactivation and reassignment rules;
-- company-to-chart association and whether historical postings bind to a chart/account version;
-- account code/name snapshots required on posted journal lines;
-- deletion/correction behavior and safe module read contracts.
-
-## Cross-module contract and posted history
-
-If finance ownership is approved, finance publishes a read/validation contract for account selection; other modules may request accounting effects but may not mutate chart/account records. Journal lines should reference the account identity within finance and preserve whatever account-code/name/classification snapshot is approved for posted history. A posted entry must remain interpretable even if the chart later changes; the exact snapshot fields and version model are unresolved.
-
-Under the proposed ownership, journal-line-to-account is an intra-`finance` FK candidate (X11 in [05](05-cross-schema-relationship-policy.md)). If `master_data` remains owner, record a separate explicit `finance → master_data` FK or application-contract decision before modeling; do not silently keep an implicit reference. No CoA entity move or migration is authorized by this document.
-
-## Phase 0 history preserved
-
-Phase 0 `08-schema-ownership-matrix.md`, `09-entity-catalog.md`, the skills context and finance/master-data skills remain unchanged as historical evidence. A future approval must name the superseded placement, the new owner, owner sign-off, impact to consumer contracts, backfill/migration and rollback plan. `sap_core_skills` was not modified.
+P06 approves architecture, not exact table/column/index/FK representation. Validate Prisma multi-schema mapping and migrations, company-scoped uniqueness, effective-date overlap, hierarchy integrity, account/version history, journal references, readiness/posting, authorization, concurrency, reports, currency, consolidation and provider recovery through V01–V22. Do not mark a test passed without reproducible pinned evidence. P02–P10 and jurisdiction-specific accounting/tax/retention gates remain independently applicable.

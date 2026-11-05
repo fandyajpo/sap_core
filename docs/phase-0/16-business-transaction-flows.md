@@ -34,3 +34,13 @@ Production confirms execution against a released order snapshot and validates ac
 ## Shared safeguards
 
 Each flow re-authenticates/authorizes at the operation boundary, scopes by trusted company context, validates current state, is idempotent where retried, writes audit evidence with the business transaction where feasible, preserves posted facts, returns a stable error, and is tested under concurrency. No external calls or hidden integration hooks are included.
+
+
+## CoA initialization, activation and posting readiness (P06)
+
+1. Finance stages a platform-template, organization-template, manual or CSV/Excel initialization batch; the company receives independent account identities and retained source/version provenance.
+2. Finance validates the batch, hierarchy, classifications, company scope and effective-date invariants, then routes it through risk-based review/approval. Approval does not itself activate it.
+3. Finance activation is a separate controlled transition. Posting readiness is separately evaluated across active validated CoA, approved accounting policy, fiscal year/open period, required mappings, opening-balance reconciliation or approved exemption, and Finance authorization; expose blockers rather than a lone readiness boolean.
+4. Posting revalidates authoritative account eligibility and company/period/currency scope in Finance. Historical journal lines are immutable; chart transitions and account corrections never rewrite posted journals.
+
+This is an owner-approved architecture flow, not a selected jurisdictional accounting rule or physical data model. See [P06](../phase-0.2/p06-chart-of-accounts-decision-closure.md) and the Phase 0.3 validation backlog.

@@ -9,7 +9,7 @@
 - Defined module/schema ownership and a conceptual entity/relationship catalog without generating application models.
 - Specified authn/authz boundaries, data integrity placement, Prisma migration discipline, transaction patterns, illustrative business flows, REST standards, target tooling and repository structure.
 - Reviewed official documentation and registry metadata for Prisma 7/8 status, Prisma multi-schema/provider behavior, Better Auth adapter peers and Next.js request interception, plus PDF and SheetJS package identities. See [02](02-technology-compatibility-matrix.md).
-- Preserved chart-of-accounts and Better Auth schema placement conflicts as explicit owner decisions.
+- Preserved the chart-of-accounts and Better Auth schema-placement conflicts as explicit owner decisions at the time of Phase 0. Phase 0.2 subsequently closes CoA ownership through owner-approved P06; Better Auth mapping remains separately unresolved.
 
 ## Evidence inspected
 
@@ -23,7 +23,7 @@ The engineering context, global rules, workflow, decision log, skill index/depen
 | Prisma/Better Auth adapter and generated auth schema | Open | Prisma 7.10.1 + adapter 1.7.17 peers align but exact client, model generation, schema placement and auth runtime are not tested. |
 | Ten-schema Prisma mapping and provider validation | Open | No Prisma schema, database instance, generated client or migration exists. |
 | Cross-schema FK and company/plant integrity policy | Open | No data-governance decision; provisional per-edge approval gate remains. |
-| Chart-of-accounts owner | Open | Baseline says master_data; finance ownership rationale conflicts. |
+| Chart-of-accounts owner | Owner decision complete; technical validation pending | Phase 0.2 P06 supersedes the historical `master_data` placement and assigns sole ownership to Finance. The physical model and Phase 0.3 validation tasks are not complete. |
 | Session/email/authorization policy and tests | Open | Revocation/freshness/MFA/recovery/delivery and role/scope decisions are not approved or implemented. |
 | ERP accounting, tax, inventory, HR and retention policies | Open | Require product, qualified business/legal owners; technical docs must not guess them. |
 | Migration, concurrency, backup/restore and runtime security evidence | Not run | No application/database or execution tool/environment. |
@@ -34,7 +34,7 @@ No package installation or lockfile resolution; build, lint, typecheck, unit/int
 
 ## Exit recommendation
 
-Treat Phase 0 as a design draft, not implementation-ready or production-ready. Before implementation, obtain owner decisions for the critical placement/integrity/domain questions and pin the compatible runtime/ORM/auth stack. Then validate the complete ten-schema schema, Better Auth adapter mapping and migrations against a disposable PostgreSQL instance matching the chosen provider. Exercise concurrency, authorization/company isolation, recovery and restore before expanding to ERP modules. Keep `integration` dormant unless a separate accepted decision changes scope.
+Treat Phase 0 as a design draft, not implementation-ready or production-ready. P06 CoA ownership is now owner-approved in Phase 0.2, but its technical validation and all other applicable P02–P10, stack, database, authorization, jurisdiction and operational gates remain. Before affected implementation, pin and validate the schema/adapter stack against disposable PostgreSQL; exercise concurrency, authorization/company isolation, recovery and restore. Keep `integration` dormant unless a separate accepted decision changes scope. See the [P06 closure report](../phase-0.2/p06-closure-report.md); Phase 0.2 and Phase 1 are not declared complete or ready.
 
 
 ## Phase 0.1 continuation

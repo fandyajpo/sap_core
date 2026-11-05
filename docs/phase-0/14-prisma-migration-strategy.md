@@ -29,3 +29,8 @@ The current candidate is Prisma ORM/CLI 7.10.1. ORM 7 official deployment guidan
 ## Required pre-production tests
 
 Fresh database creation; upgrade from supported prior state; migration history integrity and drift detection; direct connection; lock/timeout impact; all ten schemas; cross-schema FK create/drop if approved; backfill interruption/restart; rollback/forward repair; and backup/restore. No migration has been created or applied in Phase 0. These instructions are design gates, not runnable commands.
+
+
+## P06 CoA ownership correction and migration boundary
+
+P06 corrects the former documentation placement to Finance ownership; no database or legacy CoA records exist in this repository, and this documentation correction is not a data migration. If an implementation later has legacy records, an owner-reviewed, restartable backfill/reconciliation/rollback plan is required before changing schema. Preserve account IDs and posted journal history. Validate the eventual Finance schema and every migration with pinned Prisma/PostgreSQL versions; see [V01–V07](../phase-0.2/p06-phase-0.3-validation-backlog.md).

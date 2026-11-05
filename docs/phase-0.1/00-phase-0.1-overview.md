@@ -7,7 +7,7 @@
 
 Phase 0.1 reconciles Phase 0 proposals into explicit decision records and architecture specifications. It preserves the selected modular monolith, one PostgreSQL database (`sap_core`), the same ten schemas, Next.js, Prisma ORM and Prisma Migrate. Those are approved for this phase because the owner explicitly specified them as the required context. This is not evidence that an application exists, builds, or has passed a technical test.
 
-Phase 0.1 does not supersede the skills repository or rewrite Phase 0 history. Historical Phase 0 labels remain as written; this directory is the authoritative resolution layer for current architecture proposals. No new disputed identity, organization, authorization, cross-schema relationship, chart-of-accounts or exact dependency decision has owner approval. No reproducible technical test was available, so no decision is marked `VALIDATED`.
+Phase 0.1 does not supersede the skills repository or erase Phase 0 history. Historical Phase 0 labels remain as written; this directory records the prior resolution state. Phase 0.2 P06 subsequently owner-approved and closed the CoA decision stream, explicitly superseding the former `master_data` placement and Phase 0.1 proposal status. Other disputed identity, organization, authorization, cross-schema relationship, entity and exact dependency decisions remain separately gated. No reproducible technical test was available; P06 has not been technically validated. See [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md).
 
 ## Status vocabulary
 
@@ -43,7 +43,7 @@ Phase 0 vocabulary such as `Accepted`, `Candidate`, `Open` and `Not verified` is
 
 - Read the decision register with each subject specification. Recommendations and ERDs are proposals, not permission to implement them.
 - Keep the exact ten-schema set in `docs/phase-0/07-database-architecture.md`. `integration` remains reserved and empty.
-- Retain Phase 0's historical `master_data.chart_of_accounts` reference until an owner decision explicitly supersedes it. This phase recommends `finance` but does not enact the move.
+- Phase 0.2 P06 explicitly supersedes the historical `master_data.chart_of_accounts` placement. Finance is now the sole owner; the historical placement is not current architecture, and no data migration is implied.
 - No jurisdiction-specific, accounting, tax, payroll, valuation, retention or legal rule is inferred.
 - A Phase 1 gate requires the relevant owner decision and, where technical behavior is claimed, reproducible tests. Phase 1 is not cleared by this document set.
 

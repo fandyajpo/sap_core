@@ -10,7 +10,7 @@ This is a relationship inventory, not a physical ERD. It describes likely cardin
 | User ↔ organization/company membership | Placement unresolved (`core` candidate) | Many-to-many through an effective membership/role assignment concept | Authentication user and ERP membership are separate concepts; membership is authorization input, not a Better Auth role. |
 | Business partner → customer/vendor role | `master_data` | Partner may have zero or more role profiles, subject to product decision | Prevent duplicate party identity while allowing distinct role-specific data; legal identity policy unresolved. |
 | Product/material → unit of measure | `master_data` | Product/material references a base or transaction unit; conversions may be effective-dated | Canonical unit and conversion/rounding policy must be chosen before constraints. |
-| Chart of accounts → finance usage | Baseline `master_data`, consumer `finance` | Finance entries/lines reference account identifiers | Candidate cross-schema edge. Owner conflict and FK policy unresolved; preserve account-at-posting semantics. |
+| Company → company-owned CoA → account identities/versions | `core` company scope; `finance` owns all CoA/account facts | Company has one active primary CoA for posting in the relevant period; plants use that company's chart; account IDs remain stable across versions | Owner-approved by P06. Finance owns definitions and posting validation; consumers use Finance contracts. Exact FK, version/revision representation and period enforcement remain Phase 0.3 validation items. |
 
 ## Operational documents
 
@@ -39,4 +39,10 @@ Do not cascade-delete posted journal entries, inventory movements, approved sour
 
 ## Phase 0.1 ERD and edge reconciliation
 
-The relationship descriptions above remain conceptual history. Phase 0.1 adds global logical/physical draft ERDs, per-schema views and X01–X16 enforcement recommendations in [08](../phase-0.1/08-global-logical-erd.md), [09](../phase-0.1/09-global-physical-erd.md), [10](../phase-0.1/10-per-schema-erd.md) and [05](../phase-0.1/05-cross-schema-relationship-policy.md). These are proposals only; they deliberately omit unresolved module columns and do not claim an implementation-ready model.
+The relationship descriptions above remain conceptual. Phase 0.1 adds global logical/physical draft ERDs, per-schema views and X01–X16 enforcement recommendations in [08](../phase-0.1/08-global-logical-erd.md), [09](../phase-0.1/09-global-physical-erd.md), [10](../phase-0.1/10-per-schema-erd.md) and [05](../phase-0.1/05-cross-schema-relationship-policy.md). P06 owner-approves the logical CoA ownership/scope and Finance boundary; physical relations, module columns and P05 FK enforcement remain unvalidated and are not implementation-ready. See the [P06 Phase 0.3 backlog](../phase-0.2/p06-phase-0.3-validation-backlog.md).
+
+
+
+## P06 CoA relationship and history
+
+Platform and organization templates are Finance-governed initialization sources that create independent company-owned CoAs; template updates do not propagate. Financial-reporting and consolidation mappings are separate, versioned concepts, not account ownership or a shared CoA. Journal lines retain immutable Finance account identity; posted journals are never rewritten. See [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md) and [Phase 0.3 validation backlog](../phase-0.2/p06-phase-0.3-validation-backlog.md). No physical columns or cross-schema FK are decided here.

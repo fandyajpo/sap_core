@@ -34,3 +34,8 @@ For retryable create/post commands, persist a unique operation key scoped to the
 ## Evidence
 
 Concurrency tests must include simultaneous duplicate submissions, two writers to one stock key, posting/retry, stale approval, deadlock/retry and rollback after failure. A single-user success path is not evidence. None were run because there is no application or database.
+
+
+## P06 finance configuration and posting races
+
+CoA approval and activation are distinct from financial posting readiness. Implementations must recheck mutable chart/version/mapping state and authorization within the bounded transaction that activates configuration or posts a journal. Validate concurrent CoA activation, account deactivation versus posting, period closure versus posting, idempotent retries and immutable posted rows. Exact locking/isolation and outbox mechanics remain technical decisions; see [P06 V06, V08, V10 and V16](../phase-0.2/p06-phase-0.3-validation-backlog.md).

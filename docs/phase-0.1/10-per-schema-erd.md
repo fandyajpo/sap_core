@@ -1,6 +1,6 @@
 # Per-Schema ERDs — Logical and Physical Drafts
 
-**Status: `PROPOSED`; not implementation-ready.** Logical entity grouping follows Phase 0 ownership. Physical keys below are only a minimum proposal: UUID is the default for ERP-owned IDs, while Better Auth principal IDs remain adapter-determined. Fields omitted are intentionally undecided. See [07](07-entity-ownership-finalization.md), [08](08-global-logical-erd.md), [09](09-global-physical-erd.md) and [05](05-cross-schema-relationship-policy.md).
+**Status: mixed; physical draft is not implementation-ready.** P06 CoA ownership and company scope are `OWNER_APPROVED`; other entity groupings and P02–P10 decisions retain their existing statuses. Physical keys below remain proposals: UUID is the default for ERP-owned IDs, while Better Auth principal IDs remain adapter-determined. Fields omitted are intentionally undecided. See [07](07-entity-ownership-finalization.md), [08](08-global-logical-erd.md), [09](09-global-physical-erd.md), [05](05-cross-schema-relationship-policy.md) and the [P06 validation backlog](../phase-0.2/p06-phase-0.3-validation-backlog.md).
 
 ## `core`
 
@@ -12,7 +12,7 @@
 
 **Logical:** business partner may carry customer and/or vendor role profiles; material/product references unit of measure and optional conversion. Whether customer/vendor share one identity, and whether records are global/shared/company-specific, is undecided.
 
-**Physical draft:** candidate UUID primary keys only; no company FK, natural-key uniqueness, account linkage or lifecycle columns selected. A relation to `core` for company-specific records uses owner contract until scope is decided (X10). Chart of accounts stays here in Phase 0's history only; Phase 0.1 recommends `finance`, subject to approval.
+**Physical draft:** candidate UUID primary keys only; no company FK, natural-key uniqueness or lifecycle columns selected. A relation to `core` for company-specific records uses owner contract until scope is decided (X10). `master_data` has no CoA/account definitions; the historical Phase 0 placement is superseded by P06.
 
 ## `procurement`
 
@@ -34,9 +34,9 @@
 
 ## `finance`
 
-**Logical:** proposed chart of accounts → accounts; journal entry → journal lines; AP/AR and cost-center references. Finance owns posted accounting facts and correction by reversal/adjustment.
+**Logical (P06 owner-approved):** company-owned CoA and stable account identities/revisions; versioned chart structure; platform/organization template initialization; separate company reporting mappings and consolidation chart/mappings; journal entry → journal lines, AP/AR and cost-center references. Plants use their company's CoA. Finance owns account classification, hierarchy, lifecycle, posting eligibility and accounting effects.
 
-**Physical draft:** candidate UUID PKs and same-schema journal header/line and chart/account FKs if CoA placement is approved. Monetary precision, debit/credit representation, currency, period, source idempotency key, account snapshots and uniqueness are not settled. If CoA remains `master_data`, X11 becomes a separate cross-schema decision; it is not implied here.
+**Physical draft:** no CoA/account fields, indexes, constraints or table layout are prescribed. Journal-to-account reference is Finance-internal by ownership; exact FK/version and historical snapshot strategy remain subject to P05 and Phase 0.3 V01–V10. No cross-schema CoA edge to `master_data` exists. Monetary representation, policy values, period schema and migration behavior remain unvalidated or separately owner-dependent.
 
 ## `production`
 

@@ -19,7 +19,7 @@
 | `sales` | `inventory` | Reservation, issue, delivery/stock movement | Inventory command/contract; no sales direct persistence access (X14). |
 | `sales` | `finance` | Billing, receivable and posting effect | Finance contract with idempotent source identity and correction link (X15). |
 | `finance` | `core` | Company scope, user/authorization context and possibly fiscal references | Candidate typed FK to company only after company semantics and finance scope approved; do not assume a fiscal calendar. |
-| `finance` | `master_data` | Materials/partners or CoA only if CoA remains there | Narrow read/validation contract. The proposed finance-owned CoA removes the chart dependency only if owner approves; otherwise X11 is a separate cross-schema decision. |
+| `finance` | `master_data` | Materials/partners and other separately approved non-accounting references only | Narrow read/validation contracts as approved by their owners. No CoA/account-definition dependency: P06 assigns sole CoA ownership to Finance; consumers do not source chart definitions from master data. |
 | `finance` | `procurement`, `sales`, `production`, `inventory` | Source facts that create accounting effects | Source owner contract and stable idempotent application reference, not direct writes into source module; posted finance history stays finance-owned (X15/X16). |
 | `production` | `core` | Company/plant/work-center scope and actor context | Candidate typed or composite references per approved production aggregate (X08/X09). |
 | `production` | `master_data` | Materials, units and released BOM inputs | Owner contract; preserve approved revision/snapshot semantics. |
@@ -33,7 +33,7 @@
 
 The preferred direction is `business module → core/master-data owner contracts → shared infrastructure`, with contracts and transaction coordination for cross-module facts. Core must not import or query private business repositories. `procurement`, `sales` and `production` may call `inventory`; their accounting effects go to `finance`; those effect requests do not create reciprocal direct table ownership. A cross-module coordinator may call owners in one bounded local transaction, but must not create a schema-level cycle or hidden shared-write layer.
 
-The proposed CoA location in `finance` keeps the finance core reference inside its owner boundary. If owners preserve `master_data`, record the finance-to-master-data dependency and validate posting-time snapshots explicitly. `system` audit references should not create a database FK cycle across every module; use stable application references and owner-authorized reads.
+P06 confirms Finance ownership of CoA and account definitions, so chart/account consumers use Finance-owned contracts/read models; there is no Finance-to-`master_data` CoA dependency. Any other master-data reference remains a per-edge owner contract. P05 and Phase 0.3 govern physical relationship enforcement and posting-time history. `system` audit references should not create an FK cycle across modules; use stable application references and owner-authorized reads.
 
 ## Map validation
 

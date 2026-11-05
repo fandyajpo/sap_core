@@ -1,0 +1,34 @@
+# P06 Decision Matrix
+
+**Status:** all decisions `OWNER_APPROVED` and `DOCUMENTED`; technical validation pending Phase 0.3. This matrix records choices, not implementation readiness. See the [closure record](p06-chart-of-accounts-decision-closure.md) for rationale and constraints.
+
+| Decision | Topic | Selected option | Decision summary | Schemas / modules | Dependencies | Validation status |
+|---|---|---|---|---|---|---|
+| P06.1 | Ownership | B — Finance owns CoA | `finance` sole owner; no duplicate in `master_data`; consumers use Finance contracts. | `finance`, `master_data` | P05, P07, P08 | Pending V01–V02 |
+| P06.2 | Scope | C — Company-level CoA | Company-owned; one active primary for relevant period; plants inherit; consolidation separate. | `core`, `finance` | P03, P05, P07 | Pending V03 |
+| P06.3 | Sharing | C — Company-owned CoA + reusable templates | Platform/org templates initialize independent company accounts; no propagation; retain provenance. | `finance`, `core` | P03, P04, P07 | Pending V02, V03 |
+| P06.4 | Lifecycle/identity | C — Immutable identity + controlled lifecycle | Immutable account ID/company; controlled code/name/classification changes; no deletion of used accounts; effective revisions. | `finance` | P04, P05, P07 | Pending V04, V06 |
+| P06.5 | Classification/hierarchy | C — Standard classification + custom hierarchy | Fundamental five classes, extensible; company hierarchy; distinct reporting mappings and account attributes. | `finance` | P03, P04, P07 | Pending V05 |
+| P06.6 | Posting/report mapping | C — Configurable rules + versioned mapping | Server-side eligibility/subledger checks; company-scoped effective reporting mapping; historical version retention. | `finance` | P04, P07, P10 | Pending V08, V13 |
+| P06.7 | Currency | C — Multi-currency + configurable restrictions | Company functional currency; separate transaction/functional amounts; account restrictions and rate provenance. | `finance`, `core` | P03, P04, P07 | Pending V14 |
+| P06.8 | Governance | C — Role governance + approval workflow | Operator drafts, Reviewer reviews, Manager approves critical changes; maker cannot approve own critical change; activation separate. | `finance`, `core`, `system` | P02, P03, P04, P10 | Pending V12 |
+| P06.9 | Consolidation | C — Separate consolidation mapping | Independent company CoAs; separate consolidation chart and versioned mappings; preserve source journals. | `finance` | P03, P07 | Pending V15 |
+| P06.10 | Template governance | C — Layered governance | Platform/org/company ownership and distribution rights distinct; no automatic platform access to tenant transactions. | `finance`, `core` | P03, P04 | Pending V02, V11, V12 |
+| P06.11 | Standards | C — Configurable multi-standard framework | Separate jurisdiction, standard, policy, reporting framework, mapping and adjustments; additional bases only when needed. | `finance` | P03, P07 | Pending V08, V13 |
+| P06.12 | Initialization | C — Multiple paths | Template, manual, CSV/Excel use staging, validation, review, approval, activation; opening balances separate. | `finance` | P04, P07, P09 | Pending V02, V12 |
+| P06.13 | Integrity | C — Layered controls + reconciliation | DB/application/posting controls plus periodic reconciliation; scoped uniqueness, hierarchy, consistency, balanced journal, idempotent exceptions. | `finance`, `core` | P03–P05, P08 | Pending V03–V10, V17 |
+| P06.14 | Readiness | C — Full posting readiness | Activation distinct from posting readiness; evaluate CoA, policy, fiscal periods, mappings, opening balances, authorization; expose blockers. | `finance`, `core` | P03, P04, P07, P10 | Pending V08, V12 |
+| P06.15 | Version transition | C — Versioned CoA + controlled transition | Preserve old versions; separate account identity/version; map, assess, approve, activate; never rewrite journals. | `finance` | P04, P05, P07 | Pending V04, V06, V07 |
+| P06.16 | Reporting/audit | C — Versioned reporting + immutable snapshots | Snapshot config, scope, cutoff and provenance; revisions link new snapshots; hash alone is insufficient. | `finance`, `system` | P04, P07, P10 | Pending V13, V17 |
+| P06.17 | Retirement/company closure | C — Full lifecycle governance | Distinct CoA/version/company lifecycle; controlled retirement, close obligations and historical read-only access. | `finance`, `core` | P03–P05, P07, P10 | Pending V06, V08, V17 |
+| P06.18 | Retention/archival | C — Governed retention + legal hold | Category-specific schedules, archive/retrieval evidence, legal holds and audited deletion gates. | `finance`, `system` | P04, P07, P10 | Pending V17–V19 |
+| P06.19 | Security | C — Layered financial security | Reuse Better Auth, Core memberships and CASL; sensitive grants, scope, SoD and separately audited export. | `core`, `finance`, `system` | P02–P05, P10 | Pending V11–V12 |
+| P06.20 | Contracts/events | C — Hybrid contracts + controlled read models | Finance application contract authoritative; consumers cannot mutate; in-process events/outbox as justified; no broker requirement. | `finance`, consumer modules, `system` | P04, P05, P07–P09 | Pending V16 |
+| P06.21 | Testing | C — Financial assurance testing | Layered financial, DB, property, auth, concurrency and reproducibility tests; Playwright only covers browser E2E. | All affected | P02–P10 | Pending V03–V16, V19–V22 |
+| P06.22 | Performance | C — Scalable financial data architecture | Workload indexes/queries, pagination, scoped predicates, measured reporting, short transactions; no speculative partitioning/targets. | `finance`, `core` | P03, P05, P08, P09 | Pending V20 |
+| P06.23 | Operations | C — Financial observability + incident governance | Separate logs, audit, financial exceptions and incidents; trace, alert, recover and monitor. | `finance`, `system` | P04, P07, P10 | Pending V17 |
+| P06.24 | Recovery | C — Financial DR + integrity assurance | Managed backups/PITR where available; RPO/RTO, restore testing, financial verification and artifact recovery. | `finance`, `system` | P05, P08, P10 | Pending V18–V19 |
+| P06.25 | Compliance | C — Governed multi-jurisdiction readiness | Distinct legal/accounting concepts, effective-dated change lifecycle, evidence and exceptions; no universal jurisdiction implementation. | `finance`, `system` | P04, P07, P10 | Pending V08, V13, V17 |
+| P06.26 | Administration UX | C — Enterprise controlled operations | Hierarchy explorer, staged bulk work, compare/impact/dry-run, maker-checker and accessible permission-aware UX on existing stack. | `finance`, `core` | P04, P09, P10 | Pending V12, V22 |
+
+`Pending` is not failure or pass: no reproducible Phase 0.3 technical evidence is recorded yet. The conditional implementation scope and acceptance evidence are defined in the [validation backlog](p06-phase-0.3-validation-backlog.md).

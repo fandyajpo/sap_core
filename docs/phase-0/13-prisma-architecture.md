@@ -39,3 +39,9 @@ Create a minimal real Prisma schema only after Phase 0 decisions, then validate 
 ## Phase 0.1 mapping reconciliation
 
 The Prisma 7 multi-schema feature is documented, but project behavior remains untested. Phase 0.1 proposes that reviewed Better Auth user/account/session/verification models be explicitly mapped into `core` and managed by Prisma Migrate; Better Auth CLI generation does not apply migrations. Exact adapter mapping, `@@schema` behavior, IDs and cross-schema relation SQL require pinned-version tests. See [identity architecture](../phase-0.1/02-better-auth-identity-architecture.md), [compatibility resolution](../phase-0.1/13-technology-compatibility-resolution.md) and [Phase 1 gates](../phase-0.1/14-phase-1-implementation-gates.md).
+
+
+
+## P06 Finance model ownership
+
+Any eventual CoA, account, revision, mapping and journal-account models are Finance-owned and mapped to `finance`; do not place authoritative CoA records in `master_data`. This is an ownership decision, not a ready Prisma schema: do not infer fields, indexes or relations from the logical ERD. Validate multi-schema model mapping, generated SQL, migration behavior and account-reference strategy against the pinned stack under [P06 V01–V02 and V07](../phase-0.2/p06-phase-0.3-validation-backlog.md).

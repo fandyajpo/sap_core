@@ -1,6 +1,6 @@
 # Global Physical ERD — Draft
 
-**Status: `PROPOSED`; not implementation-ready.** The diagram illustrates only a minimum identity/organization persistence skeleton and its candidate keys. It does not settle field names, Better Auth ID type, company scope for module records, statuses, retention, indexes, delete actions or all ten schemas' models. No Prisma schema, generated client, migration or database exists.
+**Status: physical draft; not implementation-ready.** The diagram illustrates only a minimum identity/organization persistence skeleton and candidate keys. P06 separately owner-approves Finance CoA ownership and company scope, but the CoA physical structure is intentionally omitted pending Phase 0.3. This draft does not settle field names, Better Auth ID type, module company scope, retention, indexes, delete actions or all ten schemas' models. No Prisma schema, generated client, migration or database exists.
 
 ```mermaid
 erDiagram
@@ -77,7 +77,7 @@ erDiagram
 
 ## Intentionally omitted
 
-The ten schemas remain exactly `core`, `master_data`, `procurement`, `inventory`, `sales`, `finance`, `production`, `human_resources`, `integration`, and `system`. The operational schema tables are not given made-up columns or foreign keys here because their company/plant scope, keys, lifecycle and jurisdiction policy are not sufficiently decided. The CoA's `finance` placement is shown only in the logical view as a recommendation; it is not a physical table authorization. A future minimum implementation ERD must extend this skeleton with explicit owners, approved key types, relation matrix, required constraints and tested migrations.
+The ten schemas remain exactly `core`, `master_data`, `procurement`, `inventory`, `sales`, `finance`, `production`, `human_resources`, `integration`, and `system`. P06 owner-approves Finance as sole CoA owner and company-level scope; `master_data` does not own a copy. The CoA's physical form remains intentionally omitted: approval does not settle fields, IDs beyond stable account identity, keys, indexes, FKs, version storage or migration strategy. Operational schema tables also omit unsupported columns and relationships. Extend this ERD only after P06/P02–P10 dependencies and Phase 0.3 validation are satisfied; see [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md).
 
 ## Prisma validation prerequisites
 

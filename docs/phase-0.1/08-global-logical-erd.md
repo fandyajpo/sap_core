@@ -1,6 +1,6 @@
 # Global Logical ERD
 
-**Status: `PROPOSED` conceptual view.** Relationships and scope inheritance are not owner-approved. This is a complete cross-domain inventory at the current foundation level, not an implementation schema. See [entity ownership](07-entity-ownership-finalization.md), [relationship policy](05-cross-schema-relationship-policy.md) and [per-schema ERDs](10-per-schema-erd.md).
+**Status: mixed.** The P06 CoA submodel (Finance sole ownership, company scope, template initialization, separate reporting/consolidation mappings and immutable historical account identity) is `OWNER_APPROVED`; other relationships and scope inheritance remain `PROPOSED`. This is a logical inventory, not an implementation schema. See [entity ownership](07-entity-ownership-finalization.md), [relationship policy](05-cross-schema-relationship-policy.md) and [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md).
 
 ```mermaid
 erDiagram
@@ -21,8 +21,26 @@ erDiagram
   BUSINESS_PARTNER ||--o{ CUSTOMER_ROLE : may_have
   BUSINESS_PARTNER ||--o{ VENDOR_ROLE : may_have
 
-  CHART_OF_ACCOUNTS ||--o{ ACCOUNT : organizes
+  COMPANY ||--o{ CHART_OF_ACCOUNTS : owns_company_scope
+  CHART_OF_ACCOUNTS ||--o{ COA_VERSION : versions
+  COA_VERSION ||--o{ ACCOUNT_VERSION_ENTRY : captures
+  ACCOUNT ||--o{ ACCOUNT_VERSION_ENTRY : stable_identity_revisions
   ACCOUNT ||--o{ JOURNAL_LINE : selected_by
+  PLATFORM_TEMPLATE ||--o{ TEMPLATE_RELEASE : publishes
+  ORGANIZATION ||--o{ ORGANIZATION_TEMPLATE : owns_scoped_template
+  ORGANIZATION_TEMPLATE ||--o{ TEMPLATE_RELEASE : publishes
+  TEMPLATE_RELEASE ||--o{ COA_INITIALIZATION : source_provenance
+  CHART_OF_ACCOUNTS ||--o{ COA_INITIALIZATION : initialized_company_chart
+  REPORTING_MAPPING_VERSION ||--o{ ACCOUNT_REPORTING_MAPPING : versions
+  ACCOUNT ||--o{ ACCOUNT_REPORTING_MAPPING : presentation_mapping
+  CONSOLIDATION_CHART ||--o{ CONSOLIDATION_ACCOUNT : contains
+  CONSOLIDATION_MAPPING_VERSION ||--o{ CONSOLIDATION_MAPPING : versions
+  ACCOUNT ||--o{ CONSOLIDATION_MAPPING : source_company_account
+  CONSOLIDATION_ACCOUNT ||--o{ CONSOLIDATION_MAPPING : target_group_account
+  COMPANY ||--o{ FINANCIAL_REPORT_SNAPSHOT : owns_report_scope
+  COA_VERSION ||--o{ FINANCIAL_REPORT_SNAPSHOT : captures_chart_version
+  REPORTING_MAPPING_VERSION ||--o{ FINANCIAL_REPORT_SNAPSHOT : captures_reporting_mapping
+  CONSOLIDATION_MAPPING_VERSION ||--o{ FINANCIAL_REPORT_SNAPSHOT : captures_if_applicable
   JOURNAL_ENTRY ||--|{ JOURNAL_LINE : contains
   PURCHASE_ORDER ||--|{ PURCHASE_ORDER_LINE : contains
   GOODS_RECEIPT ||--|{ GOODS_RECEIPT_LINE : contains
@@ -36,7 +54,7 @@ erDiagram
 
 - `USER` represents the proposed canonical auth principal in `core`; account and session records are distinct security persistence. `EMPLOYEE` is an HR record and its optional identity association is not the same as employment/organization membership.
 - `ORGANIZATION`, `COMPANY` and `PLANT` meanings/cardinalities are proposals. Membership rows are separate for each scope; no hierarchy-based permission inheritance is implied.
-- `CHART_OF_ACCOUNTS` / `ACCOUNT` are shown under proposed `finance` ownership. Phase 0's `master_data` placement is preserved until an explicit owner decision supersedes it.
+- P06 owner-approves Finance as sole owner of `CHART_OF_ACCOUNTS`, account identity/revisions and finance mappings. Company CoAs are independent; each company has one active primary chart for posting in the relevant period, and plants use their company's chart. Template release/provenance is initialization-only; consolidation is separate from the company CoA. Period semantics and enforcement remain subject to Phase 0.3 validation; these conceptual edges do not assert physical columns or FKs.
 - Procurement/sales/production/inventory/finance aggregate edges internal to a module represent logical ownership boundaries. Cross-module effects are contracts, not direct cross-module writes.
 - Company/plant scope on transactional entities is expected to be decided per module. This diagram does not assert every entity is company-scoped or that every relation is an FK. Some master-data and operational concepts are listed by schema but are not linked here because their cardinality and keys remain unresolved.
 - `SOURCE_DOCUMENT` to `AUDIT_EVENT` is deliberately polymorphic and application-level. Do not implement as a fictional FK.
@@ -47,11 +65,11 @@ erDiagram
 | Schema | Logical entities represented or reserved |
 |---|---|
 | `core` | Organization, company, plant, canonical user, auth account/session/verification, memberships, optional assignments, authorization concepts. |
-| `master_data` | Business partner and customer/vendor roles, material/product, units and conversion references. |
+| `master_data` | Business partner and customer/vendor roles, material/product, units and conversion references; no CoA/account definitions. |
 | `procurement` | Requisition, purchase order, goods receipt, vendor invoice and their lines. |
 | `inventory` | Storage location, movement, transfer and balance projection. |
 | `sales` | Quotation, sales order, delivery, billing document and lines. |
-| `finance` | Proposed chart/account; journal entry/lines, AP/AR and other finance references. |
+| `finance` | Owner-approved company CoAs/account identities and revisions; platform/organization template governance; reporting/consolidation mappings; journal entry/lines, AP/AR and other finance references. |
 | `production` | BOM/revision/components, work center, production order and confirmations. |
 | `human_resources` | Employee, department and position; future HR records deferred. |
 | `integration` | None; reserved. |
