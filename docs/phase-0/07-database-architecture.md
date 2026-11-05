@@ -41,3 +41,8 @@ Ownership remains with the referenced module regardless of FK. Prisma/PostgreSQL
 ## Operational non-claims
 
 No instance, schema, database user, network policy, backup plan, restore objective, migration, or query has been created or validated. The schema policy and operational exit gates are expanded in [08](08-schema-ownership-matrix.md), [11](11-database-standards.md), and [12](12-database-integrity.md).
+
+
+## Phase 0.1 relationship reconciliation
+
+The no-blanket-FK rule above remains in force. Phase 0.1 records proposed X01–X16 edge-by-edge enforcement recommendations (FK, composite FK or application reference), including company/plant consistency, without approving any migration. See [cross-schema relationship policy](../phase-0.1/05-cross-schema-relationship-policy.md), [global physical ERD](../phase-0.1/09-global-physical-erd.md) and [dependency map](../phase-0.1/11-cross-schema-dependency-map.md). All require pinned-version database tests before `VALIDATED`.

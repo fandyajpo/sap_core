@@ -35,3 +35,8 @@ Use FKs for relationships explicitly approved by data governance and supported b
 ## Delete and historical behavior
 
 Do not cascade-delete posted journal entries, inventory movements, approved source evidence, or audit records. Prefer restrict/soft lifecycle transitions only where an owner-defined lifecycle and retention policy requires them; soft delete is not audit history. Master-data deactivation must not erase historical document snapshots. Exact ON DELETE/UPDATE actions, uniqueness scopes, nullable keys and event retention remain unapproved until domain decisions are recorded.
+
+
+## Phase 0.1 ERD and edge reconciliation
+
+The relationship descriptions above remain conceptual history. Phase 0.1 adds global logical/physical draft ERDs, per-schema views and X01–X16 enforcement recommendations in [08](../phase-0.1/08-global-logical-erd.md), [09](../phase-0.1/09-global-physical-erd.md), [10](../phase-0.1/10-per-schema-erd.md) and [05](../phase-0.1/05-cross-schema-relationship-policy.md). These are proposals only; they deliberately omit unresolved module columns and do not claim an implementation-ready model.

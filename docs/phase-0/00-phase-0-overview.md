@@ -44,3 +44,8 @@ No implementation, app scaffolding, generated Prisma models, migrations, databas
 - **Not verified:** Documentation or metadata has not established the claimed behavior in this application.
 
 See [the validation report](21-phase-0-validation-report.md) for the current exit-gate state and [the decision register](20-architecture-decisions.md) for owners and open decisions.
+
+
+## Phase 0.1 reconciliation addendum
+
+Phase 0's status vocabulary and historical decision rows are preserved. The current decision-resolution layer is [Phase 0.1](../phase-0.1/00-phase-0.1-overview.md); its five statuses and owner/test evidence are authoritative for current proposals. Phase 0.1 confirms the requested architecture baseline but leaves identity mapping, organization/company/plant semantics, FK governance, chart ownership and exact package versions `PROPOSED` or `DEFERRED`. Its exit state is **NOT READY — BLOCKING DECISIONS REMAIN**; no technical decision is `VALIDATED` without a reproducible test. See [decision register](../phase-0.1/01-decision-register.md) and [Phase 0.1 validation report](../phase-0.1/15-phase-0.1-validation-report.md).

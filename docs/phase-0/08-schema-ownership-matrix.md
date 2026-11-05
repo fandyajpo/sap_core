@@ -30,3 +30,8 @@ Schema names and initial entity references follow `sap_core_skills/SAP_CORE_CONT
 - Company/plant and shared master-data cross-schema FK policy.
 
 See [entity catalog](09-entity-catalog.md) and [decision register](20-architecture-decisions.md).
+
+
+## Phase 0.1 ownership addendum
+
+The `master_data` chart-of-accounts row above is preserved as Phase 0 history. Phase 0.1 independently recommends that finance own accounting chart semantics; no move is approved, and `master_data` remains the recorded baseline until finance/master-data owners decide. The reconciled proposal and scope questions are in [chart-of-accounts ownership](../phase-0.1/06-chart-of-accounts-ownership.md) and [entity ownership](../phase-0.1/07-entity-ownership-finalization.md).

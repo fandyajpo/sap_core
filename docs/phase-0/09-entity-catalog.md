@@ -26,3 +26,8 @@ This catalog is deliberately conceptual. Names represent the initial references 
 ## Unresolved catalog boundaries
 
 Chart-of-accounts placement; Better Auth persistence vs core user model; shared partner vs separate customer/vendor profiles; fiscal-period ownership; system vs module-specific workflow rules; and all legal/accounting/retention requirements remain unresolved. Refer to the owner matrix and ADR register.
+
+
+## Phase 0.1 catalog reconciliation
+
+This initial catalog remains the historical Phase 0 baseline. Phase 0.1 supplies a proposed owner-by-schema catalog and draft ERDs; it does not authorize generating the referenced models. The proposed canonical user mapping and optional employee link are described in [identity architecture](../phase-0.1/02-better-auth-identity-architecture.md); the CoA `finance` recommendation remains subject to owner approval and does not change its historical `master_data` placement. See [entity ownership finalization](../phase-0.1/07-entity-ownership-finalization.md).

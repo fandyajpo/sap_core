@@ -24,3 +24,8 @@ This specification follows the approved stack in `sap_core_skills/SAP_CORE_CONTE
 Use an exact lockfile and runtime version before implementation. Current registry snapshots show a plausible stable Prisma 7 CLI/client pair and a Better Auth adapter whose declared peer range includes Prisma 7; this is a candidate, not a tested combination. Node 24 LTS and the current Next.js/React metadata are also candidates only. Do not use a Prisma 8 release candidate as the baseline while the reviewed Better Auth adapter peer range excludes Prisma 8.
 
 The precise observations, source URLs, and remaining verification gates are in [the compatibility matrix](02-technology-compatibility-matrix.md). Other approved libraries remain unpinned and are not certified as one compatible stack.
+
+
+## Phase 0.1 compatibility reconciliation
+
+The package version statements above remain candidates, not a selected lockfile. Phase 0.1 adds registry observations for the remaining approved libraries and records version-documentation and peer-range caveats in [technology compatibility resolution](../phase-0.1/13-technology-compatibility-resolution.md). No combined stack has been installed, locked or built; exact versions remain `PROPOSED` and must pass the Phase 1 technology gate.

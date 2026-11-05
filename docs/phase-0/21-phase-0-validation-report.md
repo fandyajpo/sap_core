@@ -35,3 +35,8 @@ No package installation or lockfile resolution; build, lint, typecheck, unit/int
 ## Exit recommendation
 
 Treat Phase 0 as a design draft, not implementation-ready or production-ready. Before implementation, obtain owner decisions for the critical placement/integrity/domain questions and pin the compatible runtime/ORM/auth stack. Then validate the complete ten-schema schema, Better Auth adapter mapping and migrations against a disposable PostgreSQL instance matching the chosen provider. Exercise concurrency, authorization/company isolation, recovery and restore before expanding to ERP modules. Keep `integration` dormant unless a separate accepted decision changes scope.
+
+
+## Phase 0.1 continuation
+
+Phase 0.1 has now documented the owner decisions and test gates still required; it has not resolved them by assertion. See the [Phase 0.1 validation report](../phase-0.1/15-phase-0.1-validation-report.md) for the current `NOT READY — BLOCKING DECISIONS REMAIN` result, static checks and limitations. Historical Phase 0 exit findings above remain unchanged.

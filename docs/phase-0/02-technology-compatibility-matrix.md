@@ -43,3 +43,8 @@ A reasonable validation target is Node 24.22.2 LTS; Next 16.4.5 with a matching 
 - PDF package metadata: [`@react-pdf/renderer`](https://registry.npmjs.org/%40react-pdf%2Frenderer/latest), [`react-pdf`](https://registry.npmjs.org/react-pdf/latest); [React PDF renderer docs](https://react-pdf.org/). SheetJS: [`xlsx` registry metadata](https://registry.npmjs.org/xlsx/latest), [CE license](https://docs.sheetjs.com/docs/miscellany/license/), and [CE docs](https://docs.sheetjs.com/).
 
 **Verification not performed:** dependency installation/resolution, compatibility build, generated Prisma Client, Prisma schema validation, PostgreSQL migration, auth test, PDF/XLSX integration test, licensing review, or deployment test.
+
+
+## Phase 0.1 compatibility addendum (2026-11-05 UTC)
+
+The table above records the Phase 0 research boundary. Phase 0.1 additionally checked registry `latest` metadata for the remaining approved packages and official docs for TanStack Table server modes, Tiptap React alignment and Storybook/Next configuration. Snapshot observations, peer ranges, a TanStack Table registry/docs version discrepancy, a Storybook/Vite+ peer mismatch, native Sharp deployment requirements and other gates are recorded in [13](../phase-0.1/13-technology-compatibility-resolution.md). These observations do not constitute a pinned lockfile or a compatible, tested application stack. Exact package decisions remain `PROPOSED` and no compatibility result is `VALIDATED`.

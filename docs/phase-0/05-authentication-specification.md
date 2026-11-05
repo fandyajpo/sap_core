@@ -34,3 +34,8 @@ Unauthenticated operations fail closed with a stable unauthenticated result. Inv
 ## Evidence gate
 
 Pinned Better Auth/adapter/Next versions; reviewed adapter model mapping; cookie/trusted-origin configuration; session revocation and direct-action tests; recovery-delivery tests and operational owner; and an approved persistence placement are required before auth is called production-ready. Current compatibility evidence is summarized in [02](02-technology-compatibility-matrix.md); none of those application tests have been run.
+
+
+## Phase 0.1 identity reconciliation
+
+The unresolved `core.users` vs Better Auth placement statement above remains historical and is not silently resolved. Phase 0.1 proposes Better Auth's principal as the sole canonical `core.users` record, with account/session/verification persistence in `core`, employee records separate, and no second login identity. This recommendation is `PROPOSED`, not approved or tested; exact adapter-generated model/field mapping, ID type, link policy and lifecycle must be owner-approved and validated. See [identity architecture](../phase-0.1/02-better-auth-identity-architecture.md) and [P02](../phase-0.1/01-decision-register.md).

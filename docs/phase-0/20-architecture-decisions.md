@@ -37,3 +37,8 @@ Accepted decisions below mirror the skills repository's decision log and are not
 ## Supersession
 
 An accepted baseline changes only through a new, explicit decision that references the prior ADR, rationale, impact, owner approval and migration/rollout consequence. Phase 0 has not added any approved superseding decision.
+
+
+## Phase 0.1 reconciliation pointer
+
+This Phase 0 register and its historical `Accepted`/`Open` labels are preserved, not reclassified. Current proposal status and recommendations are in [Phase 0.1's decision register](../phase-0.1/01-decision-register.md). Only the owner-specified architectural context and the prohibition on inventing jurisdiction policy are `APPROVED` for this phase. Identity, organization/membership, authorization, FK policy, CoA ownership and exact dependency set remain `PROPOSED` or `DEFERRED`; no technical decision is `VALIDATED`. Phase 0.1 does not modify `sap_core_skills` or supersede its accepted ADRs.

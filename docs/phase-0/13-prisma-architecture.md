@@ -34,3 +34,8 @@ Use a carefully scoped server-side client lifecycle appropriate to the selected 
 ## Validation gate
 
 Create a minimal real Prisma schema only after Phase 0 decisions, then validate generate/type output, all schema mappings, cross-schema relation SQL, exact numerics/date fields, query ownership, and migrations against disposable PostgreSQL. No schema, generated client or database access was created here.
+
+
+## Phase 0.1 mapping reconciliation
+
+The Prisma 7 multi-schema feature is documented, but project behavior remains untested. Phase 0.1 proposes that reviewed Better Auth user/account/session/verification models be explicitly mapped into `core` and managed by Prisma Migrate; Better Auth CLI generation does not apply migrations. Exact adapter mapping, `@@schema` behavior, IDs and cross-schema relation SQL require pinned-version tests. See [identity architecture](../phase-0.1/02-better-auth-identity-architecture.md), [compatibility resolution](../phase-0.1/13-technology-compatibility-resolution.md) and [Phase 1 gates](../phase-0.1/14-phase-1-implementation-gates.md).

@@ -26,3 +26,8 @@ Every persistent business fact has one owning module. The database schema reflec
 ## Open ownership questions
 
 Better Auth adapter records versus the initial `core.users` reference, and the chart of accounts (`master_data` in the accepted context but finance-oriented in the finance domain), require explicit owner decisions. Their current catalog entries are provisional references, not authorization to generate tables. See [the decision register](20-architecture-decisions.md).
+
+
+## Phase 0.1 ownership reconciliation
+
+The proposal in [entity ownership finalization](../phase-0.1/07-entity-ownership-finalization.md) preserves all ten schema owners and adds no approved entity migration. It recommends a single Better Auth principal mapped to `core.users`, separate optional HR employee linkage, and finance ownership of the chart of accounts; both disputed placements remain `PROPOSED` pending owner approval. The cross-schema contract/FK proposals are in [05](../phase-0.1/05-cross-schema-relationship-policy.md).

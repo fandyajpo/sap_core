@@ -29,3 +29,8 @@ Return a stable forbidden response for authenticated callers who lack permission
 ## Required policy decisions/tests
 
 Owners must define membership status, role scope/inheritance, separation of duties, company/plant delegation, field permissions, admin/break-glass behavior, session freshness for high-risk actions, revocation propagation, and export access. Test allow/deny matrices, cross-company IDOR, direct Server Action calls, stale membership/session, list-query filtering, and two-user/two-company cache behavior. No concrete role catalog or legal policy is established here.
+
+
+## Phase 0.1 scope reconciliation
+
+The `core` membership/role schema and company/plant inheritance remain undecided in this Phase 0 text. Phase 0.1 proposes distinct organization/company/plant entitlements and requires every selected context to be revalidated; active organization and Better Auth roles are not ERP authorization. The proposal is not approved. See [organizational model](../phase-0.1/03-organizational-model.md), [authorization scope model](../phase-0.1/04-authorization-scope-model.md) and [Phase 1 gates](../phase-0.1/14-phase-1-implementation-gates.md).
