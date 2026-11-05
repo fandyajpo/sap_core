@@ -35,3 +35,8 @@ See [entity catalog](09-entity-catalog.md) and [decision register](20-architectu
 ## Phase 0.1 ownership addendum
 
 Phase 0's former `master_data` CoA placement is retained as historical context only and is superseded by owner-approved P06. The current schema owner is `finance`; `master_data` owns no duplicate CoA/account definitions. See [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md) and [Phase 0.3 validation](../phase-0.2/p06-phase-0.3-validation-backlog.md).
+
+
+## P07 ownership governance addendum
+
+P07.1–P07.10 are owner-approved and the P07 decision stream is complete. Each persistent entity must have one authoritative logical owner; aggregate roots govern dependent writes; shared references remain canonical; consumer projections are non-authoritative; cross-domain access uses explicit contracts. This matrix remains a conceptual schema-level summary, not the complete entity ownership registry or aggregate map. Entity-by-entity assignment, unresolved reference owners, P05 edge choices and P08 physical validation remain pending. See [P07 closure](../phase-0.2/p07-entity-ownership-decision-closure.md), [P07 traceability](../phase-0.2/p07-traceability-matrix.md) and [P07 validation backlog](../phase-0.2/p07-phase-0.3-validation-backlog.md).
