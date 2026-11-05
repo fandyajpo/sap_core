@@ -45,3 +45,10 @@ The Prisma 7 multi-schema feature is documented, but project behavior remains un
 ## P06 Finance model ownership
 
 Any eventual CoA, account, revision, mapping and journal-account models are Finance-owned and mapped to `finance`; do not place authoritative CoA records in `master_data`. This is an ownership decision, not a ready Prisma schema: do not infer fields, indexes or relations from the logical ERD. Validate multi-schema model mapping, generated SQL, migration behavior and account-reference strategy against the pinned stack under [P06 V01–V02 and V07](../phase-0.2/p06-phase-0.3-validation-backlog.md).
+
+
+## Phase 0.2 P08 decision closure
+
+P08.1–P08.93 are owner-approved and the P08 decision stream is complete. The consolidated decision establishes one governed multi-file Prisma model set/client and migration history across the ten PostgreSQL schemas, explicit model-to-owner-schema mapping, PostgreSQL FK baseline, domain-owned data-access contracts, application-orchestrated single-database transactions, central migration governance, and layered security/operations controls. It does not validate exact Prisma/provider behavior or authorize implementation. See [P08 closure](../phase-0.2/p08-prisma-multi-schema-decision-closure.md), [decision matrix](../phase-0.2/p08-decision-matrix.md), [traceability](../phase-0.2/p08-traceability-matrix.md) and [validation backlog](../phase-0.2/p08-phase-0.3-validation-backlog.md).
+
+The initial target remains one database and ten schemas. Future multi-database tenant placement, per-database pool manager and fleet operations are governed capabilities, not assumed initial implementation scope. P05 still determines each relation's enforcement; P07 still determines entity/aggregate ownership; P09 must pin exact versions. No generated client, schema, migration or test result is implied.
