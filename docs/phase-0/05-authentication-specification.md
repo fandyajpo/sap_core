@@ -13,13 +13,13 @@ Authentication establishes the identity and session of the caller. Better Auth i
 
 ## Identity and persistence ownership
 
-The skills context includes an initial `core.users` reference; Better Auth's adapter also owns identity/session model mechanics. Do not create a second user record or adopt generated adapter schema blindly. The owner must decide the canonical identity model, mapping between authentication identity and ERP user/employee, adapter-model schema placement, migration ownership, and how account deactivation affects ERP access. `core` is a candidate location, not an approved placement. See ADR-OPEN-02.
+The skills context includes an initial `core.users` reference; Better Auth's adapter also owns identity/session model mechanics. P02 now owner-approves Better Auth for authentication/accounts/sessions and `core.users` as the canonical ERP user identity, with no second ERP login identity and employees separate in `human_resources`. The exact adapter-generated model/field mapping, Prisma schema placement, ID type and migration behavior remain Phase 0.3 technical validation items; do not adopt generated schema blindly. See the P02 reconciliation below and ADR-OPEN-02's updated residual validation scope.
 
 ## Session/cookie requirements to decide and configure
 
 - Explicit session lifetime, refresh/rotation, freshness/step-up requirement, revocation and account-deactivation semantics.
 - Cookie attributes appropriate to actual deployment: Secure in production, HttpOnly, deliberate SameSite, Path/domain scope, trusted origins and CSRF/origin validation.
-- Cookie-cache use and expiry must match the approved revocation latency; if immediate revocation is required, do not rely on a stale cached session.
+- Cookie-cache use and expiry must be selected only after P10's revocation semantics and latency are approved; if immediate revocation is selected, do not rely on a stale cached session.
 - Define password reset, email verification, account enumeration behavior, rate/abuse controls and recovery operations before enabling those flows.
 - No MFA policy, password policy beyond library-supported safe defaults, or retention duration is invented here; product/security owners must approve them.
 
@@ -38,4 +38,4 @@ Pinned Better Auth/adapter/Next versions; reviewed adapter model mapping; cookie
 
 ## Phase 0.1 identity reconciliation
 
-The unresolved `core.users` vs Better Auth placement statement above remains historical and is not silently resolved. Phase 0.1 proposes Better Auth's principal as the sole canonical `core.users` record, with account/session/verification persistence in `core`, employee records separate, and no second login identity. This recommendation is `PROPOSED`, not approved or tested; exact adapter-generated model/field mapping, ID type, link policy and lifecycle must be owner-approved and validated. See [identity architecture](../phase-0.1/02-better-auth-identity-architecture.md) and [P02](../phase-0.1/01-decision-register.md).
+The original Phase 0 question about `core.users` vs Better Auth placement is preserved as history. P02 now `OWNER_APPROVED`: Better Auth handles authentication/accounts/sessions, `core.users` is the canonical ERP user identity, no second ERP login identity is created, HR employee identity remains separate, and CASL authorization remains separate. Exact adapter/Prisma mapping, generated model, ID and migration validation remain pending in Phase 0.3; owner approval does not assert a tested physical placement. See [identity architecture](../phase-0.1/02-better-auth-identity-architecture.md) and [P02](../phase-0.1/01-decision-register.md).

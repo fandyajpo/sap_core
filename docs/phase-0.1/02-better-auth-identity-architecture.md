@@ -1,25 +1,25 @@
 # Better Auth Identity Architecture
 
-**Decision: `PROPOSED`** — owner approval and the adapter/database test are outstanding. See [P02](01-decision-register.md#register).
+**Decision: `OWNER_APPROVED`** — Better Auth owns authentication, accounts and sessions; `core.users` remains the canonical ERP user identity. Exact adapter and Prisma mapping validation remains pending in Phase 0.3. See [P02](01-decision-register.md#register).
 
-## Recommendation
+## Approved identity boundary
 
-Use Better Auth's user record as the one canonical authentication principal and map that record to the conceptual `core.users` entity. Do not create an independent second ERP `users` identity table. Keep Better Auth account, session and verification persistence in the governed `core` schema alongside that principal, subject to model-generation review and owner approval. This is a proposed ownership boundary, not an implemented schema.
+Use Better Auth for authentication, account linking and session mechanics. The Better Auth principal maps to the canonical ERP user identity in `core.users`; do not create a second independent ERP login identity. CASL authorization remains separate from authentication and is based on approved Core memberships, scoped roles and current policy. The conceptual ownership is selected; it is not an implemented or technically validated schema.
 
-Better Auth's user is an authentication identity, not an employee, customer, vendor or authorization role. Keep workforce data in `human_resources.employees`; link an employee to a user only when a login is needed. An employee may have no login, and a user may have no employee. Whether one user can link to multiple employee records is a business decision; do not add a uniqueness rule until decided.
+Better Auth's user is an authentication identity, not an employee, customer, vendor or authorization role. Keep workforce data in `human_resources.employees`; link an employee to a user only when a login is needed. An employee may have no login, and a user may have no employee. Whether one user can link to multiple employee records is a separate HR cardinality decision; do not add a uniqueness rule until selected.
 
-## Proposed persistence map
+## Conceptual persistence map (mapping validation pending)
 
-| Concept | Proposed owner | Notes |
+| Concept | Conceptual owner | Notes |
 |---|---|---|
 | Canonical auth user / conceptual `core.users` | `core` | One principal ID is used by Better Auth, ERP memberships and attributable actions. Better Auth model/table/field mapping must be tested; ID scalar and naming are not fixed here. |
 | Provider/credential account links | `core` | Separate rows associate provider identity and credential data with the principal. Never treat email alone as a stable external provider key. Review token storage/encryption before enabling provider tokens. |
-| Sessions | `core` | Server-verified sessions. Cookie cache and expiry must meet the owner-approved revocation latency. |
+| Sessions | `core` | Server-verified sessions. Cookie-cache behavior and expiry remain subject to P10's proposed revocation semantics; no latency is owner-approved yet. |
 | Verification/reset tokens | `core` | Purpose-bound, expiring verification records; exact fields and cleanup policy follow the pinned adapter. |
 | ERP organization/company/plant memberships and role assignments | `core` | Business authorization data, separate from Better Auth account/session mechanics. |
 | Employee/workforce record | `human_resources` | Optional link to `core.users`; employee lifecycle and sensitive fields stay HR-owned. |
 
-This proposal is not a second auth schema: the Phase 0 set has no separate `auth` schema. `core` is the proposed governed schema for auth persistence. `core.users` in the skills/Phase 0 history is interpreted as the eventual canonical principal only if this proposal is approved.
+This is not a second auth schema: the Phase 0 set has no separate `auth` schema. `core` is the selected conceptual owner for the canonical ERP user and Better Auth persistence. The exact generated model, table/field mapping, ID type and Prisma schema placement remain Phase 0.3 technical validation items; they do not reopen the owner-selected identity boundary.
 
 ## Better Auth Organization plugin boundary
 
@@ -31,7 +31,7 @@ Better Auth documentation states account linking is enabled by default and may i
 
 ## Deactivation, revocation and deletion safeguards
 
-Propose an explicit canonical user lifecycle that can block new sign-ins and protected ERP access, then revoke existing sessions within an owner-approved bound. Every protected operation must check current active status and active memberships; a stale session cookie or cached claim must not preserve access after revocation. Account deactivation must not erase posted/audit attribution.
+Define an explicit canonical user lifecycle that can block new sign-ins and protected ERP access. P10 must select existing-session revocation and freshness semantics, including latency, before protected ERP operations are implemented. Every protected operation must check current active status and active memberships; a stale session cookie or cached claim must not preserve access after revocation. Account deactivation must not erase posted/audit attribution.
 
 Do not enable user hard deletion as a default. Better Auth documents hard deletion as optional; keep it disabled until data-governance and privacy owners define an approved deletion/retention process and reference handling. This does not assert any legally required retention duration. Deactivation, identity correction, email changes, linked-account removal and lawful erasure are distinct lifecycle operations and require explicit policy.
 

@@ -1,6 +1,6 @@
 # P06 Phase 0.3 Technical Validation Backlog
 
-**State:** 22 validation tasks tracked; none passed. P06 decisions are `OWNER_APPROVED`, not `TECHNICALLY_VALIDATED`. Execute only after the relevant P02–P10 decisions, pinned stack and disposable environment are available. Each task must retain exact versions, reproducible procedure/commands, fixture/data, result, reviewer and date. “Blocking” means blocking the affected Finance implementation/production claim; a feature may remain explicitly out of scope instead.
+**State:** 22 validation tasks tracked; none passed. P06 decisions are `OWNER_APPROVED` and the P06 stream is `DECISION_COMPLETE`, not `TECHNICALLY_VALIDATED` or `IMPLEMENTATION_READY`. P02–P05 owner selections are recorded; their adapter/Prisma, authorization/isolation and per-edge relationship evidence remains pending. Execute each task only after its applicable P07–P10 decisions, pinned stack and disposable environment are available. Retain exact versions, reproducible procedure/commands, fixture/data, result, reviewer and date. “Blocking” means blocking the affected Finance implementation/production claim; a feature may remain explicitly out of scope instead.
 
 | ID | Technical question | Expected evidence | Acceptance criteria | Classification | P06 decisions |
 |---|---|---|---|---|---|
@@ -29,7 +29,7 @@
 
 ## Execution and closure rules
 
-1. P02–P10 and applicable accounting/jurisdiction owners must resolve the dependencies identified in the [traceability matrix](p06-traceability-matrix.md); a P06 owner decision cannot satisfy another decision's gate.
+1. Resolve remaining P07–P10 and applicable accounting/jurisdiction owner dependencies in the [traceability matrix](p06-traceability-matrix.md). P02–P05 owner selections are recorded, but their required technical evidence and individual in-scope P05 edge selections still apply; a P06 owner decision cannot satisfy another decision's gate.
 2. Record a task as `TECHNICALLY_VALIDATED` only with reproducible evidence, exact pinned inputs, environment, commands, result, reviewer and date. Link artifacts and failure reports.
 3. A task may be marked `DEFERRED` only when its feature is explicitly out of scope and the affected behavior cannot be accidentally relied on. It remains a gate before that feature is enabled.
 4. No result is currently claimed. P06 remains `DECISION_COMPLETE`; it is not an implementation authorization and does not make Phase 0.2 complete or Phase 1 ready.

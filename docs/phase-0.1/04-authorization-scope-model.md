@@ -1,6 +1,6 @@
 # Authorization Scope Model
 
-**Decision: `PROPOSED`** — the owner must approve membership, role, inheritance and delegation rules. See [P04](01-decision-register.md#register).
+**Decision: `OWNER_APPROVED`** — the authorization architecture is selected; technical enforcement, detailed grants and tests remain pending. See [P04](01-decision-register.md#register).
 
 ## Separate authentication, membership and permission
 
@@ -11,7 +11,11 @@
 
 Better Auth's user/account/session records are not ERP roles. Do not use Better Auth Organization plugin roles, active-organization state, a client-side CASL ability, a URL `companyId`, or a user-supplied scope as authority.
 
-## Proposed decision inputs
+## Owner-selected P04 architecture
+
+Use a hybrid of system roles and custom roles. Permission inheritance must be explicit; within the applicable scope, an explicit deny overrides an allow. Platform Admin and Tenant Admin are distinct roles and trust boundaries. Break-glass access is controlled and separately attributable. Background jobs use dedicated service identities rather than implicit human impersonation. Preserve organization/company/plant scope, separation-of-duties checks and audit of grants, revocations and sensitive operations. Exact grant catalog and enforcement details remain implementation/validation work.
+
+## Authorization decision inputs
 
 A server authorization decision must be computed from:
 
@@ -21,7 +25,7 @@ A server authorization decision must be computed from:
 4. Requested action, resource type, resource lifecycle/version and owning-module policy.
 5. Any explicitly approved field-level or separation-of-duties constraints.
 
-Suggested policy shape: `(principal, action, subject, organization, company, optional plant, conditions)`. No concrete role names, permission catalog or inherited grant is fixed here.
+Policy shape: `(principal or service identity, action, subject, organization, company, optional plant, conditions)`. The role architecture and explicit inheritance/deny precedence are owner-approved; the exhaustive role/permission catalog and each grant remain to be specified. A hierarchy edge alone is not an inherited grant.
 
 ## Enforcement sequence
 
@@ -35,6 +39,6 @@ Apply company/plant predicates in the database query wherever possible. CASL-to-
 
 Any server/client cache key must partition by principal and authorized scope; a company switch or membership/role/session change invalidates it. Denials fail closed. Avoid confirming the existence of inaccessible resources. Audit grants/revocations and sensitive actions without copying secrets or unnecessary HR/financial payloads.
 
-## Required owner decisions and tests
+## Implementation details and required tests
 
-Owner approval is required for membership status/effectivity, role-to-permission mapping, inheritance, company/plant delegation, privileged administration, break-glass, separation of duties, field-level restrictions, export access and high-risk fresh-session requirements. Test positive and negative allow matrices; direct invocation of each server boundary; cross-company and cross-plant IDOR; stale membership/session; queries with multiple scopes; revoked users; cache separation; and role changes. These are Phase 1 platform gates in [14](14-phase-1-implementation-gates.md).
+P04 owner-selects the hybrid role model, explicit inheritance, deny-overrides-allow rule, separate Platform/Tenant Admin roles, controlled break-glass, dedicated service identities, scoped authorization, separation of duties and audit requirements. Detailed role-to-permission grants, membership status/effectivity, company/plant delegation, field restrictions, export grants and high-risk freshness dependencies remain to be specified where needed. Phase 0.3/implementation validation must test positive and negative matrices; direct server-boundary invocation; cross-company/plant IDOR; stale membership/session; multi-scope queries; revoked users; cache separation; role changes; SoD; break-glass and service-identity attribution. These are Phase 1 platform gates in [14](14-phase-1-implementation-gates.md).

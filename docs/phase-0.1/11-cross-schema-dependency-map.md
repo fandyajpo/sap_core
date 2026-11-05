@@ -6,7 +6,7 @@
 
 | Dependent schema/module | Target owner/schema | Data dependency | Proposed mechanism and decision |
 |---|---|---|---|
-| `core` | `core` | Organizations, companies, plants, canonical principal, auth records and membership/scope records | Same-schema relationships; P02/P03 and X01–X06 approval plus Prisma validation required. Core must not depend on business modules. |
+| `core` | `core` | Organizations, companies, plants, canonical ERP principal, auth records and membership/scope records | P02/P03 identity and initial scope policies are owner-approved; validate Better Auth/Prisma mapping and choose/test each in-scope X01–X06 relationship under P05. Core must not depend on business modules. |
 | `master_data` | `core` | Optional company scope for company-specific master records | Scope is undecided. Use owner contract/application validation until owners decide whether a reference is global, organization- or company-scoped (X10). |
 | `procurement` | `core` | Company/optional plant scope; actor context | Candidate FK/composite FK only for concrete approved aggregates (X08/X09); auth context is resolved at operation time. |
 | `procurement` | `master_data` | Vendor/customer role, material and unit references | Explicit owner read/validation contract; per-edge FK decision. Snapshot accepted terms and references as the procurement owner requires. |

@@ -1,16 +1,18 @@
 # Cross-Schema Relationship Policy
 
-**Policy: `PROPOSED`** — this is a per-edge recommendation, not approval to create any foreign key. See [P05](01-decision-register.md#register).
+**Policy: `OWNER_APPROVED`** — P05 selects a hybrid per-relationship policy; this does not approve every listed physical edge. See [P05](01-decision-register.md#register).
 
 ## Rule
 
-Do not globally ban cross-schema foreign keys and do not automatically permit them. A schema boundary is an ownership boundary within the same database, not a database or authorization boundary. Approve each edge with source/target owners, invariant, scope, nullability, delete/update action, migration plan and test evidence. A foreign key never transfers write authority or grants access.
+Do not globally ban cross-schema foreign keys and do not automatically permit them. A schema boundary is an ownership boundary within the same database, not a database or authorization boundary. Select enforcement, lifecycle/deletion behavior and reference strategy per relationship, with source/target owners, invariant, scope, nullability, delete/update action, migration plan and test evidence. A foreign key never transfers write authority or grants access.
+
+P05 owner-approves a hybrid relationship strategy: FK where appropriate per edge; selective composite foreign keys where same-parent scope must be proven; hybrid lifecycle and deletion behavior per entity; and typed FK or application reference according to relationship shape. Individual edge choices remain to be approved and technically tested. A composite FK is not a default for every company/plant relation, and an application reference must be identified as such rather than called a database FK.
 
 Recommend a physical FK when a stable, typed relationship must never dangle; both records share database lifecycle; PostgreSQL/Prisma can express and migrate the relationship; delete behavior is explicit; and the target's owner approves its integrity cost. Prefer a composite FK when the invariant includes company/organization/plant consistency and a unique target key exists for the composite. Recommend an application reference plus same-transaction owner validation for polymorphic, external, optional or lifecycle-decoupled references where a typed FK is not safe. Label that reference honestly; it is not a database FK.
 
-## Proposed edge matrix
+## Candidate per-edge matrix
 
-All recommendations below are `PROPOSED`. `FK` and `composite FK` mean candidate enforcement only after approval and versioned migration tests.
+The P05 policy is `OWNER_APPROVED`; the X01–X16 recommendations below are not individually owner-approved. `FK` and `composite FK` mean candidate enforcement only after the relevant edge choice and versioned migration tests. P06 X11 remains a Finance-internal relation candidate, not blanket FK approval.
 
 | Edge ID | Dependent → owner/target | Proposed enforcement | Scope / delete recommendation | ERD/map |
 |---|---|---|---|---|

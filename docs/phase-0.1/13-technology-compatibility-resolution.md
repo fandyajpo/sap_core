@@ -1,6 +1,6 @@
 # Technology Compatibility Resolution
 
-**Status: `PROPOSED` validation targets only.** Registry metadata and documentation are snapshots, not an approved lockfile, app compatibility certification or reproducible technical test. No package is marked `VALIDATED`. Evidence date follows the Phase 0 snapshot: 2026-11-05 UTC. See [P09](01-decision-register.md#register) and the historical [Phase 0 matrix](../phase-0/02-technology-compatibility-matrix.md).
+**Status: `PROPOSED` validation targets only.** Registry metadata and documentation are snapshots, not an approved lockfile, app compatibility certification or reproducible technical test. No package is `TECHNICALLY_VALIDATED`. Evidence date follows the Phase 0 snapshot: 2026-11-05 UTC. See [P09](01-decision-register.md#register) and the historical [Phase 0 matrix](../phase-0/02-technology-compatibility-matrix.md).
 
 ## Requested foundation and candidate baseline
 
@@ -31,7 +31,7 @@ The proposed engineering approach is to keep native Next.js production commands,
 
 ## Required reproducible compatibility gate
 
-No lockfile, package manifest, code, install or build is authorized in Phase 0.1. Before a version is approved for implementation, create the application package set in the authorized implementation phase, resolve a lockfile, then record exact Node/platform, package versions, commands, generated outputs and test results. At minimum: clean install; typecheck/build; Next App Router and Server Action tests; Better Auth/Prisma client generation and migrations for ten schemas; CASL query/isolation tests; React peer resolution; Storybook framework smoke test if selected; Playwright browser install/run; Sharp production image/native load test; and PDF/XLSX feature/legal checks if selected. Only those reproducible results may change a technical decision to `VALIDATED`.
+No lockfile, package manifest, code, install or build is authorized in Phase 0.1. Before a version is approved for implementation, create the application package set in the authorized implementation phase, resolve a lockfile, then record exact Node/platform, package versions, commands, generated outputs and test results. At minimum: clean install; typecheck/build; Next App Router and Server Action tests; Better Auth/Prisma client generation and migrations for ten schemas; CASL query/isolation tests; React peer resolution; Storybook framework smoke test if selected; Playwright browser install/run; Sharp production image/native load test; and PDF/XLSX feature/legal checks if selected. Only those reproducible results may mark a package or compatibility item `TECHNICALLY_VALIDATED`.
 
 ## Sources
 

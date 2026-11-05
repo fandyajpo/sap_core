@@ -20,11 +20,12 @@ The engineering context, global rules, workflow, decision log, skill index/depen
 | Gate | State | Why it blocks |
 |---|---|---|
 | Locked, tested Node/framework/dependency set | Open | Package snapshots/peer ranges are candidates; no install, lock resolution or build. |
-| Prisma/Better Auth adapter and generated auth schema | Open | Prisma 7.10.1 + adapter 1.7.17 peers align but exact client, model generation, schema placement and auth runtime are not tested. |
+| Prisma/Better Auth adapter and generated auth schema | P02 owner-approved; technical validation pending | Better Auth and canonical `core.users` identity are selected; exact adapter/client, model generation, schema placement and auth runtime are not tested. |
 | Ten-schema Prisma mapping and provider validation | Open | No Prisma schema, database instance, generated client or migration exists. |
-| Cross-schema FK and company/plant integrity policy | Open | No data-governance decision; provisional per-edge approval gate remains. |
-| Chart-of-accounts owner | Owner decision complete; technical validation pending | Phase 0.2 P06 supersedes the historical `master_data` placement and assigns sole ownership to Finance. The physical model and Phase 0.3 validation tasks are not complete. |
-| Session/email/authorization policy and tests | Open | Revocation/freshness/MFA/recovery/delivery and role/scope decisions are not approved or implemented. |
+| Cross-schema relationship policy | P05 strategy owner-approved; per-edge selection/validation pending | Hybrid per-relationship FK/composite-FK/application-reference approach is selected. No individual edge or migration is blanket-approved. |
+| Organization/company/plant and authorization architecture | P03/P04 owner-approved; technical validation pending | Initial single-company/one-organization-per-user policy, explicit plant assignment and hybrid role/permission architecture are selected; enforcement/isolation tests have not run. |
+| Chart-of-accounts owner | P06 decision complete; technical validation pending | Phase 0.2 P06 supersedes the historical `master_data` placement and assigns sole ownership to Finance. Physical model and Phase 0.3 validation tasks are incomplete. |
+| Session/email/revocation behavior | P10 proposed; tests not run | Freshness, revocation latency, MFA/recovery/delivery requirements remain owner decisions. P04 authorization architecture is approved, but its enforcement tests remain outstanding. |
 | ERP accounting, tax, inventory, HR and retention policies | Open | Require product, qualified business/legal owners; technical docs must not guess them. |
 | Migration, concurrency, backup/restore and runtime security evidence | Not run | No application/database or execution tool/environment. |
 
@@ -34,7 +35,7 @@ No package installation or lockfile resolution; build, lint, typecheck, unit/int
 
 ## Exit recommendation
 
-Treat Phase 0 as a design draft, not implementation-ready or production-ready. P06 CoA ownership is now owner-approved in Phase 0.2, but its technical validation and all other applicable P02–P10, stack, database, authorization, jurisdiction and operational gates remain. Before affected implementation, pin and validate the schema/adapter stack against disposable PostgreSQL; exercise concurrency, authorization/company isolation, recovery and restore. Keep `integration` dormant unless a separate accepted decision changes scope. See the [P06 closure report](../phase-0.2/p06-closure-report.md); Phase 0.2 and Phase 1 are not declared complete or ready.
+Treat Phase 0 as a design draft, not implementation-ready or production-ready. P02–P06 owner decisions are recorded, with P06 `DECISION_COMPLETE`; P02–P06 technical validation, P05 individual edge choices, P07–P10 owner decisions and applicable stack/database/jurisdiction/operations gates remain. Before affected implementation, pin and validate the schema/adapter stack against disposable PostgreSQL; exercise concurrency, authorization/company isolation, recovery and restore. Keep `integration` dormant unless a separate accepted decision changes scope. See the [Phase 0.1 register](../phase-0.1/01-decision-register.md) and [P06 closure report](../phase-0.2/p06-closure-report.md); Phase 0.2 and Phase 1 are not declared complete or ready.
 
 
 ## Phase 0.1 continuation

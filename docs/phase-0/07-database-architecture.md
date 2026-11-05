@@ -36,7 +36,7 @@ Prisma Postgres documentation distinguishes pooled application connections from 
 
 ## Cross-schema governance
 
-Ownership remains with the referenced module regardless of FK. Prisma/PostgreSQL documentation supports cross-schema relations in specified configurations, but project policy requires explicit approval. Until data-governance owners approve a relationship, do not silently add cross-schema FKs; define an owner contract and transaction-level validation instead. Candidate examples needing a decision include company/plant, master references and auth adapter records. CoA ownership is resolved by P06 in favor of Finance; account consumers use Finance contracts/read models, while any physical relation remains governed by P05 and Phase 0.3 tests.
+Ownership remains with the referenced module regardless of FK. Prisma/PostgreSQL documentation supports cross-schema relations in specified configurations, but project policy requires explicit per-edge approval. P05 now `OWNER_APPROVED` a hybrid per-relationship policy, selective composite FKs, per-entity lifecycle/deletion choices and a hybrid typed-FK/application-reference strategy; this is not blanket approval for any X01–X16 edge. Until each in-scope edge is selected and tested, do not silently add a cross-schema FK; define the approved owner contract and transaction-level validation instead. CoA ownership is resolved by P06 in favor of Finance; account consumers use Finance contracts/read models, while any physical relation remains governed by P05 and Phase 0.3 tests.
 
 ## Operational non-claims
 
@@ -45,4 +45,4 @@ No instance, schema, database user, network policy, backup plan, restore objecti
 
 ## Phase 0.1 relationship reconciliation
 
-The no-blanket-FK rule above remains in force. Phase 0.1 records proposed X01–X16 edge-by-edge enforcement recommendations (FK, composite FK or application reference), including company/plant consistency, without approving any migration. See [cross-schema relationship policy](../phase-0.1/05-cross-schema-relationship-policy.md), [global physical ERD](../phase-0.1/09-global-physical-erd.md) and [dependency map](../phase-0.1/11-cross-schema-dependency-map.md). All require pinned-version database tests before `VALIDATED`.
+The no-blanket-FK rule above remains in force. P05 now `OWNER_APPROVED` a hybrid per-relationship strategy with selective composite FKs, per-entity lifecycle/deletion choices and a hybrid typed-FK/application-reference approach. The X01–X16 entries remain candidate edge recommendations; no individual FK or migration is approved by that strategy alone. Validate every in-scope selection against pinned versions before `TECHNICALLY_VALIDATED`. See [cross-schema relationship policy](../phase-0.1/05-cross-schema-relationship-policy.md), [global physical ERD](../phase-0.1/09-global-physical-erd.md) and [dependency map](../phase-0.1/11-cross-schema-dependency-map.md).

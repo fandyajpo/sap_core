@@ -1,12 +1,12 @@
 # Global Logical ERD
 
-**Status: mixed.** The P06 CoA submodel (Finance sole ownership, company scope, template initialization, separate reporting/consolidation mappings and immutable historical account identity) is `OWNER_APPROVED`; other relationships and scope inheritance remain `PROPOSED`. This is a logical inventory, not an implementation schema. See [entity ownership](07-entity-ownership-finalization.md), [relationship policy](05-cross-schema-relationship-policy.md) and [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md).
+**Status: mixed.** P02–P06 architecture decisions are owner-approved; P06 is `DECISION_COMPLETE`. Identity mapping details, physical keys/constraints, individual P05 relationship choices, implementation grants and non-P06 entity ownership remain subject to technical validation or their own proposals. This is a logical inventory, not an implementation schema. See [decision register](01-decision-register.md), [entity ownership](07-entity-ownership-finalization.md), [relationship policy](05-cross-schema-relationship-policy.md) and [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md).
 
 ```mermaid
 erDiagram
-  ORGANIZATION ||--o{ COMPANY : proposed_contains
-  COMPANY ||--o{ PLANT : proposed_contains
-  USER ||--o{ ORGANIZATION_MEMBERSHIP : has
+  ORGANIZATION ||--o{ COMPANY : initial_single_company_first
+  COMPANY ||--o{ PLANT : contains
+  USER ||--o| ORGANIZATION_MEMBERSHIP : initial_one_org_assignment
   ORGANIZATION ||--o{ ORGANIZATION_MEMBERSHIP : grants_context
   USER ||--o{ COMPANY_MEMBERSHIP : has
   COMPANY ||--o{ COMPANY_MEMBERSHIP : scopes
@@ -15,8 +15,8 @@ erDiagram
   USER ||--o{ AUTH_ACCOUNT : authenticates_through
   USER ||--o{ AUTH_SESSION : opens
   USER o|--o{ EMPLOYEE : optional_login_link
-  ORGANIZATION_MEMBERSHIP ||--o{ COMPANY_MEMBERSHIP : proposed_parent_scope
-  COMPANY_MEMBERSHIP ||--o{ PLANT_ASSIGNMENT : proposed_parent_scope
+  ORGANIZATION_MEMBERSHIP ||--o{ COMPANY_MEMBERSHIP : parent_scope
+  COMPANY_MEMBERSHIP ||--o{ PLANT_ASSIGNMENT : parent_scope
 
   BUSINESS_PARTNER ||--o{ CUSTOMER_ROLE : may_have
   BUSINESS_PARTNER ||--o{ VENDOR_ROLE : may_have
@@ -52,8 +52,8 @@ erDiagram
 
 ## Interpretation and scope boundaries
 
-- `USER` represents the proposed canonical auth principal in `core`; account and session records are distinct security persistence. `EMPLOYEE` is an HR record and its optional identity association is not the same as employment/organization membership.
-- `ORGANIZATION`, `COMPANY` and `PLANT` meanings/cardinalities are proposals. Membership rows are separate for each scope; no hierarchy-based permission inheritance is implied.
+- `USER` represents the owner-approved canonical ERP identity in `core`; Better Auth handles authentication/accounts/sessions and exact adapter mapping remains pending. `EMPLOYEE` is an HR record and its optional identity association is not the same as employment/organization membership.
+- P03 owner-approves single-company-first and one organization per ERP user under the initial policy, explicit plant assignment, and distinct organization/company memberships. The one-organization rule is not a permanent global identity constraint; membership rows, history and future policy remain separate from `core.users`. P04 owner-approves explicit permission inheritance; the physical ERD does not imply inheritance from hierarchy alone.
 - P06 owner-approves Finance as sole owner of `CHART_OF_ACCOUNTS`, account identity/revisions and finance mappings. Company CoAs are independent; each company has one active primary chart for posting in the relevant period, and plants use their company's chart. Template release/provenance is initialization-only; consolidation is separate from the company CoA. Period semantics and enforcement remain subject to Phase 0.3 validation; these conceptual edges do not assert physical columns or FKs.
 - Procurement/sales/production/inventory/finance aggregate edges internal to a module represent logical ownership boundaries. Cross-module effects are contracts, not direct cross-module writes.
 - Company/plant scope on transactional entities is expected to be decided per module. This diagram does not assert every entity is company-scoped or that every relation is an FK. Some master-data and operational concepts are listed by schema but are not linked here because their cardinality and keys remain unresolved.

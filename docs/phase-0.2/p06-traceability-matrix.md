@@ -34,7 +34,7 @@
 ## Reconciliation rules
 
 - Phase 0's old `master_data` CoA location is historical only; the owner-approved Phase 0.2 decision is authoritative.
-- Phase 0.1's finance-ownership recommendation is upgraded to owner-approved; its other P02–P10 decisions retain their prior statuses.
+- P02–P05 are owner-approved in the current decision register. Their selected architecture does not imply adapter/schema validation, authorization/isolation tests or individual P05 edge approvals. P07–P10 remain `PROPOSED`; no P02–P10 technical item is thereby validated.
 - P05 governs any physical relation, company-key strategy and delete action. P06 fixes ownership/consumer boundaries but does not approve an untested FK or concrete database layout.
 - Company/plant authorization, identity, session handling and role/SoD semantics continue to use P02–P04/P10.
 - The exact ten schemas and reserved `integration` namespace do not change.

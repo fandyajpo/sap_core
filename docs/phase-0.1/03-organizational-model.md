@@ -1,33 +1,33 @@
 # Organizational Model
 
-**Decision: `PROPOSED`** — product and legal-entity semantics, membership inheritance and scope constraints need owner approval. See [P03](01-decision-register.md#register).
+**Decision: `OWNER_APPROVED`** — the initial operating policy and membership/assignment model are selected. Technical enforcement and broader legal/jurisdiction semantics remain separate. See [P03](01-decision-register.md#register).
 
-## Proposed conceptual hierarchy
+## Approved initial operating model
 
 ```mermaid
 graph TD
-  O[Organization / tenant group] -->|contains 0..n| C[Legal company]
+  O[Organization / tenant context] -->|initial single-company scope| C[Company]
   C -->|contains 0..n| P[Plant / operating site]
-  U[Canonical core user] --> OM[Organization membership]
+  U[Canonical core user] --> OM[Initial organization membership]
   U --> CM[Company membership]
-  U --> PA[Optional plant assignment]
+  U --> PA[Explicit plant assignment]
   OM --> O
   CM --> C
   PA --> P
   E[HR employee] -. optional identity link .-> U
 ```
 
-This hierarchy is a design recommendation, not a universal legal definition. `organization` is proposed as a tenant/group security boundary, `company` as a legal/financial entity, and `plant` as an operational physical site. Owners must confirm whether actual customers need these meanings, whether organization may exist without a company, whether a company can move between organizations, and how mergers, branches and shared services are represented.
+The initial product scope is single-company first. An ERP user belongs to one organization under the initial operating policy. That is not a permanent global identity constraint: keep the canonical `core.users` identity independent from organization membership and represent the association through membership records, so a later explicit product decision can evolve the organization policy without changing every user identity. `organization` is the initial tenant context, `company` is the initial operating/accounting boundary, and `plant` is an operational site; no jurisdiction-specific legal form is inferred.
 
-## Proposed membership distinctions
+## Selected membership and assignment model
 
-| Relationship | Purpose | Proposed invariant (requires approval) |
+| Relationship | Purpose | Selected initial invariant |
 |---|---|---|
-| Organization membership | Establishes access to the tenant/group context and platform administration surface. | A user may have memberships in multiple organizations. Membership does not automatically grant access to every company. |
-| Company membership | Grants explicitly assigned access at one company boundary. | Membership references a company and its owning organization consistently. Scope and role are effective only while active. |
-| Plant assignment | Narrows selected company access to one or more operating sites for plant-scoped actions. | A plant belongs to the referenced company; plant assignment does not silently grant another company. |
+| Organization membership | Establishes the user's initial tenant context. | An ERP user is assigned to one organization under the initial policy. Do not encode a lifetime or global uniqueness constraint on `core.users`; membership history/reassignment and future policy evolution remain relationship concerns. |
+| Company membership | Grants access at the company boundary within the user's organization. | The initial product starts with one company. Membership is explicit and consistent with its organization. Roles may differ by company; organization membership alone does not authorize all company resources. |
+| Plant assignment | Grants access to a plant-scoped operation/resource. | Plant access requires explicit assignment; do not infer it from company membership. Roles may differ by plant. |
 
-Recommendation: deny by default and require explicit company/plant entitlements unless an owner-defined delegation rule says otherwise. Do not infer permission inheritance (organization → all companies → all plants) from hierarchy alone. Role scope, delegation, date-effective membership, status vocabulary, admin/break-glass access and self-service invitations remain undecided.
+Resolve the active organization/company/plant from trusted server-side membership and assignment records on every protected operation. Context supplied by a route, UI or session hint is a selector only. P04 defines explicit permission inheritance and deny precedence; hierarchy alone does not grant inherited access. The current authorization posture remains deny-by-default and scoped, with delegation only through an explicit policy.
 
 ## Context selection is not authorization
 
@@ -43,8 +43,8 @@ A valid user session does not mean an active ERP membership. A foreign key does 
 
 ## Consistency model
 
-Propose composite keys/unique constraints on `(organization_id, company_id)` and `(company_id, plant_id)` when needed, with composite references for relationships that must prove same-parent membership. These constraints must be tested with the pinned Prisma/PostgreSQL versions. If a specific constraint cannot be expressed or safely migrated, use an owning-core transaction contract and a dedicated consistency test; document that fallback per edge in [05](05-cross-schema-relationship-policy.md).
+The selected hierarchy/membership policy does not select a physical key or enforcement mechanism. Evaluate composite keys/unique constraints on `(organization_id, company_id)` and `(company_id, plant_id)` where they prove same-parent membership. P05 owner-approves a hybrid per-relationship policy, including selective composite FKs; each in-scope edge still needs an explicit choice and pinned Prisma/PostgreSQL validation. If a constraint cannot be expressed or safely migrated, use an owning-core transaction contract and a dedicated consistency test; record the approved fallback per edge in [05](05-cross-schema-relationship-policy.md).
 
 ## Unresolved semantics
 
-No country/legal form, tax registration, statutory branch definition, fiscal-year boundary, consolidation rule, company-to-chart mapping, plant reporting rule or legal treatment is inferred. Fiscal calendar design is separate and remains deferred until the applicable business/jurisdiction is selected. See [policy classification](12-erp-policy-classification.md).
+P03 owner-approves the initial one-organization-per-user, single-company-first operating policy, explicit plant assignment and scoped roles. It does not define country/legal form, tax registration, statutory branch treatment, fiscal-year boundary, consolidation rule, all future multi-company behavior or plant reporting policy. Company-to-chart ownership is separately decided by P06: each company owns its CoA, with one active primary chart for posting in the relevant period, and its plants use that chart. Fiscal calendar design remains deferred until the applicable business/jurisdiction is selected. See the [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md) and [policy classification](12-erp-policy-classification.md).

@@ -203,10 +203,10 @@ P06 consumes, and does not replace, the shared decisions:
 
 | Dependency | P06 relationship |
 |---|---|
-| P02 — Better Auth identity and `core.users` | Supplies canonical actor identity/session for approval, audit and access. No Finance login identity. P02 remains independently gated. |
-| P03 — organization/company/plant and memberships | Supplies company ownership and scope, plant inheritance, company isolation and organization-scoped templates. P06 does not create another tenant hierarchy. |
-| P04 — hybrid authorization, role scope, SoD, break-glass and service identities | Supplies permission evaluation and maker-checker controls; Finance grants are scoped through shared authorization. P06 does not create an independent authorization engine. |
-| P05 — cross-schema FK, composite keys, lifecycle and reference strategy | Governs Finance→Core company references and consumer reference enforcement. Owner-level FK decisions are not replaced by P06; technical validation remains open. |
+| P02 — Better Auth identity and `core.users` | Owner-approved: Better Auth handles authentication/accounts/sessions and `core.users` is the canonical ERP identity. Adapter/Prisma mapping, generated schema and migration validation remain pending; no Finance login identity. |
+| P03 — organization/company/plant and memberships | Owner-approved initial single-company, one-organization-per-user operating policy, explicit plant assignment and scoped roles. Technical constraints/history and consistency tests remain pending; P06 does not create another tenant hierarchy. |
+| P04 — hybrid authorization, role scope, SoD, break-glass and service identities | Owner-approved shared authorization architecture supplies permissions and maker-checker controls. Detailed grants, enforcement and tests remain pending; P06 does not create an independent authorization engine. |
+| P05 — cross-schema FK, composite keys, lifecycle and reference strategy | Owner-approved hybrid per-relationship policy governs Finance→Core company references and consumer enforcement. Individual in-scope edge choices, migrations and tests remain pending; P06 does not approve blanket FKs. |
 | P07 — entity ownership | Must incorporate Finance-owned CoA, version/revision, template, reporting and consolidation responsibilities without inventing physical tables. |
 | P08 — Prisma multi-schema | Must map any eventual CoA/account models to `finance`; generated schema and migrations remain unvalidated. |
 | P09 — exact technology set | Provides pinned tools for validation. P06 does not select packages or versions. |
@@ -230,6 +230,6 @@ Until then:
 
 ## 6. Closure status
 
-**P06 DECISION COMPLETE.** All 26 selected options are owner-approved and recorded in the decision matrix and traceability matrix. Earlier proposals for `master_data` ownership, shared charts, unversioned account structures, or conditional Finance ownership are superseded where inconsistent. Technical validation is pending Phase 0.3; P06 is not implementation-ready. Phase 0.2 as a whole remains open, Phase 1 is not ready, and unresolved P02–P10 and applicable finance/jurisdiction policies remain gates.
+**P06 `DECISION_COMPLETE`.** All 26 selected options are `OWNER_APPROVED` and recorded in the decision matrix and traceability matrix. Earlier proposals for `master_data` ownership, shared charts, unversioned account structures, or conditional Finance ownership are superseded where inconsistent. P06 technical validation is pending Phase 0.3; P06 is not `IMPLEMENTATION_READY`. P02–P05 are separately `OWNER_APPROVED`, but their applicable technical mapping/enforcement evidence and per-edge P05 choices remain pending. P07–P10 and applicable finance/jurisdiction decisions remain open. Phase 0.3 validation remains pending; Phase 0.2 as a whole remains open and Phase 1 is not ready.
 
 See [decision matrix](p06-decision-matrix.md), [traceability matrix](p06-traceability-matrix.md), [Phase 0.3 validation backlog](p06-phase-0.3-validation-backlog.md) and [closure report](p06-closure-report.md).

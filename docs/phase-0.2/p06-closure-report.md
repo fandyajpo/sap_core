@@ -16,8 +16,8 @@ No P06.27 is required: the owner's scope supplied a closed, enumerated P06.1–P
 - `finance` is the sole authoritative owner of company-level CoAs, account identity/records, classification, hierarchy and lifecycle. The historical `master_data` location is corrected in current catalogs and ownership tables; its history is explicitly marked superseded rather than retained as a live alternative.
 - Companies own isolated CoAs; plants inherit their company's chart. Platform and organization templates are initialization sources that copy into independent company ownership. Consolidation has a separate chart/mapping layer.
 - Account identity is distinct from CoA version and mutable attributes. Controlled revision, effective dates, lifecycle, posting readiness, historical journals and report snapshots are described consistently.
-- Finance contracts and controlled read models are the consumer boundary. Other modules do not mutate Finance tables. P02 identity, P03 scope, P04 authorization/SoD, P05 relationship policy and P07–P10 technical gates remain shared dependencies; no duplicate Finance auth/tenant model was introduced.
-- Phase 0.1 proposals and ERD notes are updated to mark P06 as owner-approved and to retain the remaining P02–P10 proposals and blockers.
+- Finance contracts and controlled read models are the consumer boundary. Other modules do not mutate Finance tables. P02–P05 owner-approved decisions remain shared dependencies whose applicable adapter, scope, authorization, per-edge relationship and technical validation gates still apply; P07–P10 remain separate owner/technical gates. No duplicate Finance auth/tenant model was introduced.
+- Phase 0.1 proposals and ERD notes were reconciled for P06. This later register correction owner-approves P02–P05 as well; their technical validation and P05 per-edge selections remain pending. P07–P10 remain proposals and implementation blockers.
 
 ## Remaining implementation and validation details
 
@@ -28,7 +28,7 @@ The owner name and date were not included in the supplied selection record. This
 ## Known risks and gates
 
 1. Earlier Phase 0 and Phase 0.1 text contained a `master_data` CoA baseline and conditional Finance recommendation. Current authoritative catalog entries now point to Finance; historical records link to this superseding owner decision.
-2. Company, fiscal period, authorization and FK implementation depend on P02–P05 and other P06 dependencies. Those decisions are not silently changed by P06 closure.
+2. Company, fiscal-period, authorization and FK implementation depend on the separately owner-approved P02–P05 architecture and on their remaining technical evidence/per-edge choices, plus other P06 dependencies. P06 does not satisfy those independent gates.
 3. Effective dates, concurrent activation/posting, hierarchy cycles, multi-currency, report reproducibility and restoration cannot be certified from documentation.
 4. Jurisdictional accounting, tax, legal retention, compliance and applicable standards require qualified owners and remain scoped to actual markets/features.
 5. Provider backup/PITR and artifact recovery depend on the selected Prisma Postgres plan; no service capability is presumed.

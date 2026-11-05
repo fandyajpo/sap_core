@@ -7,19 +7,22 @@
 
 Phase 0.1 reconciles Phase 0 proposals into explicit decision records and architecture specifications. It preserves the selected modular monolith, one PostgreSQL database (`sap_core`), the same ten schemas, Next.js, Prisma ORM and Prisma Migrate. Those are approved for this phase because the owner explicitly specified them as the required context. This is not evidence that an application exists, builds, or has passed a technical test.
 
-Phase 0.1 does not supersede the skills repository or erase Phase 0 history. Historical Phase 0 labels remain as written; this directory records the prior resolution state. Phase 0.2 P06 subsequently owner-approved and closed the CoA decision stream, explicitly superseding the former `master_data` placement and Phase 0.1 proposal status. Other disputed identity, organization, authorization, cross-schema relationship, entity and exact dependency decisions remain separately gated. No reproducible technical test was available; P06 has not been technically validated. See [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md).
+Phase 0.1 does not supersede the skills repository or erase Phase 0 history. Historical Phase 0 labels remain as written; this directory records the earlier resolution state. Phase 0.2 P06 owner-approved and closed the CoA decision stream, explicitly superseding the former `master_data` placement and Phase 0.1 proposal status. The current register now records P02–P05 as `OWNER_APPROVED` as well; their adapter/schema, enforcement, per-edge relationship and security test evidence remains pending. P06 is `DECISION_COMPLETE`, but not technically validated. P07–P10 remain proposed; Phase 0.2 remains open and Phase 1 is not ready. See [decision register](01-decision-register.md) and [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md).
 
 ## Status vocabulary
 
-Use only these five decision statuses in Phase 0.1:
+Phase 0 and the original Phase 0.1 labels are preserved as historical vocabulary. Current decision tracking distinguishes owner selection, decision closure, technical evidence and scoped implementation readiness:
 
-- `APPROVED` — explicit owner approval is recorded with the approver and evidence. The requested architectural context is the sole approval provided in this phase.
-- `VALIDATED` — a reproducible technical test has been run and its procedure, pinned inputs, environment and result are recorded. Documentation or registry metadata alone is not validation.
-- `PROPOSED` — a reasoned recommendation awaiting owner approval and/or required technical evidence.
-- `DEFERRED` — intentionally postponed; it is not an implicit default and must be reopened before the affected module/policy is implemented.
-- `REJECTED` — an option was explicitly rejected with owner/evidence recorded. No new Phase 0.1 option has been marked rejected.
+- `APPROVED` — the historical Phase 0.1 label for the specified baseline; selection alone is not technical validation or implementation readiness.
+- `OWNER_APPROVED` — the owner explicitly selected a decision. It does not assert technical validation or implementation readiness.
+- `DECISION_COMPLETE` — an explicitly bounded decision set has been selected and documented. It does not close dependent decisions or technical gates.
+- `TECHNICALLY_VALIDATED` — reproducible evidence against pinned tools and a recorded environment exists; documentation or registry metadata alone is not validation.
+- `IMPLEMENTATION_READY` — applicable owner decisions and technical gates are satisfied for a specifically scoped implementation.
+- `PROPOSED` — a reasoned recommendation still awaiting owner selection and/or required evidence.
+- `DEFERRED` — intentionally postponed; not an implicit default, and reopen before the affected feature/policy is implemented.
+- `REJECTED` — an option was explicitly rejected with owner/evidence recorded.
 
-Phase 0 vocabulary such as `Accepted`, `Candidate`, `Open` and `Not verified` is preserved only in its historical files and is not a Phase 0.1 decision status.
+`VALIDATED` remains only in historical Phase 0.1 wording; use `TECHNICALLY_VALIDATED` for current technical status. Phase 0 terms such as `Accepted`, `Candidate`, `Open` and `Not verified` remain unchanged in their historical files.
 
 ## Deliverables
 

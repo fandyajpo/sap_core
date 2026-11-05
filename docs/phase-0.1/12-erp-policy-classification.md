@@ -12,10 +12,10 @@
 
 | Policy/decision area | Classification | Phase 1 treatment |
 |---|---|---|
-| Canonical principal, Better Auth persistence mapping, ID semantics, account link and deactivation/revocation | Platform-blocking | Approve and test before authentication/ERP access is implemented. Do not make a duplicate identity model. |
-| Organization/company/plant meanings, memberships and selected-context semantics | Platform-blocking | Approve core hierarchy and isolation constraints before tenant-scoped queries or writes. No jurisdiction/legal form is presumed. |
-| Authorization roles, scope inheritance/delegation, deny-by-default and server enforcement | Platform-blocking | Approve minimum membership/permission model and test every protected operation, stale session and cross-company/plant access. Exact role catalog remains owner-specific. |
-| Cross-schema FK/composite-FK/application-reference policy | Platform-blocking | Approve per-edge policy for all models included in Phase 1; test referential and same-company/plant invariants. |
+| Canonical principal, Better Auth persistence mapping, ID semantics, account link and deactivation/revocation | Platform-blocking | P02 identity boundary is `OWNER_APPROVED`; validate adapter/Prisma mapping, ID/schema behavior and revocation before authentication/ERP access is implemented. Do not make a duplicate identity model. |
+| Organization/company/plant meanings, memberships and selected-context semantics | Platform-blocking | P03 initial policy is `OWNER_APPROVED`; validate membership history/cardinality, company/plant consistency and isolation before tenant-scoped queries or writes. No jurisdiction/legal form is presumed. |
+| Authorization roles, scope inheritance/delegation, deny-by-default and server enforcement | Platform-blocking | P04 architecture is `OWNER_APPROVED`; validate inheritance/deny precedence and every protected operation, stale session and cross-company/plant access. Exact role grants remain to be specified. |
+| Cross-schema FK/composite-FK/application-reference policy | Platform-blocking | P05 hybrid strategy is `OWNER_APPROVED`; select and test per-edge policy for all models included in Phase 1, including referential and same-company/plant invariants. |
 | Entity ownership and minimal physical core ERD | Platform-blocking | Approve selected entity owners, keys, constraints and lifecycle; all module relationships in scope must match the matrix and ERDs. |
 | Prisma multi-schema mapping, exact framework/runtime/ORM/adapter baseline | Platform-blocking | Pin, install and build exact versions, generate client, test all ten schemas and migration flows before production code depends on it. |
 | Session revocation latency, disablement and high-risk freshness | Platform-blocking | Owner must choose minimum behavior before protected operations. Exact durations/MFA are not guessed. Production email/recovery operations need separate evidence. |
