@@ -29,3 +29,14 @@ The precise observations, source URLs, and remaining verification gates are in [
 ## Phase 0.1 compatibility reconciliation
 
 The package version statements above remain candidates, not a selected lockfile. Phase 0.1 adds registry observations for the remaining approved libraries and records version-documentation and peer-range caveats in [technology compatibility resolution](../phase-0.1/13-technology-compatibility-resolution.md). No combined stack has been installed, locked or built; exact versions remain `PROPOSED` and must pass the Phase 1 technology gate.
+
+
+## Phase 0.2 P09 governance decisions
+
+P09.1–P09.17 are owner-approved and P09 is decision-complete. Lock core dependencies first; adopt optional packages only for concrete features. Pin Node.js LTS and one package manager, consistently used in development, CI and deployment with frozen CI installs. The package manager and exact versions remain unselected.
+
+Next.js remains the application framework and production build/runtime authority. React/React DOM follow its supported range; TypeScript follows framework and dependency support. Prisma CLI, Client and Migrate form one compatibility set against an explicit PostgreSQL major/provider. Better Auth and its Prisma adapter must match that set; CASL remains a separate authorization engine.
+
+Use a governed hybrid toolchain. Vite+ is optional and does not replace Next.js build, SSR or runtime without proven, approved integration. Storybook, Tiptap, ECharts, PDF, Sharp and XLSX are feature-driven optional capabilities. Security, upgrades, observability, environment parity, resilience, lifecycle and architecture change authority follow P09.
+
+P09 is not a package manifest, lockfile or compatibility test. Exact versions, package-manager selection, dependency installation, build, Prisma generation/migrations, integration tests and deployment evidence remain Phase 0.3 work. See [P09 closure](../phase-0.2/p09-technology-stack-decision-closure.md), [decision matrix](../phase-0.2/p09-decision-matrix.md) and [validation backlog](../phase-0.2/p09-phase-0.3-validation-backlog.md).
