@@ -31,3 +31,8 @@ P02–P06 owner-approve canonical identity, initial organization/company/plant p
 ## Phase 0.1 catalog reconciliation
 
 This catalog remains a conceptual Phase 0 baseline. P02 now owner-approves `core.users` as the canonical ERP identity with Better Auth authentication/account/session handling; exact adapter/Prisma mapping remains unvalidated. Employees remain separate HR identities with an optional login link. P06 supersedes the former CoA placement: Finance owns CoA/account identities; master data excludes them. Owner approval does not authorize model generation. See [identity architecture](../phase-0.1/02-better-auth-identity-architecture.md), [P06 closure](../phase-0.2/p06-chart-of-accounts-decision-closure.md) and [entity ownership](../phase-0.1/07-entity-ownership-finalization.md).
+
+
+## P07 ownership governance addendum
+
+P07.1–P07.10 are owner-approved and P07 is DECISION_COMPLETE. The catalog remains conceptual: each in-scope entity must be assigned exactly one authoritative owner and aggregate root in the governed registry before implementation. Aggregate boundaries, technical/business/external identity details, lifecycle, consumer projections, contracts and shared-reference ownership require entity-level traceability. No unresolved Currency, Tax Code or fiscal-calendar owner is inferred. See [P07 closure](../phase-0.2/p07-entity-ownership-decision-closure.md), [decision matrix](../phase-0.2/p07-decision-matrix.md) and [validation backlog](../phase-0.2/p07-phase-0.3-validation-backlog.md).

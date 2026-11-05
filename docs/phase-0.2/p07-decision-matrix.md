@@ -1,0 +1,18 @@
+# P07 Decision Matrix
+
+**Status:** P07.1–P07.10 are OWNER_APPROVED; P07 is DECISION_COMPLETE. Technical validation and entity-by-entity implementation mapping remain pending Phase 0.3. See the [closure record](p07-entity-ownership-decision-closure.md).
+
+| Decision | Topic | Selected option | Approved decision | Scope / dependencies | Validation |
+|---|---|---|---|---|---|
+| P07.1 | Entity Ownership Principle | B — Logical Domain Ownership with Controlled Access | Every persistent entity has one authoritative logical owner. Consumers use governed contracts/references without acquiring write authority. | All ten schemas; P05, P08 | Pending P07-V01 |
+| P07.2 | Entity Ownership Granularity | B — Aggregate-Based Ownership | Aggregate root controls dependent entities and their invariants; child ownership follows the root unless independently lifecycle-bearing. | Domain aggregates; P05, P06, P08 | Pending P07-V02 |
+| P07.3 | Ownership Registry & Governance | B — Centralized Enterprise Entity Ownership Registry | A central version-controlled registry records owner, aggregate, lifecycle, keys, scope, consumers/contracts, relationships, authorization and status. | All ten; P02–P08 | Pending P07-V03 |
+| P07.4 | Ownership Change & Transfer Governance | B — Governed Ownership Transfer | Transfers require approved plan, identity/history preservation, reconciliation, migration/cutover and one authoritative write owner at a time. | Cross-domain change; P05, P08 | Pending P07-V04 |
+| P07.5 | Entity Identity & Key Strategy | B — Stable Technical Identity + Governed Business Identity | Technical identity remains stable; business and external identifiers are distinct and governed per entity/source/scope. | All persistent entities; P02, P05, P08 | Pending P07-V05 |
+| P07.6 | Lifecycle Ownership & State Governance | B — Domain-Owned Lifecycle with Shared Governance Standards | Domain owns lifecycle semantics; platform supplies shared standards for auditability, retention hooks and safe deletion. | All domain entities; P04–P08, P10 | Pending P07-V06 |
+| P07.7 | Derived Data, Read Models & Data Projection Ownership | B — Authoritative Source Ownership with Consumer-Owned Projections | Source domain remains authoritative; consumer owns non-authoritative projection with provenance, consistency, reconciliation and rebuild semantics. | Cross-domain read paths; P05, P08 | Pending P07-V07 |
+| P07.8 | Cross-Domain Interaction & Dependency Governance | B — Explicit Domain Contracts with Governed Dependencies | Cross-domain interaction uses explicit contracts; prohibit hidden internal-model coupling and circular dependencies. | Modular monolith; P05, P06, P08 | Pending P07-V08 |
+| P07.9 | Domain Boundary Enforcement & Architecture Compliance | B — Automated Architecture Governance | Repeatable architecture checks enforce ownership/dependency rules; exceptions are approved, scoped, time-bound and reviewed. | Source/build/CI governance; P08, P09 | Pending P07-V09 |
+| P07.10 | Shared, Reference & Cross-Domain Entity Governance | B — Canonical Ownership with Governed Shared Reference Contracts | Shared/reference data retains one canonical owner; consumers use contracts, projections or historical snapshots, not competing authoritative copies. | Shared/reference domains; P05, P06, P08 | Pending P07-V10 |
+
+The matrix records owner selections and their technical evidence obligations. It does not assign unresolved Currency, Tax Code, fiscal calendar or other reference ownership; those remain separate owner decisions. It does not turn candidate entities into approved tables or relations.
