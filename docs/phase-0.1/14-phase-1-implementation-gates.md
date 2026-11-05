@@ -1,0 +1,33 @@
+# Phase 1 Implementation Gates
+
+**Gate result: NOT CLEARED.** These are objective entry gates, not permission to start implementation. Phase 1 is not ready while applicable technical evidence is untested or remaining owner decisions are open. See [decision register](01-decision-register.md) and [policy classification](12-erp-policy-classification.md).
+
+## Required entry gates
+
+| Gate | Decision / evidence | Pass criterion before affected implementation |
+|---|---|---|
+| G01 — Canonical identity | P02 owner-approved; adapter/Prisma mapping validation pending | Preserve Better Auth as auth/accounts/sessions and `core.users` as the canonical ERP identity; no duplicate login identity; employee records remain separate. Review pinned generated schema and prove the mapping, migration and identity behavior. |
+| G02 — Organization scope | P03 owner-approved; technical enforcement pending | Implement initial single-company scope, one organization per ERP user under the initial policy, explicit plant assignment and scoped roles. Do not impose a permanent global identity constraint. Test membership/history, company/plant consistency and denial of unassigned access. |
+| G03 — Authentication and revocation | P10 remains proposed | Select session verification, account disablement, membership revocation and freshness behavior. Tests prove direct server operation denial and revocation at the agreed latency. Email/recovery operational gates are required before enabling those flows. |
+| G04 — Authorization | P04 owner-approved; detailed grants and technical tests pending | Implement hybrid system/custom roles, explicit permission inheritance and deny-overrides-allow within applicable scope; keep Platform Admin and Tenant Admin separate; control break-glass and use dedicated service identities. Prove scoped action/row filtering, SoD, audit, revocation and cache isolation. |
+| G05 — Relationship governance | P05 hybrid policy owner-approved; individual in-scope edge choices and evidence pending | Select per-edge FK/composite-FK/application-reference enforcement, nullability, lifecycle/delete behavior and owning contract. Test company/plant invariants. P06 X11 is not blanket FK approval. |
+| G06 — Entity ownership and minimum ERD | P07 remains proposed | Each selected entity has one owner, stable key type, scope, fields, lifecycle, constraints, authorization and correction/snapshot behavior. Core logical/physical ERDs match entity and relationship matrices. |
+| G07 — Chart of accounts | P06 decision stream complete; P06.1–P06.26 owner-approved; validation pending | Finance sole ownership, company-level CoA, plant inheritance, template-only initialization and separate consolidation mappings are owner-approved. Before affected implementation, complete applicable V01–V22 tests, satisfy P02–P05 technical dependencies, approve consumer contracts and record any legacy-data migration impact. If deferred, do not implement an implicit model/reference. |
+| G08 — Prisma multi-schema and migrations | P08 remains proposed | Pin exact Prisma/provider/adapter set. Clean generation validates all ten exact schemas, approved relations and client ownership; fresh and upgrade migrations are tested on disposable PostgreSQL. Prisma Migrate remains the sole governed migration path. |
+| G09 — Technology baseline | P09 remains proposed | Lock Node, Next/React, Prisma CLI/client, Better Auth/adapter, CASL and selected feature packages together. Clean install, build, typecheck and representative security/build tests pass on target runtime. Registry peers alone do not pass this gate. |
+| G10 — Database operations | Phase 0 ADR-OPEN-05 | Select runtime/migration credentials/roles, pooled vs direct paths, provider/engine major, TLS/network controls and backup/recovery objectives before provisioning or production migration. |
+| G11 — Phase 1 scope | P12–P13 | Product explicitly lists included modules/features. Any module-specific or jurisdiction policy required by those features is owner-approved; omitted policies stay `DEFERRED` and the corresponding feature remains excluded. |
+
+## Technical evidence packet
+
+For each technical gate, retain the pinned version/platform, exact repeatable commands, schema/migration artifacts, test fixtures and results, owner reviewer and date. At minimum, use two organizations, two companies and multiple plants with users/memberships that include authorized, unauthorized, revoked and unassigned cases. Verify generated Prisma schema and SQL rather than relying on diagrams or docs.
+
+Do not count unit-only checks as tenant-isolation proof. Exercise the actual protected Route Handler, Server Action, service/use-case and query predicates. Verify that a malicious caller cannot change user ID, company, organization or plant in input to widen scope. Test migration creation/application from an empty database and upgrade from the prior migration history.
+
+## Explicitly deferred unless Phase 1 scope changes
+
+Payroll, tax, fiscal/legal requirements, accounting standard, FX/rounding, inventory valuation, production costing, legal record retention, number gaplessness, external integrations, Vite+, PDF/XLSX features and non-core workflows remain excluded until their qualified owners decide them. If Phase 1 includes any such feature, its decision becomes a module/jurisdiction gate before schema or code work.
+
+## Decision rule
+
+A gate passes only when applicable owner decisions are `OWNER_APPROVED` (or the explicitly retained historical `APPROVED` baseline) and required evidence is `TECHNICALLY_VALIDATED`. `DECISION_COMPLETE` alone is not a technical pass; `IMPLEMENTATION_READY` is an aggregate, scoped outcome, not a synonym for owner approval. Do not report Phase 1 ready while any applicable gate is unmet. Current aggregate outcome: **NOT READY — BLOCKING DECISIONS / EVIDENCE REMAIN**.
