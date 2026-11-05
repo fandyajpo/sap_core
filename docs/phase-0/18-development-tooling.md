@@ -30,3 +30,9 @@ Use separate local/test/staging/production configuration; never commit credentia
 ## File-heavy libraries
 
 PDF rendering/generation and spreadsheet/image processing are server/client-specific and may have native/browser worker constraints. Apply upload size, MIME/content, memory, CPU/time, decompression and output-safety limits; test in the actual deploy target before enabling.
+
+## Phase 0.2 P09 governance decisions
+
+P09.1–P09.17 are owner-approved. Pin Node.js LTS and exactly one package manager; use lockfile-based reproducible installs and frozen/immutable CI installation. Keep Next.js native development and production build workflows authoritative. Typecheck, lint/format, unit/integration tests and Playwright E2E are explicit pipeline layers; exact lint/formatter tools remain unselected. Vite+ is optional pending a concrete tested use case. Dependency scanning, reviewed upgrades, observability, environment parity and resilience are governed requirements. Optional feature packages are added only when their feature is approved and compatibility/security/license/deployment constraints are tested.
+
+These are owner-approved policies, not implemented automation. No package manager, CI workflow, scanner, lockfile or runtime configuration is created by this decision. See [P09 closure](../phase-0.2/p09-technology-stack-decision-closure.md) and [P09 backlog](../phase-0.2/p09-phase-0.3-validation-backlog.md).
