@@ -34,3 +34,10 @@ Fresh database creation; upgrade from supported prior state; migration history i
 ## P06 CoA ownership correction and migration boundary
 
 P06 corrects the former documentation placement to Finance ownership; no database or legacy CoA records exist in this repository, and this documentation correction is not a data migration. If an implementation later has legacy records, an owner-reviewed, restartable backfill/reconciliation/rollback plan is required before changing schema. Preserve account IDs and posted journal history. Validate the eventual Finance schema and every migration with pinned Prisma/PostgreSQL versions; see [V01–V07](../phase-0.2/p06-phase-0.3-validation-backlog.md).
+
+
+## Phase 0.2 P08 migration governance closure
+
+P08.1–P08.93 are owner-approved and P08 is decision-complete. The approved direction retains one governed Prisma Migrate history for the initial database, domain-owned migration authorship under central governance, forward-only default evolution, drift detection and reviewed reconciliation, dedicated release identity/pipeline, clean and upgrade migration evidence, and controlled forward recovery. This does not mean a migration history or executable pipeline already exists.
+
+The initial deployment remains one PostgreSQL database with ten schemas. Multi-database fleet migrations and tenant relocation are future governed capabilities, activated only through a scoped phase with provider evidence. Validate actual CLI behavior against the exact P09-pinned Prisma version and G10 connection/role decisions. See [P08 closure](../phase-0.2/p08-prisma-multi-schema-decision-closure.md) and [P08 validation backlog](../phase-0.2/p08-phase-0.3-validation-backlog.md).
