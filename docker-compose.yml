@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17.6
+    container_name: sap-core-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sap_core
+      POSTGRES_PASSWORD: sap_core_dev
+      POSTGRES_DB: sap_core
+    ports:
+      - "5432:5432"
+    volumes:
+      - sap_core_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sap_core -d sap_core"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  sap_core_postgres_data:

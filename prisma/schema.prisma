@@ -1,0 +1,19 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["core", "master_data", "procurement", "inventory", "sales", "finance", "production", "human_resources", "integration", "system"]
+}
+
+// Minimal technical-validation model only. This is not the production entity catalog.
+model ValidationRecord {
+  id        String   @id @default(uuid()) @db.Uuid
+  label     String   @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("validation_records")
+  @@schema("core")
+}
