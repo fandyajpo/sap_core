@@ -1,10 +1,10 @@
 # Entity Ownership Finalization
 
-**Decision status: `PROPOSED`.** This is a reconciled ownership proposal, not approval to generate models. The word “finalization” means the catalog is now explicit enough for owner review; it does not mean every entity or field is finalized. See [P07](01-decision-register.md#register).
+**Decision status: `DECISION_COMPLETE` (P07.1–P07.10 `OWNER_APPROVED`).** The ownership principles and governance model are owner-approved. This conceptual catalog is not a final physical table catalog, does not assign unresolved reference entities, and does not authorize model generation. See [P07 closure](../phase-0.2/p07-entity-ownership-decision-closure.md), [decision matrix](../phase-0.2/p07-decision-matrix.md) and [Phase 0.3 backlog](../phase-0.2/p07-phase-0.3-validation-backlog.md).
 
 ## Ownership map
 
-| Schema | Proposed owner and entity groups | Phase 0.1 disposition / unresolved boundary |
+| Schema | Conceptual owner and entity groups | Owner-approved boundary / unresolved implementation detail |
 |---|---|---|
 | `core` | Core/platform: organizations, companies, plants, canonical ERP user identity, Better Auth account/session/verification persistence, organization/company memberships, plant assignments and authorization assignment concepts. | P02/P03 identity and initial membership policies are `OWNER_APPROVED`; Better Auth/Prisma mapping, physical constraints and tests remain pending. No parallel login identity. P04 role/authorization architecture is owner-approved; detailed grants and enforcement remain to be validated. Fiscal-year references remain deferred until fiscal-calendar policy is selected. |
 | `master_data` | Master-data: business partners; customer/vendor role profiles; materials/products; units and conversions. | Does not own or duplicate CoA definitions or account records under owner-approved P06. Partner identity, company/global scope, effective dating and unit conversion remain separate product decisions. |
@@ -33,4 +33,4 @@ Organization/company/plant and their distinct organization/company membership an
 
 ## Changes from Phase 0 and unresolved items
 
-P06 explicitly supersedes the historical Phase 0 CoA placement and the former Phase 0.1 proposal: Finance is the sole owner, company-level CoA is selected, and `master_data` excludes account definitions. P02–P05 are now owner-approved; adapter/Prisma mapping, technical enforcement and per-edge P05 choices remain open. P07–P10 and other entity ownership decisions remain proposed or subject to their applicable gates. No schema authoring is authorized by this catalog. The updated views are [global logical](08-global-logical-erd.md), [global physical draft](09-global-physical-erd.md) and [per-schema](10-per-schema-erd.md); see the [P06 traceability matrix](../phase-0.2/p06-traceability-matrix.md).
+P06 explicitly supersedes the historical Phase 0 CoA placement and the former Phase 0.1 proposal: Finance is the sole owner, company-level CoA is selected, and `master_data` excludes account definitions. P02–P05 are now owner-approved; adapter/Prisma mapping, technical enforcement and per-edge P05 choices remain open. P07's ownership principles are owner-approved and decision-complete; entity-by-entity aggregate mapping, unresolved reference ownership, technical evidence and all applicable P05/P08 constraints remain pending. P08–P10 remain proposed or subject to their applicable gates. No schema authoring is authorized by this catalog. The updated views are [global logical](08-global-logical-erd.md), [global physical draft](09-global-physical-erd.md) and [per-schema](10-per-schema-erd.md); see the [P06 traceability matrix](../phase-0.2/p06-traceability-matrix.md).
