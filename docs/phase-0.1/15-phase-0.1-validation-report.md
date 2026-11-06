@@ -73,3 +73,9 @@ This is documentation reconciliation only. No exact Node/package-manager/package
 P10.1–P10.18 are now `OWNER_APPROVED` and P10 is `DECISION_COMPLETE`. The approved session governance packet is recorded in [P10 closure](../phase-0.2/p10-session-governance-decision-closure.md), [decision matrix](../phase-0.2/p10-decision-matrix.md), [traceability](../phase-0.2/p10-traceability-matrix.md) and [Phase 0.3 validation backlog](../phase-0.2/p10-phase-0.3-validation-backlog.md).
 
 This continuation records owner decisions only. No Better Auth adapter behavior, session revocation, expiration, step-up, token rotation, CSRF, cache propagation, audit, compromise recovery or operational control is asserted to exist or pass. Exact durations, propagation SLOs, retention periods and vendor-specific APIs remain pending evidence-based Phase 0.3 validation. G03 remains uncleared until its applicable P0 evidence is produced. Phase 1 remains NOT READY.
+
+
+
+## Phase 0.3 P05 X06 continuation
+
+The project owner has now explicitly approved P05 X06: `core.session.userId` → `core.user.id` and `core.account.userId` → `core.user.id` both use `ON DELETE RESTRICT`. Revoke sessions and unlink accounts only through the approved authentication lifecycle; Better Auth hard-delete remains disabled. This later selection supersedes the historical per-edge status above for X06 only; other edge choices and technical validation remain pending. The current V03 migration and test still use `ON DELETE CASCADE`, so implementation reconciliation remains required. Existing applied migrations must not be edited or rewritten; any correction must be a new migration. This continuation records the decision and does not claim technical validation or implementation.

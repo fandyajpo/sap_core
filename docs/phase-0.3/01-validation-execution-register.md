@@ -9,7 +9,7 @@
 | V00 | Repository baseline inspection | `PASS` (inventory only) | [Baseline assessment](00-repository-baseline-assessment.md) |
 | V01 | Prisma multi-schema validation | `PASS` | PostgreSQL 17.6; Prisma 7.10.1 validation and Client generation; all ten PostgreSQL schemas physically verified; initial migrations applied and database status up to date; fresh disposable database reproducibility verified |
 | V02 | Cross-schema relation validation | `PASS` | Cross-schema relation migration applied; PostgreSQL FK metadata verified; orphan reference rejected; `ON DELETE CASCADE` behavior verified; test transaction rolled back |
-| V03 | Better Auth canonical identity | `BLOCKED` | Local integration suite passed (3/3); X06 cascade discrepancy remains open; clean migration replay and CI integration test remain pending. See evidence below. |
+| V03 | Better Auth canonical identity | `BLOCKED` | X06 is owner-approved as `ON DELETE RESTRICT`, but the applied V03 migration and integration test still use `ON DELETE CASCADE`; implementation reconciliation, clean migration replay and CI integration testing remain pending. See evidence below. |
 | V04 | Tenant isolation and RLS | `BLOCKED` | Company/plant scope enforcement, RLS policy evidence where selected, cross-tenant negative tests |
 | V05 | Migration/schema integrity | `BLOCKED` | Clean database migration, repeatability, drift and recovery evidence |
 | V06 | Transaction/concurrency | `BLOCKED` | Interactive transaction, rollback, idempotency, race and financial/stock integrity tests |
@@ -18,7 +18,7 @@
 | V09 | Error classification/recovery | `BLOCKED` | SQLSTATE/Prisma/provider error taxonomy, redaction, retry and ambiguous-outcome tests |
 | V10 | Security/privilege boundaries | `BLOCKED` | Least-privilege roles, secrets handling, authz boundaries, audit and negative security tests |
 
-## V03 evidence and unresolved discrepancy
+## V03 evidence and X06 implementation reconciliation
 
 ### Evidence recorded
 
@@ -28,9 +28,9 @@
 - GitHub Actions static validation passed on commit `c0bef8e7c3843ebd763e8aa01a2533821cf8b2a2` for dependency installation, `pnpm db:validate`, `pnpm db:generate`, lint, and typecheck.
 - The GitHub Actions workflow does not run the V03 integration suite. CI integration testing remains pending.
 
-### X06 remains unresolved
+### X06 policy approved; implementation reconciliation pending
 
-P05 X06 states: “No cascading principal deletion; revoke/expire sessions and unlink accounts only through approved auth lifecycle. Hard-delete behavior remains unselected.” The V03 migration instead defines `ON DELETE CASCADE` for both `core.session.userId` and `core.account.userId`, and the integration test directly deletes its tagged principal and verifies the database cascades. Better Auth hard-delete is not enabled as an application feature, but that does not remove the database-level cascades. This discrepancy is open; V03 remains `BLOCKED` and X06 must not be treated as resolved.
+P05 X06 is now `OWNER_APPROVED`: `core.session.userId` → `core.user.id` and `core.account.userId` → `core.user.id` both require `ON DELETE RESTRICT`. Sessions must be revoked and accounts unlinked only through the approved authentication lifecycle; Better Auth hard-delete remains disabled. The current Prisma schema, applied V03 migration and integration test still define or assert `ON DELETE CASCADE`; the test's direct SQL principal deletion verifies that old database behavior, not the approved authentication lifecycle. V03 remains `BLOCKED` until implementation and test evidence match the approved decision. Existing applied migrations must not be edited or rewritten; any corrective DDL must be a new migration.
 
 Clean migration replay and CI integration testing also remain pending. The current evidence does not establish either.
 
@@ -68,6 +68,6 @@ Clean migration replay and CI integration testing also remain pending. The curre
 
 ## Current blocker
 
-V01 and V02 are `PASS` based on the evidence recorded above. V03 remains `BLOCKED` due to the unresolved X06 cascade-policy discrepancy and outstanding reproducibility evidence: clean migration replay and CI integration testing are pending. V04–V10 remain `BLOCKED` until their own acceptance criteria are evidenced. Phase 1 remains blocked while any required gate remains unresolved.
+V01 and V02 are `PASS` based on the evidence recorded above. The X06 policy is now owner-approved, but V03 remains `BLOCKED` because the current schema, applied migration and test still use `ON DELETE CASCADE` instead of the approved `ON DELETE RESTRICT`; clean migration replay and CI integration testing are also pending. V04–V10 remain `BLOCKED` until their own acceptance criteria are evidenced. Phase 1 remains blocked while any required gate remains unresolved.
 
 This register is an execution tracker, not evidence that blocked validations have passed.

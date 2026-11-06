@@ -33,7 +33,7 @@ Better Auth documentation states account linking is enabled by default and may i
 
 Define an explicit canonical user lifecycle that can block new sign-ins and protected ERP access. P10 must select existing-session revocation and freshness semantics, including latency, before protected ERP operations are implemented. Every protected operation must check current active status and active memberships; a stale session cookie or cached claim must not preserve access after revocation. Account deactivation must not erase posted/audit attribution.
 
-Do not enable user hard deletion as a default. Better Auth documents hard deletion as optional; keep it disabled until data-governance and privacy owners define an approved deletion/retention process and reference handling. This does not assert any legally required retention duration. Deactivation, identity correction, email changes, linked-account removal and lawful erasure are distinct lifecycle operations and require explicit policy.
+P05 X06 is `OWNER_APPROVED`: `core.session.userId` and `core.account.userId` both reference `core.user.id` with `ON DELETE RESTRICT`. Direct principal deletion therefore cannot silently remove authentication records. Revoke sessions and unlink accounts only through the approved authentication lifecycle. Better Auth hard-delete remains disabled; this FK decision does not enable it or select a broader deletion/retention process. Deactivation, identity correction, email changes and lawful erasure remain distinct lifecycle operations; no legally required retention duration is inferred.
 
 ## Migration and implementation ownership
 
