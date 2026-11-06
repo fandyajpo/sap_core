@@ -4,7 +4,7 @@
 
 | ID | Validation area | Required evidence / acceptance criteria | Priority |
 |---|---|---|---|
-| V01 | Runtime/package manager | Refresh official support data; select exact Node LTS and one manager; record versions and deployment support. | P0 |
+| V01 | Runtime/package manager | Reconcile and verify the repository-declared Node.js 26.0.0 and pnpm 10.20.0 against current support and deployment requirements; record the resolved versions/configuration. The package manager is declared in `package.json` and both CI jobs; `pnpm-lock.yaml` records lockfile format, not the pnpm version. See the later repository-pin reconciliation in the [P09 closure](p09-technology-stack-decision-closure.md). | P0 |
 | V02 | Lockfile reproducibility | Clean checkout install with frozen/immutable lockfile succeeds in CI without unreviewed lockfile mutation. | P0 |
 | V03 | Core dependency resolution | Exact Next, React/DOM, TypeScript, Prisma CLI/Client, Better Auth/adapter and CASL resolve without peer/engine conflicts. | P0 |
 | V04 | Next.js runtime | Production build and representative App Router, SSR, Server Components, Server Actions and protected Proxy/DAL paths work on pinned Node. | P0 |
