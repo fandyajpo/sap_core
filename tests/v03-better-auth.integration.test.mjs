@@ -249,6 +249,7 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       const signoutResponse = await authRequest("/sign-out", {
         method: "POST",
         cookie,
+        body: {},
       });
       await readJson(signoutResponse, "sign out");
 
