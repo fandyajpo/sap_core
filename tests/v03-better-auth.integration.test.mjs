@@ -75,6 +75,17 @@ function authRequest(path, { method = "GET", body, cookie } = {}) {
   });
 }
 
+async function insertTestUser(email) {
+  const userId = randomUUID();
+  await pool.query(
+    `INSERT INTO "core"."user"
+       ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, false, NOW(), NOW())`,
+    [userId, "V03 FK fixture", email],
+  );
+  return userId;
+}
+
 before(async () => {
   await pool.query("SELECT 1");
 
@@ -108,16 +119,35 @@ before(async () => {
 });
 
 after(async () => {
+  const cleanupErrors = [];
+
   try {
     if (schemaReady) {
-      await pool.query(
-        'DELETE FROM "core"."user" WHERE "email" LIKE $1',
-        [`${testPrefix}%`],
-      );
-      await pool.query(
+      const ownedEmailPattern = `${testPrefix}%`;
+      const cleanupQueries = [
+        `DELETE FROM "core"."session"
+         WHERE "userId" IN (
+           SELECT "id" FROM "core"."user" WHERE "email" LIKE $1
+         )`,
+        `DELETE FROM "core"."account"
+         WHERE "userId" IN (
+           SELECT "id" FROM "core"."user" WHERE "email" LIKE $1
+         )`,
         'DELETE FROM "core"."verification" WHERE "identifier" LIKE $1',
-        [`${testPrefix}%`],
-      );
+        'DELETE FROM "core"."user" WHERE "email" LIKE $1',
+      ];
+
+      for (const query of cleanupQueries) {
+        try {
+          await pool.query(query, [ownedEmailPattern]);
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+      }
+    }
+
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(cleanupErrors, "V03 fixture cleanup failed.");
     }
   } finally {
     await pool.end();
@@ -171,8 +201,58 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
     }
   });
 
+  await t.test("session FK independently restricts principal deletion", async () => {
+    const userId = await insertTestUser(`${testPrefix}session-restrict@example.test`);
+    const sessionId = randomUUID();
+    await pool.query(
+      `INSERT INTO "core"."session"
+         ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
+       VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
+      [sessionId, new Date(Date.now() + 60_000), randomUUID(), userId],
+    );
+
+    await assert.rejects(
+      pool.query('DELETE FROM "core"."user" WHERE "id" = $1', [userId]),
+      (error) => error?.code === "23503",
+      "a session alone must prevent principal deletion",
+    );
+    const { rows } = await pool.query(
+      `SELECT
+         (SELECT COUNT(*) FROM "core"."user" WHERE "id" = $1) AS users,
+         (SELECT COUNT(*) FROM "core"."session" WHERE "id" = $2) AS sessions`,
+      [userId, sessionId],
+    );
+    assert.equal(Number(rows[0].users), 1);
+    assert.equal(Number(rows[0].sessions), 1);
+  });
+
+  await t.test("account FK independently restricts principal deletion", async () => {
+    const userId = await insertTestUser(`${testPrefix}account-restrict@example.test`);
+    const accountId = randomUUID();
+    await pool.query(
+      `INSERT INTO "core"."account"
+         ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+      [accountId, randomUUID(), "v03-account-restrict", userId],
+    );
+
+    await assert.rejects(
+      pool.query('DELETE FROM "core"."user" WHERE "id" = $1', [userId]),
+      (error) => error?.code === "23503",
+      "an account alone must prevent principal deletion",
+    );
+    const { rows } = await pool.query(
+      `SELECT
+         (SELECT COUNT(*) FROM "core"."user" WHERE "id" = $1) AS users,
+         (SELECT COUNT(*) FROM "core"."account" WHERE "id" = $2) AS accounts`,
+      [userId, accountId],
+    );
+    assert.equal(Number(rows[0].users), 1);
+    assert.equal(Number(rows[0].accounts), 1);
+  });
+
   await t.test(
-    "Better Auth signup, user/account/session persistence, profile update, and sign-out",
+    "Better Auth signup, identity persistence, account unlink, disabled hard-delete, and sign-out",
     async () => {
       const email = `${testPrefix}auth@example.test`;
       const password = `${randomUUID()}Aa1!`;
@@ -215,6 +295,7 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       assert.equal(accountRows[0].providerId, "credential");
       assert.equal(accountRows[0].accountId, userId);
       assert.equal(accountRows[0].relatedUserId, userId);
+      const credentialAccountId = accountRows[0].id;
 
       const { rows: sessionRows } = await pool.query(
         `SELECT s."id", s."userId", u."id" AS "relatedUserId"
@@ -246,6 +327,97 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       );
       assert.equal(updatedUserRows[0]?.name, updatedName);
 
+      const linkedAccountId = randomUUID();
+      await pool.query(
+        `INSERT INTO "core"."account"
+           ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+        [linkedAccountId, randomUUID(), "v03-unlink-test", userId],
+      );
+
+      const foreignUserId = await insertTestUser(`${testPrefix}foreign@example.test`);
+      const foreignAccountId = randomUUID();
+      await pool.query(
+        `INSERT INTO "core"."account"
+           ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+        [foreignAccountId, randomUUID(), "v03-foreign-account", foreignUserId],
+      );
+
+      const unlinkResponse = await authRequest("/unlink-account", {
+        method: "POST",
+        cookie,
+        body: { accountId: linkedAccountId },
+      });
+      await readJson(unlinkResponse, "unlink linked account");
+      const { rows: unlinkedRows } = await pool.query(
+        `SELECT
+           (SELECT COUNT(*) FROM "core"."account" WHERE "id" = $1) AS unlinked,
+           (SELECT COUNT(*) FROM "core"."user" WHERE "id" = $2) AS users,
+           (SELECT COUNT(*) FROM "core"."account" WHERE "id" = $3 AND "userId" = $2) AS credentials`,
+        [linkedAccountId, userId, credentialAccountId],
+      );
+      assert.equal(Number(unlinkedRows[0].unlinked), 0);
+      assert.equal(Number(unlinkedRows[0].users), 1);
+      assert.equal(Number(unlinkedRows[0].credentials), 1);
+
+      const foreignUnlinkResponse = await authRequest("/unlink-account", {
+        method: "POST",
+        cookie,
+        body: { accountId: foreignAccountId },
+      });
+      const foreignUnlinkBody = await foreignUnlinkResponse.text();
+      assert.equal(
+        foreignUnlinkResponse.ok,
+        false,
+        `unlinking another user's account must fail: ${foreignUnlinkBody.slice(0, 500)}`,
+      );
+      const { rows: remainingForeignRows } = await pool.query(
+        'SELECT "id", "userId" FROM "core"."account" WHERE "id" = $1',
+        [foreignAccountId],
+      );
+      assert.equal(remainingForeignRows.length, 1);
+      assert.equal(remainingForeignRows[0].userId, foreignUserId);
+
+      const lastAccountResponse = await authRequest("/unlink-account", {
+        method: "POST",
+        cookie,
+        body: { accountId: credentialAccountId },
+      });
+      const lastAccountBody = await lastAccountResponse.text();
+      assert.equal(
+        lastAccountResponse.ok,
+        false,
+        `unlinking the last account must fail: ${lastAccountBody.slice(0, 500)}`,
+      );
+      const { rows: remainingCredentialRows } = await pool.query(
+        'SELECT "id" FROM "core"."account" WHERE "id" = $1 AND "userId" = $2',
+        [credentialAccountId, userId],
+      );
+      assert.equal(remainingCredentialRows.length, 1);
+
+      const deleteUserResponse = await authRequest("/delete-user", {
+        method: "POST",
+        cookie,
+        body: {},
+      });
+      const deleteUserBody = await deleteUserResponse.text();
+      assert.equal(
+        deleteUserResponse.ok,
+        false,
+        `Better Auth hard deletion must be disabled: ${deleteUserBody.slice(0, 500)}`,
+      );
+      const { rows: preservedPrincipalRows } = await pool.query(
+        `SELECT
+           (SELECT COUNT(*) FROM "core"."user" WHERE "id" = $1) AS users,
+           (SELECT COUNT(*) FROM "core"."session" WHERE "id" = $2) AS sessions,
+           (SELECT COUNT(*) FROM "core"."account" WHERE "id" = $3) AS accounts`,
+        [userId, sessionId, credentialAccountId],
+      );
+      assert.equal(Number(preservedPrincipalRows[0].users), 1);
+      assert.equal(Number(preservedPrincipalRows[0].sessions), 1);
+      assert.equal(Number(preservedPrincipalRows[0].accounts), 1);
+
       const signoutResponse = await authRequest("/sign-out", {
         method: "POST",
         cookie,
@@ -258,6 +430,15 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
         [sessionId],
       );
       assert.equal(revokedSessions.length, 0, "sign-out must revoke the database session");
+
+      const { rows: preservedAfterSignout } = await pool.query(
+        `SELECT
+           (SELECT COUNT(*) FROM "core"."user" WHERE "id" = $1) AS users,
+           (SELECT COUNT(*) FROM "core"."account" WHERE "id" = $2 AND "userId" = $1) AS accounts`,
+        [userId, credentialAccountId],
+      );
+      assert.equal(Number(preservedAfterSignout[0].users), 1);
+      assert.equal(Number(preservedAfterSignout[0].accounts), 1);
 
       const afterSignoutResponse = await authRequest("/get-session", { cookie });
       const afterSignout = await readJson(afterSignoutResponse, "get session after sign-out");
@@ -310,40 +491,6 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
         ),
         (error) => error?.code === "23503",
       );
-
-      // Better Auth hard-delete is deliberately not enabled. Delete only this
-      // uniquely tagged test principal directly to verify PostgreSQL cascades.
-      await pool.query(
-        `INSERT INTO "core"."session"
-           ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
-         VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
-        [randomUUID(), new Date(Date.now() + 60_000), randomUUID(), userId],
-      );
-      await pool.query(
-        `INSERT INTO "core"."account"
-           ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, NOW(), NOW())`,
-        [randomUUID(), randomUUID(), "v03-cascade-test", userId],
-      );
-      const deleteUserResult = await pool.query(
-        'DELETE FROM "core"."user" WHERE "id" = $1',
-        [userId],
-      );
-      assert.equal(deleteUserResult.rowCount, 1);
-
-      const { rows: remainingChildren } = await pool.query(
-        `SELECT
-           (SELECT COUNT(*) FROM "core"."session" WHERE "userId" = $1) AS sessions,
-           (SELECT COUNT(*) FROM "core"."account" WHERE "userId" = $1) AS accounts`,
-        [userId],
-      );
-      assert.equal(Number(remainingChildren[0].sessions), 0);
-      assert.equal(Number(remainingChildren[0].accounts), 0);
-      const { rows: deletedUserRows } = await pool.query(
-        'SELECT "id" FROM "core"."user" WHERE "id" = $1',
-        [userId],
-      );
-      assert.equal(deletedUserRows.length, 0);
     },
   );
 });
