@@ -22,7 +22,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
       - run: pnpm db:validate
       - run: pnpm db:generate
+      - run: pnpm lint
+      - run: pnpm typecheck
