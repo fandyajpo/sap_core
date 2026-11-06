@@ -7,8 +7,8 @@
 | ID | Validation | Current state | Exit evidence |
 |---|---|---|---|
 | V00 | Repository baseline inspection | `PASS` (inventory only) | [Baseline assessment](00-repository-baseline-assessment.md) |
-| V01 | Prisma multi-schema validation | `BLOCKED` | Pinned Prisma toolchain, ten PostgreSQL schemas, successful Prisma validation and Client generation |
-| V02 | Cross-schema relation validation | `BLOCKED` | Representative approved FK/relation patterns, generated Client and migration proof |
+| V01 | Prisma multi-schema validation | `PASS` | PostgreSQL 17.6; Prisma 7.10.1 validation and Client generation; all ten PostgreSQL schemas physically verified; initial migrations applied and database status up to date; fresh disposable database reproducibility verified |
+| V02 | Cross-schema relation validation | `PASS` | Cross-schema relation migration applied; PostgreSQL FK metadata verified; orphan reference rejected; `ON DELETE CASCADE` behavior verified; test transaction rolled back |
 | V03 | Better Auth canonical identity | `BLOCKED` | Local integration suite passed (3/3); X06 cascade discrepancy remains open; clean migration replay and CI integration test remain pending. See evidence below. |
 | V04 | Tenant isolation and RLS | `BLOCKED` | Company/plant scope enforcement, RLS policy evidence where selected, cross-tenant negative tests |
 | V05 | Migration/schema integrity | `BLOCKED` | Clean database migration, repeatability, drift and recovery evidence |
@@ -47,14 +47,14 @@ Clean migration replay and CI integration testing also remain pending. The curre
 
 ### Stage 2 — Database architecture proof
 
-- Execute V01 and V02.
+- V01 and V02 are passed as recorded above.
 - Validate migration history, drift handling and clean bootstrap for V05.
 - Exercise transaction, concurrency, pooling and session context for V06/V07.
 - Exercise cancellation, workload bounds and error recovery for V08/V09.
 
 ### Stage 3 — Identity, authorization and security proof
 
-- Validate Better Auth adapter compatibility and canonical `core.users` mapping.
+- Validate Better Auth adapter compatibility and canonical `core.user` mapping.
 - Validate CASL separately from authentication.
 - Validate organization/company/plant isolation and selected RLS boundaries.
 - Execute P10 session validation backlog and security/privilege checks for V03/V04/V10.
@@ -68,6 +68,6 @@ Clean migration replay and CI integration testing also remain pending. The curre
 
 ## Current blocker
 
-The validation harness and V03 implementation are present, and the recorded local and static CI evidence is summarized above. V03 remains blocked by the unresolved X06 cascade-policy discrepancy; clean migration replay and CI integration testing are also pending. V01–V02 and V04–V10 remain blocked until their own acceptance criteria are evidenced. Phase 1 remains blocked while any required gate remains unresolved.
+V01 and V02 are `PASS` based on the evidence recorded above. V03 remains `BLOCKED` due to the unresolved X06 cascade-policy discrepancy and outstanding reproducibility evidence: clean migration replay and CI integration testing are pending. V04–V10 remain `BLOCKED` until their own acceptance criteria are evidenced. Phase 1 remains blocked while any required gate remains unresolved.
 
 This register is an execution tracker, not evidence that blocked validations have passed.
