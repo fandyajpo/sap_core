@@ -14,6 +14,20 @@ model ValidationRecord {
   label     String   @db.VarChar(120)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  references ValidationReference[]
+
   @@map("validation_records")
   @@schema("core")
+}
+
+model ValidationReference {
+  id                 String           @id @default(uuid()) @db.Uuid
+  validationRecordId String           @map("validation_record_id") @db.Uuid
+  validationRecord   ValidationRecord @relation(fields: [validationRecordId], references: [id], onDelete: Cascade)
+  label              String           @db.VarChar(120)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([validationRecordId])
+  @@map("validation_references")
+  @@schema("master_data")
 }
