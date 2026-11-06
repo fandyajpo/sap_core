@@ -1,0 +1,348 @@
+import "dotenv/config";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { after, before, test } from "node:test";
+import pg from "pg";
+
+const { Pool } = pg;
+const databaseUrl = process.env.DATABASE_URL;
+const authBaseURL = process.env.BETTER_AUTH_URL;
+
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is required to run the V03 integration suite.");
+}
+
+if (!authBaseURL) {
+  throw new Error("BETTER_AUTH_URL is required to run the V03 integration suite.");
+}
+
+const parsedDatabaseURL = new URL(databaseUrl);
+const databaseName = decodeURIComponent(parsedDatabaseURL.pathname.slice(1));
+const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+if (
+  !localHosts.has(parsedDatabaseURL.hostname) ||
+  parsedDatabaseURL.port !== "5433" ||
+  databaseName !== "sap_core"
+) {
+  throw new Error(
+    "V03 tests refuse non-disposable targets; use the local docker-compose database at localhost:5433/sap_core.",
+  );
+}
+
+const authURL = authBaseURL.replace(/\/+$/, "");
+const authOrigin = new URL(authBaseURL).origin;
+const testPrefix = `v03-${randomUUID()}-`;
+const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+const requiredSchemas = [
+  "core",
+  "master_data",
+  "procurement",
+  "inventory",
+  "sales",
+  "finance",
+  "production",
+  "human_resources",
+  "integration",
+  "system",
+];
+let schemaReady = false;
+
+async function readJson(response, label) {
+  const text = await response.text();
+  assert.ok(
+    response.ok,
+    `${label} returned HTTP ${response.status}: ${text.slice(0, 500)}`,
+  );
+  return text ? JSON.parse(text) : null;
+}
+
+function authRequest(path, { method = "GET", body, cookie } = {}) {
+  const headers = { origin: authOrigin };
+
+  if (body !== undefined) {
+    headers["content-type"] = "application/json";
+  }
+
+  if (cookie) {
+    headers.cookie = cookie;
+  }
+
+  return fetch(`${authURL}/api/auth${path}`, {
+    method,
+    headers,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
+
+before(async () => {
+  await pool.query("SELECT 1");
+
+  const { rows: schemaRows } = await pool.query(
+    `SELECT schema_name
+     FROM information_schema.schemata
+     WHERE schema_name = ANY($1::text[])`,
+    [requiredSchemas],
+  );
+  assert.deepEqual(
+    schemaRows.map((row) => row.schema_name).sort(),
+    [...requiredSchemas].sort(),
+    "V01 schemas must remain present",
+  );
+
+  const { rows: tableRows } = await pool.query(`
+    SELECT
+      to_regclass('"core"."validation_records"') IS NOT NULL AS validation_records,
+      to_regclass('"master_data"."validation_references"') IS NOT NULL AS validation_references,
+      to_regclass('"core"."user"') IS NOT NULL AS auth_user,
+      to_regclass('"core"."session"') IS NOT NULL AS auth_session,
+      to_regclass('"core"."account"') IS NOT NULL AS auth_account,
+      to_regclass('"core"."verification"') IS NOT NULL AS auth_verification
+  `);
+  assert.deepEqual(
+    Object.values(tableRows[0]),
+    [true, true, true, true, true, true],
+    "V01/V02 fixtures and all V03 identity tables must exist",
+  );
+  schemaReady = true;
+});
+
+after(async () => {
+  try {
+    if (schemaReady) {
+      await pool.query(
+        'DELETE FROM "core"."user" WHERE "email" LIKE $1',
+        [`${testPrefix}%`],
+      );
+      await pool.query(
+        'DELETE FROM "core"."verification" WHERE "identifier" LIKE $1',
+        [`${testPrefix}%`],
+      );
+    }
+  } finally {
+    await pool.end();
+  }
+});
+
+test("V03 Better Auth identity integration and V01/V02 regression", async (t) => {
+  await t.test("V01/V02 ten-schema and cross-schema relation regression", async () => {
+    const recordId = randomUUID();
+    const referenceId = randomUUID();
+
+    try {
+      await pool.query(
+        'INSERT INTO "core"."validation_records" ("id", "label") VALUES ($1, $2)',
+        [recordId, `${testPrefix}record`],
+      );
+      await pool.query(
+        `INSERT INTO "master_data"."validation_references"
+           ("id", "validation_record_id", "label")
+         VALUES ($1, $2, $3)`,
+        [referenceId, recordId, `${testPrefix}reference`],
+      );
+
+      const { rows } = await pool.query(
+        `SELECT r."id", v."id" AS "recordId"
+         FROM "master_data"."validation_references" r
+         JOIN "core"."validation_records" v
+           ON v."id" = r."validation_record_id"
+         WHERE r."id" = $1`,
+        [referenceId],
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].recordId, recordId);
+
+      await pool.query('DELETE FROM "core"."validation_records" WHERE "id" = $1', [
+        recordId,
+      ]);
+      const { rows: remainingReferences } = await pool.query(
+        'SELECT "id" FROM "master_data"."validation_references" WHERE "id" = $1',
+        [referenceId],
+      );
+      assert.equal(remainingReferences.length, 0, "V02 cascade must remain intact");
+    } finally {
+      await pool.query('DELETE FROM "core"."validation_records" WHERE "id" = $1', [
+        recordId,
+      ]);
+      await pool.query(
+        'DELETE FROM "master_data"."validation_references" WHERE "id" = $1',
+        [referenceId],
+      );
+    }
+  });
+
+  await t.test(
+    "Better Auth signup, user/account/session persistence, profile update, and sign-out",
+    async () => {
+      const email = `${testPrefix}auth@example.test`;
+      const password = `${randomUUID()}Aa1!`;
+      const signupResponse = await authRequest("/sign-up/email", {
+        method: "POST",
+        body: { name: "V03 Initial Name", email, password },
+      });
+      const signupBody = await readJson(signupResponse, "email signup");
+      const userId = signupBody?.user?.id;
+      assert.equal(typeof userId, "string");
+
+      const setCookies =
+        typeof signupResponse.headers.getSetCookie === "function"
+          ? signupResponse.headers.getSetCookie()
+          : [signupResponse.headers.get("set-cookie") ?? ""];
+      const cookie = setCookies
+        .map((value) => value.split(";", 1)[0])
+        .filter(Boolean)
+        .join("; ");
+      assert.match(cookie, /session_token=/, "signup must set a session cookie");
+
+      const { rows: userRows } = await pool.query(
+        `SELECT "id", "name", "email", "emailVerified"
+         FROM "core"."user"
+         WHERE "id" = $1`,
+        [userId],
+      );
+      assert.equal(userRows.length, 1);
+      assert.equal(userRows[0].email, email);
+      assert.equal(userRows[0].emailVerified, false);
+
+      const { rows: accountRows } = await pool.query(
+        `SELECT a."id", a."accountId", a."providerId", a."userId", u."id" AS "relatedUserId"
+         FROM "core"."account" a
+         JOIN "core"."user" u ON u."id" = a."userId"
+         WHERE a."userId" = $1`,
+        [userId],
+      );
+      assert.equal(accountRows.length, 1);
+      assert.equal(accountRows[0].providerId, "credential");
+      assert.equal(accountRows[0].accountId, userId);
+      assert.equal(accountRows[0].relatedUserId, userId);
+
+      const { rows: sessionRows } = await pool.query(
+        `SELECT s."id", s."userId", u."id" AS "relatedUserId"
+         FROM "core"."session" s
+         JOIN "core"."user" u ON u."id" = s."userId"
+         WHERE s."userId" = $1`,
+        [userId],
+      );
+      assert.equal(sessionRows.length, 1);
+      assert.equal(sessionRows[0].relatedUserId, userId);
+      const sessionId = sessionRows[0].id;
+
+      const getSessionResponse = await authRequest("/get-session", { cookie });
+      const activeSession = await readJson(getSessionResponse, "get session");
+      assert.equal(activeSession?.user?.id, userId);
+      assert.equal(activeSession?.session?.userId, userId);
+
+      const updatedName = "V03 Updated Name";
+      const updateResponse = await authRequest("/update-user", {
+        method: "POST",
+        cookie,
+        body: { name: updatedName },
+      });
+      await readJson(updateResponse, "update user");
+
+      const { rows: updatedUserRows } = await pool.query(
+        'SELECT "name" FROM "core"."user" WHERE "id" = $1',
+        [userId],
+      );
+      assert.equal(updatedUserRows[0]?.name, updatedName);
+
+      const signoutResponse = await authRequest("/sign-out", {
+        method: "POST",
+        cookie,
+      });
+      await readJson(signoutResponse, "sign out");
+
+      const { rows: revokedSessions } = await pool.query(
+        'SELECT "id" FROM "core"."session" WHERE "id" = $1',
+        [sessionId],
+      );
+      assert.equal(revokedSessions.length, 0, "sign-out must revoke the database session");
+
+      const afterSignoutResponse = await authRequest("/get-session", { cookie });
+      const afterSignout = await readJson(afterSignoutResponse, "get session after sign-out");
+      assert.equal(afterSignout, null);
+
+      const verificationId = randomUUID();
+      const verificationIdentifier = `${testPrefix}verification`;
+      const verificationValue = randomUUID();
+      const expiresAt = new Date(Date.now() + 60_000);
+      await pool.query(
+        `INSERT INTO "core"."verification"
+           ("id", "identifier", "value", "expiresAt", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+        [verificationId, verificationIdentifier, verificationValue, expiresAt],
+      );
+      const { rows: verificationRows } = await pool.query(
+        `SELECT "identifier", "value", "expiresAt"
+         FROM "core"."verification"
+         WHERE "id" = $1`,
+        [verificationId],
+      );
+      assert.equal(verificationRows.length, 1);
+      assert.equal(verificationRows[0].identifier, verificationIdentifier);
+      assert.equal(verificationRows[0].value, verificationValue);
+      await pool.query('DELETE FROM "core"."verification" WHERE "id" = $1', [
+        verificationId,
+      ]);
+      const { rows: deletedVerification } = await pool.query(
+        'SELECT "id" FROM "core"."verification" WHERE "id" = $1',
+        [verificationId],
+      );
+      assert.equal(deletedVerification.length, 0);
+
+      const invalidUserId = `missing-${randomUUID()}`;
+      await assert.rejects(
+        pool.query(
+          `INSERT INTO "core"."session"
+             ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
+           VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
+          [randomUUID(), new Date(Date.now() + 60_000), randomUUID(), invalidUserId],
+        ),
+        (error) => error?.code === "23503",
+      );
+      await assert.rejects(
+        pool.query(
+          `INSERT INTO "core"."account"
+             ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+          [randomUUID(), randomUUID(), "v03-reference-test", invalidUserId],
+        ),
+        (error) => error?.code === "23503",
+      );
+
+      // Better Auth hard-delete is deliberately not enabled. Delete only this
+      // uniquely tagged test principal directly to verify PostgreSQL cascades.
+      await pool.query(
+        `INSERT INTO "core"."session"
+           ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
+         VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
+        [randomUUID(), new Date(Date.now() + 60_000), randomUUID(), userId],
+      );
+      await pool.query(
+        `INSERT INTO "core"."account"
+           ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+        [randomUUID(), randomUUID(), "v03-cascade-test", userId],
+      );
+      const deleteUserResult = await pool.query(
+        'DELETE FROM "core"."user" WHERE "id" = $1',
+        [userId],
+      );
+      assert.equal(deleteUserResult.rowCount, 1);
+
+      const { rows: remainingChildren } = await pool.query(
+        `SELECT
+           (SELECT COUNT(*) FROM "core"."session" WHERE "userId" = $1) AS sessions,
+           (SELECT COUNT(*) FROM "core"."account" WHERE "userId" = $1) AS accounts`,
+        [userId],
+      );
+      assert.equal(Number(remainingChildren[0].sessions), 0);
+      assert.equal(Number(remainingChildren[0].accounts), 0);
+      const { rows: deletedUserRows } = await pool.query(
+        'SELECT "id" FROM "core"."user" WHERE "id" = $1',
+        [userId],
+      );
+      assert.equal(deletedUserRows.length, 0);
+    },
+  );
+});
