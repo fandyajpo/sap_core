@@ -9,7 +9,7 @@
 | V00 | Repository baseline inspection | `PASS` (inventory only) | [Baseline assessment](00-repository-baseline-assessment.md) |
 | V01 | Prisma multi-schema validation | `PASS` | PostgreSQL 17.6; Prisma 7.10.1 validation and Client generation; all ten PostgreSQL schemas physically verified; initial migrations applied and database status up to date; fresh disposable database reproducibility verified |
 | V02 | Cross-schema relation validation | `PASS` | Cross-schema relation migration applied; PostgreSQL FK metadata verified; orphan reference rejected; `ON DELETE CASCADE` behavior verified; test transaction rolled back |
-| V03 | Better Auth canonical identity | `BLOCKED` | X06 implementation and a dedicated GitHub Actions integration job are authored; no successful V03 workflow run is recorded yet. Manual validation, migration evidence and a successful CI integration run remain pending. See evidence below. |
+| V03 | Better Auth canonical identity | `PASS` | Local suite: 5 passed, 0 failed; all 6 migrations replayed on disposable PostgreSQL 17.6 with schema up to date; both X06 FKs inspected as `ON DELETE RESTRICT`; GitHub Actions run [#19](https://github.com/fandyajpo/sap_core/actions/runs/42152029847) passed `static` and `v03-integration` |
 | V04 | Tenant isolation and RLS | `BLOCKED` | Company/plant scope enforcement, RLS policy evidence where selected, cross-tenant negative tests |
 | V05 | Migration/schema integrity | `BLOCKED` | Clean database migration, repeatability, drift and recovery evidence |
 | V06 | Transaction/concurrency | `BLOCKED` | Interactive transaction, rollback, idempotency, race and financial/stock integrity tests |
@@ -22,19 +22,23 @@
 
 ### Evidence recorded
 
-- Better Auth `1.7.17` and Prisma `7.10.1` were installed; Prisma Client generation succeeded.
-- The local V03 integration suite passed: 3 tests, 3 passed, 0 failed. This predates the X06 test additions and is not evidence for the current suite.
-- Migration status reported 5 migrations found and the database schema up to date. This does not establish a clean migration replay.
-- GitHub Actions static validation passed on commit `c0bef8e7c3843ebd763e8aa01a2533821cf8b2a2` for dependency installation, `pnpm db:validate`, `pnpm db:generate`, lint, and typecheck.
-- A dedicated `v03-integration` GitHub Actions job is now configured for pull requests and pushes to `main`; an actual successful run is still pending.
+- Better Auth `1.7.17` and Prisma `7.10.1` are pinned; Prisma Client generation passed.
+- Earlier local V03 evidence recorded 3 passing tests before the X06 test additions; the current suite result supersedes it.
+- Local validation passed: `pnpm db:validate`, `pnpm db:generate`, `pnpm lint`, `pnpm typecheck`, and `pnpm db:migrate:deploy`.
+- `pnpm db:status` reported 6 migrations and that the database schema is up to date.
+- `pnpm test:v03` passed: 5 tests, 0 failed.
+- Clean migration replay deployed all 6 migrations successfully to a disposable PostgreSQL 17.6 instance; migration status confirmed the schema was up to date.
+- Direct PostgreSQL inspection confirmed `session_userId_fkey` and `account_userId_fkey` both use `ON DELETE RESTRICT`.
+- GitHub Actions run [#19](https://github.com/fandyajpo/sap_core/actions/runs/42152029847), for commit `a86f22e5a01a7be41d20ba398840e32b55f56cf6`, succeeded: `static` and `v03-integration` both reported `SUCCESS`.
+- The integration job completed PostgreSQL initialization, Prisma validation and generation, migration deploy/status, Next.js readiness, and `pnpm test:v03` successfully.
 
-### X06 implementation authored; execution evidence pending
+### X06 validated; V03 PASS
 
-P05 X06 is `OWNER_APPROVED` and final: `core.session.userId` → `core.user.id` and `core.account.userId` → `core.user.id` both require `ON DELETE RESTRICT`. The Prisma schema and Better Auth config encode the policy, including explicit `user.deleteUser.enabled: false`; no Admin plugin or custom deletion endpoint is configured. The integration suite covers independent session/account FK restrictions, blocked hard deletion, database-backed sign-out revocation, successful and rejected account unlink attempts, and RESTRICT-safe cleanup. One new forward migration replaces only the two auth FKs and retains `ON UPDATE CASCADE`; no applied migration or migration lock was changed. The new CI job runs the suite against an isolated PostgreSQL service, but it has not yet produced a successful workflow result. V03 remains `BLOCKED` pending local validation, clean migration evidence and a successful GitHub Actions integration run.
+P05 X06 is `OWNER_APPROVED` and final: `core.session.userId` → `core.user.id` and `core.account.userId` → `core.user.id` both require `ON DELETE RESTRICT`. The Prisma schema and Better Auth config encode the policy, including explicit `user.deleteUser.enabled: false`; no Admin plugin or custom deletion endpoint is configured. Integration tests cover independent session/account FK restrictions, blocked hard deletion, database-backed sign-out revocation, successful and rejected account unlink attempts, and RESTRICT-safe cleanup. The forward migration preserves `ON UPDATE CASCADE`; previously applied migrations and migration history remain unchanged. Local validation, clean migration replay, direct FK inspection, and GitHub Actions run #19 provide the required V03 evidence. V03 is `PASS`; this does not clear V04–V10 or the Phase 1 gate.
 
-### X06 manual verification commands (not run here)
+### Reproduction commands
 
-From the `Sap Core` repository root, run these in order and review each result before changing V03 from `BLOCKED`:
+From the `Sap Core` repository root, the following sequence reproduces the local validation checks. The GitHub Actions integration job independently runs V03 against its isolated PostgreSQL service:
 
 1. `docker compose up -d postgres`
 2. `pnpm db:validate`
@@ -54,7 +58,7 @@ From the `Sap Core` repository root, run these in order and review each result b
 - Add a disposable PostgreSQL environment.
 - Add the ten-schema Prisma proof of concept without implementing ERP workflows.
 - Add deterministic install, lint/typecheck, Prisma validate/generate/migrate and test scripts.
-- Add CI that runs the same commands.
+- CI runs static validation and the V03 integration suite on pull requests and pushes to `main`.
 
 ### Stage 2 — Database architecture proof
 
@@ -68,7 +72,7 @@ From the `Sap Core` repository root, run these in order and review each result b
 - Validate Better Auth adapter compatibility and canonical `core.user` mapping.
 - Validate CASL separately from authentication.
 - Validate organization/company/plant isolation and selected RLS boundaries.
-- Execute P10 session validation backlog and security/privilege checks for V03/V04/V10.
+- V03 is passed; continue applicable P10 session-governance and security/privilege validation for V04/V10.
 
 ### Stage 4 — Gate review
 
@@ -79,6 +83,6 @@ From the `Sap Core` repository root, run these in order and review each result b
 
 ## Current blocker
 
-V01 and V02 are `PASS` based on the evidence recorded above. X06 is owner-approved and its schema, config, forward migration and test changes are authored, but V03 remains `BLOCKED` until those changes are executed and their evidence reviewed; clean migration replay and CI integration testing are also pending. V04–V10 remain `BLOCKED` until their own acceptance criteria are evidenced. Phase 1 remains blocked while any required gate remains unresolved.
+V01, V02, and V03 are `PASS` based on the evidence recorded above. V04–V10 remain `BLOCKED` pending their own acceptance criteria. Phase 1 remains blocked until the applicable V04–V10 gates are completed and evidenced.
 
 This register is an execution tracker, not evidence that blocked validations have passed.
