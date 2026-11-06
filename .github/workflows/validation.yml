@@ -26,3 +26,71 @@ jobs:
       - run: pnpm db:generate
       - run: pnpm lint
       - run: pnpm typecheck
+
+
+  v03-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: sap_core
+          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_DB: sap_core
+        ports:
+          - "5433:5432"
+        options: >-
+          --health-cmd "pg_isready -U sap_core -d sap_core"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:5433/sap_core?schema=public
+      BETTER_AUTH_SECRET: ci-only-v03-secret-0123456789abcdef
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:validate
+      - run: pnpm db:generate
+      - run: pnpm db:migrate:deploy
+      - run: pnpm db:status
+      - name: Start Next.js development server
+        run: |
+          log_file="$(mktemp "${RUNNER_TEMP}/sap-core-next.XXXXXX.log")"
+          pnpm dev >"$log_file" 2>&1 &
+          server_pid=$!
+          {
+            echo "NEXT_SERVER_LOG=$log_file"
+            echo "NEXT_SERVER_PID=$server_pid"
+          } >> "$GITHUB_ENV"
+      - name: Wait for Better Auth readiness
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 120))
+
+          while (( SECONDS < deadline )); do
+            if curl --fail --silent http://127.0.0.1:3000/api/auth/get-session >/dev/null; then
+              echo "Better Auth endpoint is ready."
+              exit 0
+            fi
+
+            if ! kill -0 "$NEXT_SERVER_PID" 2>/dev/null; then
+              echo "Next.js server exited before becoming ready. Server log:" >&2
+              cat "$NEXT_SERVER_LOG" >&2
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          echo "Timed out waiting for Better Auth. Server log:" >&2
+          cat "$NEXT_SERVER_LOG" >&2
+          exit 1
+      - run: pnpm test:v03
