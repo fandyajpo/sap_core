@@ -1,6 +1,6 @@
 # Entity Relationship Design (Conceptual)
 
-This is a relationship inventory, not a physical ERD. It describes likely cardinality and ownership while leaving cross-schema FK policy open. Every edge must be reviewed for company/plant consistency, delete behavior, lifecycle and historical snapshot needs before Prisma models are authored.
+This is a historical conceptual relationship inventory, not a physical ERD. It describes cardinality and ownership; subsequent P05 decisions select per-edge policies. D9–D13 approve X01–X05, now represented in the checked-in Prisma schema and migration 7. This inventory does not certify current-database state or complete technical validation. Other edges remain subject to their own approval and evidence.
 
 ## Organization and reference relationships
 

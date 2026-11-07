@@ -137,3 +137,17 @@ A further isolated PostgreSQL 17.6 execution (run ID `22e1b72960eb4eab910774b40a
 Important gaps remain: the database permits direct deletion of revoked Role Assignment rows; typed role-scope and owner/kind validation were not demonstrated in Core; unreferenced-key immutability was not established. Suspended-access authorization, permission catalog, grant matrix, cross-scope inheritance, protected operations, RLS, application tenant isolation, and concurrent parent mutation/child insertion were not validated.
 
 All seven D1/D6 fixture categories were verified at zero after cleanup. This is supplemental case-level evidence only. V04–V10 and Phase 1 remain BLOCKED; no gate promotion is claimed. Detailed results and limitations are in `v04.4-execution-record-2026-11-07.md` under “Supplemental D5/D1/D6 and D7/D8/D14 runtime evidence”.
+
+
+
+## D9–D13 source and evidence reconciliation — HEAD `cd183e4`
+
+**Checked-in source:** `prisma/schema.prisma` and migration 7, `20261107112700_v0451_tenant_scope_schema`, contain the X01–X05 tenant models, Prisma relations, FK DDL and supporting keys/indexes. Migration 8 is D7; migration 9 is D8. No new migration is indicated by the reviewed source evidence.
+
+**Database status:** No current database/catalog was queried for this reconciliation. V04.4 records historical isolated replays of seven migrations at an earlier baseline, not a full nine-migration replay at HEAD `cd183e4`. Do not infer deployed/current-database state from those runs.
+
+**Historical structural evidence:** The V04.4 execution record documents valid hierarchy inserts, six selected wrong-parent/missing-parent FK rejections, two referenced Company key-update rejections, and separate selected D5/D1/D6 and role-edge behavior. These are case-level disposable-database results, not complete X01–X05 coverage. Direct FK action/nullability/catalog checks and X02 parent-mutation/child-insert concurrency remain incomplete or unestablished; see the execution record for the exact case list.
+
+**Integration-test and application evidence:** The checked-in D6 scoped-access and D7/D8 integration suites exercise selected service workflows; they do not certify all X01–X05 database actions or the current database. The scoped-access service creates CompanyMembership and PlantAssignment with transactional parent checks. The reviewed source search found no Organization, Company, or Plant provisioning/creation workflow. Structural FKs do not provide active-membership authorization.
+
+V04 remains `BLOCKED`. The reported D14 revoked-RoleAssignment deletion discrepancy is a separate investigation and does not change this X01–X05 status. No database command, test, migration, or replay was run for this documentation update.
