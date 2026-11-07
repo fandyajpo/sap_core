@@ -163,7 +163,14 @@ sha256_file() {
     return 1
   fi
 }
-CHECK_FILES=('prisma/migrations/migration_lock.toml')
+CHECK_FILES=(
+  'package.json'
+  'pnpm-lock.yaml'
+  'pnpm-workspace.yaml'
+  '.nvmrc'
+  'prisma/schema.prisma'
+  'prisma/migrations/migration_lock.toml'
+)
 for migration in "${MIGRATIONS[@]}"; do
   CHECK_FILES+=("prisma/migrations/$migration/migration.sql")
   test "$(find "$WORKSPACE/prisma/migrations/$migration" -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" = "1"
@@ -427,10 +434,16 @@ case "$STATE" in
 esac
 test "$(docker inspect --format '{{.Id}}' "$CONTAINER_ID")" = "$CONTAINER_ID"
 docker rm "$CONTAINER_ID"
-rm -rf "$WORKSPACE"
 ```
 
-After `docker rm`, do not run a Docker command that could select a replacement container by the former name. Record successful removal in the evidence template before deleting the workspace, or preserve the template elsewhere without secrets. The container uses only an ephemeral tmpfs mount; never remove a volume, and do not remove the pulled PostgreSQL image cache.
+After `docker rm`, do not run a Docker command that could select a replacement container by the former name. While the workspace still exists, record the container-removal result and timestamp in the sanitized evidence template. Preserve that evidence outside the workspace in an owner-approved location before deleting the workspace. Then remove only the exact verified workspace and confirm its absence:
+
+```bash
+rm -rf "$WORKSPACE"
+test ! -e "$WORKSPACE"
+```
+
+Update the external sanitized evidence record with the workspace-removal result and timestamp. The container uses only an ephemeral tmpfs mount; never remove a volume, and do not remove the pulled PostgreSQL image cache.
 
 ## 9. Handoff and status boundary
 
@@ -468,7 +481,7 @@ This runbook is reconciled to merged `main` at `d3e270cffa08bbe7f97f855e0999bb97
 **Tenant-schema evidence already present in the baseline (limited):**
 
 - The committed Prisma schema and seventh migration declare D6 partial unique indexes on `(userId, companyId)` for CompanyMembership and `(userId, plantId)` for PlantAssignment, both with `status IN ('ACTIVE','SUSPENDED')`. The successful seven-migration replay applied that migration, but no D6 index-catalog inspection or uniqueness/lifecycle behavior tests are recorded.
-- The committed Prisma schema and migration declare each typed Role Assignment → RoleDefinition FK with `ON DELETE RESTRICT ON UPDATE RESTRICT`. Prisma schema validation passed historically, and the seven-migration replay applied the SQL. No D14-specific catalog inspection or delete/update behavior tests are recorded; this does not establish typed-scope/definition matching, immutable keys, definition retirement, or history behavior.
+- The committed Prisma schema and migration declare each typed Role Assignment → RoleDefinition FK with `ON DELETE RESTRICT ON UPDATE RESTRICT`. The seven-migration replay applied the SQL, but the reviewed evidence does not independently confirm a Prisma schema-validation run. No D14-specific catalog inspection or delete/update behavior tests are recorded; this does not establish typed-scope/definition matching, immutable keys, definition retirement, or history behavior.
 - D6 suspension/terminal/regrant semantics are owner-approved policy. That policy approval is not evidence that transitions, slot retention/release, or history preservation were exercised.
 
 **Remaining NOT RUN:**
