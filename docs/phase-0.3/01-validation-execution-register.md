@@ -10,7 +10,7 @@
 | V01 | Prisma multi-schema validation | `PASS` | PostgreSQL 17.6; Prisma 7.10.1 validation and Client generation; all ten PostgreSQL schemas physically verified; initial migrations applied and database status up to date; fresh disposable database reproducibility verified |
 | V02 | Cross-schema relation validation | `PASS` | Cross-schema relation migration applied; PostgreSQL FK metadata verified; orphan reference rejected; `ON DELETE CASCADE` behavior verified; test transaction rolled back |
 | V03 | Better Auth canonical identity | `PASS` | Local suite: 5 passed, 0 failed; all 6 migrations replayed on disposable PostgreSQL 17.6 with schema up to date; both X06 FKs inspected as `ON DELETE RESTRICT`; GitHub Actions run [#19](https://github.com/fandyajpo/sap_core/actions/runs/42152029847) passed `static` and `v03-integration` |
-| V04 | Tenant isolation and RLS | `BLOCKED` | Company/plant scope enforcement, RLS policy evidence where selected, cross-tenant negative tests |
+| V04 | Tenant isolation and RLS | `BLOCKED` | Partial V04.4 structural evidence: isolated fresh/staged-upgrade replay, FK/index catalog equivalence, selected membership/assignment uniqueness behavior, and four composite FK positive/negative cases; see [V04.4 execution record](v04.4-execution-record-2026-11-07.md). Application authorization, protected operations, RLS, application tenant isolation, and remaining acceptance criteria are not established. |
 | V05 | Migration/schema integrity | `BLOCKED` | Clean database migration, repeatability, drift and recovery evidence |
 | V06 | Transaction/concurrency | `BLOCKED` | Interactive transaction, rollback, idempotency, race and financial/stock integrity tests |
 | V07 | Pooling/session context | `BLOCKED` | Pooled connection reuse, transaction-local context isolation, cleanup and failure tests |
@@ -50,6 +50,29 @@ From the `Sap Core` repository root, the following sequence reproduces the local
 6. `pnpm db:migrate:deploy`
 7. `pnpm db:status`
 8. `pnpm test:v03`
+
+## V04.4 partial execution evidence — 2026-11-07
+
+The isolated V04.4 execution is documented in
+[v04.4-execution-record-2026-11-07.md](v04.4-execution-record-2026-11-07.md).
+
+Observed results include:
+
+- Prisma 7.10.1 schema validation and Client generation passed.
+- Fresh seven-migration replay and staged six-plus-one upgrade replay passed.
+- Both databases reported migration status up to date.
+- Inspected FK/index catalogs matched between fresh and upgrade replay.
+- Selected OrganizationMembership, CompanyMembership, and PlantAssignment
+  partial-unique behavior tests passed.
+- Four composite FK positive/negative transactional tests passed.
+
+This is partial structural feasibility evidence only. Concurrency cases,
+remaining lifecycle/history cases, D5 cardinality, role-edge behavior,
+application authorization, protected operations, RLS, and application-level
+tenant isolation remain unestablished or NOT RUN.
+
+V04 remains `BLOCKED`; V05–V10 remain `BLOCKED`; Phase 1 remains `BLOCKED`.
+This evidence update does not clear or promote any validation gate.
 
 ## Execution sequence
 
