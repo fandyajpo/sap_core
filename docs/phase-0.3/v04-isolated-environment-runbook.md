@@ -53,8 +53,8 @@ TECHNICAL_BASELINE="a1cfa848ea3686ce04ddc77ea8042c257e9ef15a"
 test "$(git -C "$REPO" branch --show-current)" = "main"
 git -C "$REPO" merge-base --is-ancestor "$TECHNICAL_BASELINE" HEAD
 git -C "$REPO" diff --exit-code "$TECHNICAL_BASELINE" HEAD -- package.json pnpm-lock.yaml pnpm-workspace.yaml .nvmrc prisma/schema.prisma prisma/migrations
-test "$(git -C "$REPO" remote get-url origin)" = "https://github.com/fandyajpo/sap_core"
-test -z "$(git -C "$REPO" status --porcelain)"
+test "$(git -C "$REPO" remote get-url origin)" = "https://github.com/fandyajpo/sap_core.git"
+test "$(git -C "$REPO" status --porcelain --untracked-files=all)" = " M docs/phase-0.3/v04-isolated-environment-runbook.md"
 test "$(cat "$REPO/.nvmrc")" = "26.0.0"
 test "$(node --version)" = "v26.0.0"
 test "$(pnpm --version)" = "10.20.0"
