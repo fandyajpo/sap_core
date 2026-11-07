@@ -124,3 +124,16 @@ A second isolated PostgreSQL 17.6 run (run ID `9e176ea3b14a4668acb4462c832cadd4`
 Detailed cases and limitations are recorded in `v04.4-execution-record-2026-11-07.md` under “Supplemental X01–X05 runtime evidence”.
 
 This evidence does not test concurrency, complete membership lifecycle behavior, D5 cardinality, role-edge behavior, authorization, protected operations, RLS, or application tenant isolation. V04 remains BLOCKED; no gate promotion is claimed.
+
+### V04.4 supplemental D5/D1/D6 and role-edge evidence — 2026-11-07
+
+A further isolated PostgreSQL 17.6 execution (run ID `22e1b72960eb4eab910774b40a9181b7`) recorded bounded runtime evidence:
+
+- D5: one Organization accepted multiple Companies; a Company with a nonexistent Organization was rejected.
+- D1: selected membership lifecycle cases passed, and a two-connection concurrent duplicate ACTIVE membership was rejected by `organization_membership_user_slot_key`.
+- D6: selected CompanyMembership and PlantAssignment lifecycle cases passed. Concurrent duplicate pair insertions were rejected by `company_membership_user_company_current_key` and `plant_assignment_user_plant_current_key`.
+- D7/D8/D14: the six typed Role Assignment FK edges used RESTRICT/RESTRICT; referenced parent and Role Definition deletion/key updates were rejected; Role Definitions could be disabled.
+
+Important gaps remain: the database permits direct deletion of revoked Role Assignment rows; typed role-scope and owner/kind validation were not demonstrated in Core; unreferenced-key immutability was not established. Suspended-access authorization, permission catalog, grant matrix, cross-scope inheritance, protected operations, RLS, application tenant isolation, and concurrent parent mutation/child insertion were not validated.
+
+All seven D1/D6 fixture categories were verified at zero after cleanup. This is supplemental case-level evidence only. V04–V10 and Phase 1 remain BLOCKED; no gate promotion is claimed. Detailed results and limitations are in `v04.4-execution-record-2026-11-07.md` under “Supplemental D5/D1/D6 and D7/D8/D14 runtime evidence”.

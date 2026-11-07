@@ -153,3 +153,18 @@ A supplemental isolated PostgreSQL 17.6 execution (run ID `9e176ea3b14a4668acb44
 See `v04.4-execution-record-2026-11-07.md`, “Supplemental X01–X05 runtime evidence”, for exact constraints and results.
 
 This update does not establish concurrency behavior, complete lifecycle semantics, D5 cardinality, role-edge behavior, authorization, protected operations, RLS, or application tenant isolation. It is supplemental evidence only; V04 and the downstream gates remain BLOCKED.
+
+## V04.4 supplemental D5/D1/D6 and role-edge execution update — 2026-11-07
+
+A further isolated PostgreSQL 17.6 execution (run ID `22e1b72960eb4eab910774b40a9181b7`) added bounded runtime evidence:
+
+- D5 Organization → Company one-to-many cardinality was exercised with one Organization and multiple Companies; an invalid Company parent reference was rejected.
+- D1 selected OrganizationMembership lifecycle cases passed. Two concurrent ACTIVE inserts for the same user were serialized by the unique index; the second insert was rejected.
+- D6 selected CompanyMembership and PlantAssignment lifecycle cases passed. Concurrent duplicate pair insertions were rejected by their respective partial unique indexes.
+- D7/D8/D14 role-edge FKs were inspected and exercised for RESTRICT/RESTRICT behavior. Referenced parent and Role Definition deletes/key updates were rejected; Role Definitions could be disabled.
+
+The run also confirmed enforcement gaps: direct deletion of revoked Role Assignment rows remains possible at database level; Core owner/kind and typed-scope validation was not demonstrated; unreferenced-key immutability remains unproven. Suspended-access authorization, permission catalog/grant matrix, cross-scope inheritance, protected operations, RLS, application tenant isolation, and concurrent parent mutation/child insertion remain outside the evidence obtained.
+
+All seven D1/D6 fixture categories were verified at zero after cleanup. See `v04.4-execution-record-2026-11-07.md` for detailed cases and limitations.
+
+This is supplemental case-level evidence, not completion of V04 acceptance criteria. No schema or policy decision is changed. V04–V10 and Phase 1 remain BLOCKED.
