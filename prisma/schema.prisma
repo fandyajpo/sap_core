@@ -1,11 +1,46 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
   provider = "postgresql"
   schemas  = ["core", "master_data", "procurement", "inventory", "sales", "finance", "production", "human_resources", "integration", "system"]
+}
+
+enum OrganizationMembershipStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  ENDED
+
+  @@schema("core")
+}
+
+enum ScopedAccessStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  ENDED
+
+  @@schema("core")
+}
+
+enum RoleDefinitionKind {
+  SYSTEM
+  ORGANIZATION_CUSTOM
+
+  @@schema("core")
+}
+
+enum RoleScope {
+  ORGANIZATION
+  COMPANY
+  PLANT
+
+  @@schema("core")
 }
 
 // Minimal technical-validation model only. This is not the production entity catalog.
@@ -45,6 +80,9 @@ model User {
   updatedAt     DateTime  @updatedAt
   sessions      Session[]
   accounts      Account[]
+  organizationMemberships OrganizationMembership[]
+  companyMemberships      CompanyMembership[]
+  plantAssignments        PlantAssignment[]
 
   @@unique([email])
   @@map("user")
@@ -60,7 +98,7 @@ model Session {
   ipAddress String?
   userAgent String?
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@unique([token])
   @@index([userId])
@@ -82,7 +120,7 @@ model Account {
   password              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([userId])
   @@map("account")
@@ -99,5 +137,184 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+  @@schema("core")
+}
+
+model Organization {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  createdAt                DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  companies   Company[]
+  memberships OrganizationMembership[]
+
+  @@map("organization")
+  @@schema("core")
+}
+
+model Company {
+  id              String               @id @default(uuid()) @db.Uuid
+  organizationId  String               @db.Uuid
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  plants          Plant[]              @relation("CompanyPlants")
+  memberships     CompanyMembership[]  @relation("CompanyMemberships")
+
+  // Composite target required for X02 and X04 references; id remains the primary key.
+  @@unique([organizationId, id], map: "company_organization_id_id_key")
+  @@index([organizationId])
+  @@map("company")
+  @@schema("core")
+}
+
+model Plant {
+  id              String             @id @default(uuid()) @db.Uuid
+  organizationId  String             @db.Uuid
+  companyId       String             @db.Uuid
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  company         Company            @relation("CompanyPlants", fields: [organizationId, companyId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict)
+  assignments     PlantAssignment[]
+
+  // Composite target required for the X05 Plant reference; id remains the primary key.
+  @@unique([organizationId, companyId, id], map: "plant_organization_company_id_key")
+  @@index([organizationId, companyId])
+  @@map("plant")
+  @@schema("core")
+}
+
+model OrganizationMembership {
+  id                       String                       @id @default(uuid()) @db.Uuid
+  userId                   String
+  organizationId           String                       @db.Uuid
+  status                   OrganizationMembershipStatus
+  createdAt                DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                     User                         @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  organization             Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  companyMemberships       CompanyMembership[]
+  roleAssignments          OrganizationRoleAssignment[]
+
+  // Composite target required for the X04 OrganizationMembership reference.
+  @@unique([id, userId, organizationId], map: "organization_membership_id_user_org_key")
+  @@unique([userId], where: raw("status IN ('ACTIVE','SUSPENDED')"), map: "organization_membership_user_slot_key")
+  @@index([userId, status])
+  @@index([organizationId, status])
+  @@map("organization_membership")
+  @@schema("core")
+}
+
+model CompanyMembership {
+  id                       String                @id @default(uuid()) @db.Uuid
+  userId                   String
+  organizationMembershipId String                @db.Uuid
+  organizationId           String                @db.Uuid
+  companyId                String                @db.Uuid
+  status                   ScopedAccessStatus
+  createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                     User                  @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  organizationMembership   OrganizationMembership @relation(fields: [organizationMembershipId, userId, organizationId], references: [id, userId, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  company                  Company               @relation("CompanyMemberships", fields: [organizationId, companyId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict)
+  plantAssignments         PlantAssignment[]
+  roleAssignments          CompanyRoleAssignment[]
+
+  // Composite target required for the X05 CompanyMembership reference.
+  @@unique([id, userId, organizationId, companyId], map: "company_membership_id_user_org_company_key")
+  @@unique([userId, companyId], where: raw("status IN ('ACTIVE','SUSPENDED')"), map: "company_membership_user_company_current_key")
+  @@index([userId, status])
+  @@index([organizationMembershipId, userId, organizationId])
+  @@index([organizationId, companyId])
+  @@map("company_membership")
+  @@schema("core")
+}
+
+model PlantAssignment {
+  id                       String             @id @default(uuid()) @db.Uuid
+  userId                   String
+  companyMembershipId      String             @db.Uuid
+  organizationId           String             @db.Uuid
+  companyId                String             @db.Uuid
+  plantId                  String             @db.Uuid
+  status                   ScopedAccessStatus
+  createdAt                DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                     User               @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  companyMembership       CompanyMembership  @relation(fields: [companyMembershipId, userId, organizationId, companyId], references: [id, userId, organizationId, companyId], onDelete: Restrict, onUpdate: Restrict)
+  plant                    Plant              @relation(fields: [organizationId, companyId, plantId], references: [organizationId, companyId, id], onDelete: Restrict, onUpdate: Restrict)
+  roleAssignments          PlantRoleAssignment[]
+
+  @@unique([userId, plantId], where: raw("status IN ('ACTIVE','SUSPENDED')"), map: "plant_assignment_user_plant_current_key")
+  @@index([userId, status])
+  @@index([companyMembershipId, userId, organizationId, companyId])
+  @@index([organizationId, companyId, plantId])
+  @@map("plant_assignment")
+  @@schema("core")
+}
+
+// Candidate catalog structure only; no permission catalog or grant matrix is implied.
+model RoleDefinition {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  code                 String
+  version              Int
+  kind                 RoleDefinitionKind
+  scope                RoleScope
+  ownerOrganizationId  String?                     @db.Uuid
+  disabledAt           DateTime?                   @map("disabled_at") @db.Timestamptz(6)
+  createdAt            DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  organizationAssignments OrganizationRoleAssignment[]
+  companyAssignments     CompanyRoleAssignment[]
+  plantAssignments       PlantRoleAssignment[]
+
+  // Core validates owner/kind, owner organization, and typed role-scope invariants; no unapproved FK is inferred.
+  // D14 primary-key immutability needs Core write controls or a reviewed future SQL trigger.
+  @@index([ownerOrganizationId])
+  @@map("role_definition")
+  @@schema("core")
+}
+
+model OrganizationRoleAssignment {
+  id                       String         @id @default(uuid()) @db.Uuid
+  organizationMembershipId String         @db.Uuid
+  roleDefinitionId         String         @db.Uuid
+  createdAt                DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt                DateTime?      @map("revoked_at") @db.Timestamptz(6)
+  organizationMembership   OrganizationMembership @relation(fields: [organizationMembershipId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roleDefinition           RoleDefinition @relation(fields: [roleDefinitionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([organizationMembershipId])
+  @@index([roleDefinitionId])
+  @@map("organization_role_assignment")
+  @@schema("core")
+}
+
+model CompanyRoleAssignment {
+  id                 String              @id @default(uuid()) @db.Uuid
+  companyMembershipId String              @db.Uuid
+  roleDefinitionId   String              @db.Uuid
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt          DateTime?           @map("revoked_at") @db.Timestamptz(6)
+  companyMembership  CompanyMembership   @relation(fields: [companyMembershipId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roleDefinition     RoleDefinition      @relation(fields: [roleDefinitionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([companyMembershipId])
+  @@index([roleDefinitionId])
+  @@map("company_role_assignment")
+  @@schema("core")
+}
+
+model PlantRoleAssignment {
+  id                 String              @id @default(uuid()) @db.Uuid
+  plantAssignmentId  String              @db.Uuid
+  roleDefinitionId   String              @db.Uuid
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt          DateTime?           @map("revoked_at") @db.Timestamptz(6)
+  plantAssignment    PlantAssignment     @relation(fields: [plantAssignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roleDefinition     RoleDefinition      @relation(fields: [roleDefinitionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([plantAssignmentId])
+  @@index([roleDefinitionId])
+  @@map("plant_role_assignment")
   @@schema("core")
 }
