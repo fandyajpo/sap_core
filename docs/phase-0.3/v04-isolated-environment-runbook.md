@@ -95,6 +95,22 @@ The printed run ID and absolute workspace path contain no credentials. Confirm t
 
 ### C. Copy only required manifests/schema/history and verify checksums — creates temporary files
 
+Re-check the workspace boundary immediately before any copy. If any assertion fails, stop without copying:
+
+```bash
+test -d "$WORKSPACE"
+test ! -L "$WORKSPACE"
+test "$WORKSPACE" != "$REPO"
+case "$WORKSPACE/" in
+  "$REPO/"*) printf '%s\n' 'STOP: refusing to copy into a workspace inside the repository.' >&2; exit 1 ;;
+esac
+test "$(cd "$(dirname "$WORKSPACE")" && pwd -P)" = "$TMP_BASE"
+test "$(cat "$WORKSPACE/.run-id")" = "$RUN_ID"
+WORKSPACE_BASENAME="$(basename "$WORKSPACE")"
+[[ "$RUN_ID" =~ ^[0-9a-f]{32}$ ]]
+[[ "$WORKSPACE_BASENAME" =~ ^sap-core-v04-4\.${RUN_ID}\.[[:alnum:]]{8}$ ]]
+```
+
 The following is the complete expected migration-directory list; do not use a wildcard copy:
 
 ```bash
@@ -385,13 +401,17 @@ Cleanup is performed only when the owner is finished and has recorded the eviden
 First verify the recorded workspace and container identity. The commands below require the original `REPO`, `TMP_BASE`, `WORKSPACE`, `RUN_ID`, `CONTAINER_NAME`, and `CONTAINER_ID` variables; if they are unavailable, recover the non-secret ID/name from the specific workspace markers only after verifying the workspace path. Do not retrieve or print the password.
 
 ```bash
+test -d "$WORKSPACE"
+test ! -L "$WORKSPACE"
+test "$WORKSPACE" != "$REPO"
 case "$WORKSPACE/" in
   "$REPO/"*) printf '%s\n' 'STOP: refusing workspace cleanup inside repository.' >&2; exit 1 ;;
 esac
-case "$WORKSPACE" in
-  "$TMP_BASE"/sap-core-v04-4.*) ;;
-  *) printf '%s\n' 'STOP: workspace is outside the recorded runbook temp prefix.' >&2; exit 1 ;;
-esac
+test "$(cd "$(dirname "$WORKSPACE")" && pwd -P)" = "$TMP_BASE"
+WORKSPACE_BASENAME="$(basename "$WORKSPACE")"
+[[ "$RUN_ID" =~ ^[0-9a-f]{32}$ ]]
+[[ "$WORKSPACE_BASENAME" =~ ^sap-core-v04-4\.${RUN_ID}\.[[:alnum:]]{8}$ ]]
+test "$(cd "$WORKSPACE" && pwd -P)" = "$WORKSPACE"
 test "$(cat "$WORKSPACE/.run-id")" = "$RUN_ID"
 test "$(cat "$WORKSPACE/.container-name")" = "$CONTAINER_NAME"
 test "$(cat "$WORKSPACE/.container-id")" = "$CONTAINER_ID"
@@ -440,9 +460,10 @@ This runbook is reconciled to merged `main` at `d3e270cffa08bbe7f97f855e0999bb97
 
 **Prisma validation and generation status:**
 
-- `pnpm db:validate` passed in the prior V04.5.1 validation. That historical PASS records Prisma schema validation and does not establish a rerun in the V04.4 procedure.
-- Prisma Client generation has no confirmed PASS evidence in the available evidence; no PASS is claimed.
-- Repeating `pnpm db:validate` in the V04.4 procedure remains NOT RUN.
+- The separate V04.5.1 X06 validation note records migration replay, migration status, X06 catalog inspection, and transactional FK behavior only; it does **not** record a `pnpm db:validate` result.
+- No independently verifiable V04.5.1 `pnpm db:validate` execution record is cited by the reviewed documentation. The previous PASS statement is therefore withdrawn; schema validation status is **NOT CONFIRMED** and must not be reported as PASS.
+- Prisma Client generation has no confirmed PASS evidence; status is **NOT CONFIRMED** and no PASS is claimed.
+- Repeating schema validation and Client generation in the V04.4 procedure remains **NOT RUN** and requires separate authorization.
 
 **Tenant-schema evidence already present in the baseline (limited):**
 
