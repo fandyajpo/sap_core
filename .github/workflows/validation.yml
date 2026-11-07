@@ -95,3 +95,4 @@ jobs:
           exit 1
       - run: pnpm test:v03
       - run: pnpm test:d6
+      - run: pnpm test:d7
