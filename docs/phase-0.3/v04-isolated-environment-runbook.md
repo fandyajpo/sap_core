@@ -409,7 +409,7 @@ After `docker rm`, do not run a Docker command that could select a replacement c
 
 Handoff is complete only when all preflight items pass, the evidence template is filled without secrets, and the owner explicitly accepts control of the verified temporary workspace/container. Otherwise stop and follow the recovery section. This runbook does not authorize the V04.4 Prisma/SQL/test phase.
 
-This runbook is not evidence that the environment has been created. No database operations or technical experiments have been performed while authoring it. Gate states remain unchanged: V01–V03 `PASS`; V04–V10 `BLOCKED`; Phase 1 `BLOCKED`. D6 guard testing remains blocked pending explicit status vocabulary and physical predicate resolution.
+This runbook is not evidence that the environment has been created. No database operations or technical experiments have been performed while authoring it. Gate states remain unchanged: V01–V03 `PASS`; V04–V10 `BLOCKED`; Phase 1 `BLOCKED`. D6 owner-policy blocker is resolved; physical guard feasibility and behavior remain NOT RUN pending separate V04.4 execution approval.
 
 ## 10. Reconciliation record — 2026-11-07
 
