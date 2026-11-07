@@ -80,7 +80,7 @@ P04 and P10 consistently separate authentication/session validity from business 
 
 ### 5.4 Unresolved owner decisions and implementation parameters — HIGH
 
-The approved decisions do not supply: a complete action/resource/field/export permission catalog and grant matrix; a complete permission/grant catalog and lifecycle details outside the D1–D6 decisions; detailed invitation-edge choices; or P05 edge choices for additional business entities brought into scope. These are not silently resolved by the ERD, by D15, or by the fact that a proposed FK exists. Owner decisions must precede the affected implementation. P10 propagation bounds/cache TTLs and other session parameters remain values to select and test; they affect demonstrated authorization freshness but do not reverse the approved session architecture.
+The approved decisions do not supply: a complete action/resource/field/export permission catalog and grant matrix; lifecycle details outside the D1–D6 decisions; detailed invitation-edge choices; or P05 edge choices for additional business entities brought into scope. These are not silently resolved by the ERD, by D15, or by the fact that a proposed FK exists. Owner decisions must precede the affected implementation. P10 propagation bounds/cache TTLs and other session parameters remain values to select and test; they affect demonstrated authorization freshness but do not reverse the approved session architecture.
 
 ### 5.5 P09 documentation versus current manifest — MEDIUM
 
