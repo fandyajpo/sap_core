@@ -39,12 +39,12 @@ const fixture = {
   organizationMembershipId: randomUUID(),
   companyMembershipId: randomUUID(),
   plantAssignmentId: randomUUID(),
+  unusedRoleDefinitionId: randomUUID(),
   roleDefinitions: {
     ORGANIZATION: randomUUID(),
     COMPANY: randomUUID(),
     PLANT: randomUUID(),
     PLATFORM: randomUUID(),
-    UNUSED: randomUUID(),
   },
 };
 
@@ -177,6 +177,12 @@ before(async () => {
       [id, `d7-fixture-${scope.toLowerCase()}-${id}`, scope],
     );
   }
+  await client.query(
+    `INSERT INTO "core"."role_definition"
+       ("id", "code", "version", "kind", "scope", "updated_at")
+     VALUES ($1, $2, 1, 'SYSTEM', 'ORGANIZATION'::"core"."RoleScope", NOW())`,
+    [fixture.unusedRoleDefinitionId, `d7-fixture-unused-${fixture.unusedRoleDefinitionId}`],
+  );
 });
 
 after(async () => {
@@ -488,7 +494,7 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
     ));
     await assertDatabaseRejects(() => client.query(
       `UPDATE "core"."role_definition" SET "id" = $2 WHERE "id" = $1`,
-      [fixture.roleDefinitions.UNUSED, randomUUID()],
+      [fixture.unusedRoleDefinitionId, randomUUID()],
     ));
     await assertDatabaseRejects(() => client.query(
       `DELETE FROM "core"."role_definition" WHERE "id" = $1`,
