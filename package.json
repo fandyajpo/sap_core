@@ -18,7 +18,8 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
-    "test:v03": "node --test tests/v03-better-auth.integration.test.mjs"
+    "test:v03": "node --test tests/v03-better-auth.integration.test.mjs",
+    "test:d6": "node --test tests/d6-scoped-access.integration.test.mjs"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "1.7.17",

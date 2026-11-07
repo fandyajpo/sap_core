@@ -94,3 +94,4 @@ jobs:
           cat "$NEXT_SERVER_LOG" >&2
           exit 1
       - run: pnpm test:v03
+      - run: pnpm test:d6
