@@ -433,7 +433,7 @@ test("D6 Company Membership and Plant Assignment lifecycles", async (t) => {
       scopedAccess.grantCompanyMembership({
         userId: userA,
         organizationMembershipId: membershipA,
-        companyId: companyB,
+        companyId: companyA,
       }),
       "PARENT_NOT_ACTIVE",
     );
