@@ -95,6 +95,22 @@ The printed run ID and absolute workspace path contain no credentials. Confirm t
 
 ### C. Copy only required manifests/schema/history and verify checksums — creates temporary files
 
+Re-check the workspace boundary immediately before any copy. If any assertion fails, stop without copying:
+
+```bash
+test -d "$WORKSPACE"
+test ! -L "$WORKSPACE"
+test "$WORKSPACE" != "$REPO"
+case "$WORKSPACE/" in
+  "$REPO/"*) printf '%s\n' 'STOP: refusing to copy into a workspace inside the repository.' >&2; exit 1 ;;
+esac
+test "$(cd "$(dirname "$WORKSPACE")" && pwd -P)" = "$TMP_BASE"
+test "$(cat "$WORKSPACE/.run-id")" = "$RUN_ID"
+WORKSPACE_BASENAME="$(basename "$WORKSPACE")"
+[[ "$RUN_ID" =~ ^[0-9a-f]{32}$ ]]
+[[ "$WORKSPACE_BASENAME" =~ ^sap-core-v04-4\.${RUN_ID}\.[[:alnum:]]{8}$ ]]
+```
+
 The following is the complete expected migration-directory list; do not use a wildcard copy:
 
 ```bash
@@ -147,7 +163,14 @@ sha256_file() {
     return 1
   fi
 }
-CHECK_FILES=('prisma/migrations/migration_lock.toml')
+CHECK_FILES=(
+  'package.json'
+  'pnpm-lock.yaml'
+  'pnpm-workspace.yaml'
+  '.nvmrc'
+  'prisma/schema.prisma'
+  'prisma/migrations/migration_lock.toml'
+)
 for migration in "${MIGRATIONS[@]}"; do
   CHECK_FILES+=("prisma/migrations/$migration/migration.sql")
   test "$(find "$WORKSPACE/prisma/migrations/$migration" -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" = "1"
@@ -172,7 +195,9 @@ docker version --format 'Docker server={{.Server.Version}}'
 if ! docker image inspect postgres:17.6 >/dev/null 2>&1; then
   docker pull postgres:17.6
 fi
-docker image inspect --format 'Image ID={{.Id}} RepoDigests={{json .RepoDigests}}' postgres:17.6
+IMAGE_ID="$(docker image inspect --format '{{.Id}}' postgres:17.6)"
+IMAGE_REPODIGESTS="$(docker image inspect --format '{{json .RepoDigests}}' postgres:17.6)"
+printf 'PostgreSQL image ID=%s RepoDigests=%s\n' "$IMAGE_ID" "$IMAGE_REPODIGESTS"
 
 CONTAINER_NAME="sapcore-v04-4-$RUN_ID"
 POSTGRES_USER="v04_4_$RUN_ID"
@@ -206,6 +231,7 @@ CONTAINER_ID="$(docker run --detach \
   --env POSTGRES_DB \
   postgres:17.6)"
 test -n "$CONTAINER_ID"
+[[ "$CONTAINER_ID" =~ ^[0-9a-f]{64}$ ]]
 printf '%s\n' "$CONTAINER_ID" > "$WORKSPACE/.container-id"
 printf '%s\n' "$CONTAINER_NAME" > "$WORKSPACE/.container-name"
 printf '%s\n' "$DB_FRESH" "$DB_UPGRADE" "$DB_SHADOW" > "$WORKSPACE/.database-names"
@@ -223,6 +249,7 @@ test "$(docker inspect --format '{{.Id}}' "$CONTAINER_ID")" = "$CONTAINER_ID"
 test "$(docker inspect --format '{{.Name}}' "$CONTAINER_ID")" = "/$CONTAINER_NAME"
 test "$(docker inspect --format '{{.State.Status}}' "$CONTAINER_ID")" = "running"
 test "$(docker inspect --format '{{.Config.Image}}' "$CONTAINER_ID")" = 'postgres:17.6'
+test "$(docker inspect --format '{{.Image}}' "$CONTAINER_ID")" = "$IMAGE_ID"
 test "$(docker inspect --format '{{index .Config.Labels "com.sapcore.v04.run-id"}}' "$CONTAINER_ID")" = "$RUN_ID"
 test "$(docker inspect --format '{{index .Config.Labels "com.sapcore.v04.purpose"}}' "$CONTAINER_ID")" = 'v04.4'
 
@@ -252,7 +279,7 @@ docker exec "$CONTAINER_ID" sh -c "awk '\$2 == \"/var/lib/postgresql/data\" && \
 docker exec "$CONTAINER_ID" df -P /var/lib/postgresql/data
 ```
 
-Expected invariants: `postgres --version` reports PostgreSQL `17.6`; Docker reports the same unique ID/name and `postgres:17.6` image; the port line is exactly `127.0.0.1:<assigned-port>` and is not port `5433`; the bindings JSON contains exactly one host binding for container `5432/tcp`, with host IP `127.0.0.1` and that assigned port; `HostConfig.Tmpfs` declares exactly `/var/lib/postgresql/data` with the requested options; `HostConfig.Binds` is empty; and `/proc/mounts` inside the container confirms that the data directory is actually `tmpfs`. Docker Desktop may render `.Mounts` as `[]` even when `HostConfig.Tmpfs` and the runtime mount prove tmpfs; record that representation as a platform deviation, not a failure. Any actual named/bind mount, missing runtime tmpfs, extra binding, non-loopback address, version/tag mismatch, or uncertainty means STOP.
+Expected invariants: `postgres --version` reports PostgreSQL `17.6`; Docker reports the same unique ID/name and `postgres:17.6` image, and the container's immutable `.Image` ID equals the captured local `IMAGE_ID`; the port line is exactly `127.0.0.1:<assigned-port>` and is not port `5433`; the bindings JSON contains exactly one host binding for container `5432/tcp`, with host IP `127.0.0.1` and that assigned port; `HostConfig.Tmpfs` declares exactly `/var/lib/postgresql/data` with the requested options; `HostConfig.Binds` is empty; and `/proc/mounts` inside the container confirms that the data directory is actually `tmpfs`. Docker Desktop may render `.Mounts` as `[]` even when `HostConfig.Tmpfs` and the runtime mount prove tmpfs; record that representation as a platform deviation, not a failure. Any actual named/bind mount, missing runtime tmpfs, extra binding, non-loopback address, version/tag mismatch, or uncertainty means STOP.
 
 An optional liveness-only check may be used; it does not execute SQL or prove migration readiness:
 
@@ -335,7 +362,7 @@ Every item must be confirmed before handoff; any failed or ambiguous item is STO
 - [ ] Workspace absolute path is outside the repository; run ID is unique and recorded.
 - [ ] Exactly the seven named migration directories and seven `migration.sql` files exist in the copy, including `20261107112700_v0451_tenant_scope_schema`; migration lock and SQL checksums match the repository byte-for-byte.
 - [ ] No `.env` was copied or loaded; no `.env.example`, Compose file, repository Prisma config, source, test, or generated file was copied.
-- [ ] The new exact container ID/name and run-ID label match; image tag and binary report PostgreSQL `17.6`.
+- [ ] The new exact 64-character container ID/name and run-ID label match; image tag and binary report PostgreSQL `17.6`, and the container's immutable `.Image` ID matches the captured local `IMAGE_ID`.
 - [ ] `HostConfig.Tmpfs` declares only `/var/lib/postgresql/data` with the specified options; `HostConfig.Binds` is empty; `/proc/mounts` inside the container confirms runtime `tmpfs`; Docker `.Mounts` representation is recorded (it may be `[]` on Docker Desktop).
 - [ ] One dynamic host port is bound only to `127.0.0.1`; the port is not `5433`.
 - [ ] Fresh, upgrade, and shadow database names are unique throwaway names; URL host/port/name assertions pass without printing credentials; no URL references `5433` or `sap_core`.
@@ -385,13 +412,17 @@ Cleanup is performed only when the owner is finished and has recorded the eviden
 First verify the recorded workspace and container identity. The commands below require the original `REPO`, `TMP_BASE`, `WORKSPACE`, `RUN_ID`, `CONTAINER_NAME`, and `CONTAINER_ID` variables; if they are unavailable, recover the non-secret ID/name from the specific workspace markers only after verifying the workspace path. Do not retrieve or print the password.
 
 ```bash
+test -d "$WORKSPACE"
+test ! -L "$WORKSPACE"
+test "$WORKSPACE" != "$REPO"
 case "$WORKSPACE/" in
   "$REPO/"*) printf '%s\n' 'STOP: refusing workspace cleanup inside repository.' >&2; exit 1 ;;
 esac
-case "$WORKSPACE" in
-  "$TMP_BASE"/sap-core-v04-4.*) ;;
-  *) printf '%s\n' 'STOP: workspace is outside the recorded runbook temp prefix.' >&2; exit 1 ;;
-esac
+test "$(cd "$(dirname "$WORKSPACE")" && pwd -P)" = "$TMP_BASE"
+WORKSPACE_BASENAME="$(basename "$WORKSPACE")"
+[[ "$RUN_ID" =~ ^[0-9a-f]{32}$ ]]
+[[ "$WORKSPACE_BASENAME" =~ ^sap-core-v04-4\.${RUN_ID}\.[[:alnum:]]{8}$ ]]
+test "$(cd "$WORKSPACE" && pwd -P)" = "$WORKSPACE"
 test "$(cat "$WORKSPACE/.run-id")" = "$RUN_ID"
 test "$(cat "$WORKSPACE/.container-name")" = "$CONTAINER_NAME"
 test "$(cat "$WORKSPACE/.container-id")" = "$CONTAINER_ID"
@@ -407,10 +438,16 @@ case "$STATE" in
 esac
 test "$(docker inspect --format '{{.Id}}' "$CONTAINER_ID")" = "$CONTAINER_ID"
 docker rm "$CONTAINER_ID"
-rm -rf "$WORKSPACE"
 ```
 
-After `docker rm`, do not run a Docker command that could select a replacement container by the former name. Record successful removal in the evidence template before deleting the workspace, or preserve the template elsewhere without secrets. The container uses only an ephemeral tmpfs mount; never remove a volume, and do not remove the pulled PostgreSQL image cache.
+After `docker rm`, do not run a Docker command that could select a replacement container by the former name. While the workspace still exists, record the container-removal result and timestamp in the sanitized evidence template. Preserve that evidence outside the workspace in an owner-approved location before deleting the workspace. Then remove only the exact verified workspace and confirm its absence:
+
+```bash
+rm -rf "$WORKSPACE"
+test ! -e "$WORKSPACE"
+```
+
+Update the external sanitized evidence record with the workspace-removal result and timestamp. The container uses only an ephemeral tmpfs mount; never remove a volume, and do not remove the pulled PostgreSQL image cache.
 
 ## 9. Handoff and status boundary
 
@@ -440,14 +477,15 @@ This runbook is reconciled to merged `main` at `d3e270cffa08bbe7f97f855e0999bb97
 
 **Prisma validation and generation status:**
 
-- `pnpm db:validate` passed in the prior V04.5.1 validation. That historical PASS records Prisma schema validation and does not establish a rerun in the V04.4 procedure.
-- Prisma Client generation has no confirmed PASS evidence in the available evidence; no PASS is claimed.
-- Repeating `pnpm db:validate` in the V04.4 procedure remains NOT RUN.
+- The separate V04.5.1 X06 validation note records migration replay, migration status, X06 catalog inspection, and transactional FK behavior only; it does **not** record a `pnpm db:validate` result.
+- The validation register records a historical V01 Prisma validation PASS, but that is not evidence for the later V04.5.1 tenant-scope schema. No independently verifiable V04.5.1 `pnpm db:validate` execution record is cited by the reviewed documentation. The previous V04.5.1 PASS statement is therefore withdrawn; validation of that candidate schema is **NOT CONFIRMED** and must not be reported as PASS.
+- Prisma Client generation against the committed V04.5.1 tenant-scope baseline has no confirmed PASS evidence; status is **NOT CONFIRMED** and no PASS is claimed.
+- Repeating schema validation and Client generation in the V04.4 procedure remains **NOT RUN** and requires separate authorization.
 
 **Tenant-schema evidence already present in the baseline (limited):**
 
 - The committed Prisma schema and seventh migration declare D6 partial unique indexes on `(userId, companyId)` for CompanyMembership and `(userId, plantId)` for PlantAssignment, both with `status IN ('ACTIVE','SUSPENDED')`. The successful seven-migration replay applied that migration, but no D6 index-catalog inspection or uniqueness/lifecycle behavior tests are recorded.
-- The committed Prisma schema and migration declare each typed Role Assignment → RoleDefinition FK with `ON DELETE RESTRICT ON UPDATE RESTRICT`. Prisma schema validation passed historically, and the seven-migration replay applied the SQL. No D14-specific catalog inspection or delete/update behavior tests are recorded; this does not establish typed-scope/definition matching, immutable keys, definition retirement, or history behavior.
+- The committed Prisma schema and migration declare each typed Role Assignment → RoleDefinition FK with `ON DELETE RESTRICT ON UPDATE RESTRICT`. The seven-migration replay applied the SQL. The validation register's historical V01 Prisma-validation PASS predates this V04.5.1 tenant-scope schema and does not establish that the current candidate passed validation. No D14-specific catalog inspection or delete/update behavior tests are recorded; this does not establish typed-scope/definition matching, immutable keys, definition retirement, or history behavior.
 - D6 suspension/terminal/regrant semantics are owner-approved policy. That policy approval is not evidence that transitions, slot retention/release, or history preservation were exercised.
 
 **Remaining NOT RUN:**
