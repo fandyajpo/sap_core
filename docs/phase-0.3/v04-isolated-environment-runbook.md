@@ -279,7 +279,7 @@ docker exec "$CONTAINER_ID" sh -c "awk '\$2 == \"/var/lib/postgresql/data\" && \
 docker exec "$CONTAINER_ID" df -P /var/lib/postgresql/data
 ```
 
-Expected invariants: `postgres --version` reports PostgreSQL `17.6`; Docker reports the same unique ID/name and `postgres:17.6` image; the port line is exactly `127.0.0.1:<assigned-port>` and is not port `5433`; the bindings JSON contains exactly one host binding for container `5432/tcp`, with host IP `127.0.0.1` and that assigned port; `HostConfig.Tmpfs` declares exactly `/var/lib/postgresql/data` with the requested options; `HostConfig.Binds` is empty; and `/proc/mounts` inside the container confirms that the data directory is actually `tmpfs`. Docker Desktop may render `.Mounts` as `[]` even when `HostConfig.Tmpfs` and the runtime mount prove tmpfs; record that representation as a platform deviation, not a failure. Any actual named/bind mount, missing runtime tmpfs, extra binding, non-loopback address, version/tag mismatch, or uncertainty means STOP.
+Expected invariants: `postgres --version` reports PostgreSQL `17.6`; Docker reports the same unique ID/name and `postgres:17.6` image, and the container's immutable `.Image` ID equals the captured local `IMAGE_ID`; the port line is exactly `127.0.0.1:<assigned-port>` and is not port `5433`; the bindings JSON contains exactly one host binding for container `5432/tcp`, with host IP `127.0.0.1` and that assigned port; `HostConfig.Tmpfs` declares exactly `/var/lib/postgresql/data` with the requested options; `HostConfig.Binds` is empty; and `/proc/mounts` inside the container confirms that the data directory is actually `tmpfs`. Docker Desktop may render `.Mounts` as `[]` even when `HostConfig.Tmpfs` and the runtime mount prove tmpfs; record that representation as a platform deviation, not a failure. Any actual named/bind mount, missing runtime tmpfs, extra binding, non-loopback address, version/tag mismatch, or uncertainty means STOP.
 
 An optional liveness-only check may be used; it does not execute SQL or prove migration readiness:
 
@@ -362,7 +362,7 @@ Every item must be confirmed before handoff; any failed or ambiguous item is STO
 - [ ] Workspace absolute path is outside the repository; run ID is unique and recorded.
 - [ ] Exactly the seven named migration directories and seven `migration.sql` files exist in the copy, including `20261107112700_v0451_tenant_scope_schema`; migration lock and SQL checksums match the repository byte-for-byte.
 - [ ] No `.env` was copied or loaded; no `.env.example`, Compose file, repository Prisma config, source, test, or generated file was copied.
-- [ ] The new exact container ID/name and run-ID label match; image tag and binary report PostgreSQL `17.6`.
+- [ ] The new exact 64-character container ID/name and run-ID label match; image tag and binary report PostgreSQL `17.6`, and the container's immutable `.Image` ID matches the captured local `IMAGE_ID`.
 - [ ] `HostConfig.Tmpfs` declares only `/var/lib/postgresql/data` with the specified options; `HostConfig.Binds` is empty; `/proc/mounts` inside the container confirms runtime `tmpfs`; Docker `.Mounts` representation is recorded (it may be `[]` on Docker Desktop).
 - [ ] One dynamic host port is bound only to `127.0.0.1`; the port is not `5433`.
 - [ ] Fresh, upgrade, and shadow database names are unique throwaway names; URL host/port/name assertions pass without printing credentials; no URL references `5433` or `sap_core`.
