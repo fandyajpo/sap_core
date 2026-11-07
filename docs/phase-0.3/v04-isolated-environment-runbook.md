@@ -478,14 +478,14 @@ This runbook is reconciled to merged `main` at `d3e270cffa08bbe7f97f855e0999bb97
 **Prisma validation and generation status:**
 
 - The separate V04.5.1 X06 validation note records migration replay, migration status, X06 catalog inspection, and transactional FK behavior only; it does **not** record a `pnpm db:validate` result.
-- No independently verifiable V04.5.1 `pnpm db:validate` execution record is cited by the reviewed documentation. The previous PASS statement is therefore withdrawn; schema validation status is **NOT CONFIRMED** and must not be reported as PASS.
-- Prisma Client generation has no confirmed PASS evidence; status is **NOT CONFIRMED** and no PASS is claimed.
+- The validation register records a historical V01 Prisma validation PASS, but that is not evidence for the later V04.5.1 tenant-scope schema. No independently verifiable V04.5.1 `pnpm db:validate` execution record is cited by the reviewed documentation. The previous V04.5.1 PASS statement is therefore withdrawn; validation of that candidate schema is **NOT CONFIRMED** and must not be reported as PASS.
+- Prisma Client generation against the committed V04.5.1 tenant-scope baseline has no confirmed PASS evidence; status is **NOT CONFIRMED** and no PASS is claimed.
 - Repeating schema validation and Client generation in the V04.4 procedure remains **NOT RUN** and requires separate authorization.
 
 **Tenant-schema evidence already present in the baseline (limited):**
 
 - The committed Prisma schema and seventh migration declare D6 partial unique indexes on `(userId, companyId)` for CompanyMembership and `(userId, plantId)` for PlantAssignment, both with `status IN ('ACTIVE','SUSPENDED')`. The successful seven-migration replay applied that migration, but no D6 index-catalog inspection or uniqueness/lifecycle behavior tests are recorded.
-- The committed Prisma schema and migration declare each typed Role Assignment → RoleDefinition FK with `ON DELETE RESTRICT ON UPDATE RESTRICT`. The seven-migration replay applied the SQL, but the reviewed evidence does not independently confirm a Prisma schema-validation run. No D14-specific catalog inspection or delete/update behavior tests are recorded; this does not establish typed-scope/definition matching, immutable keys, definition retirement, or history behavior.
+- The committed Prisma schema and migration declare each typed Role Assignment → RoleDefinition FK with `ON DELETE RESTRICT ON UPDATE RESTRICT`. The seven-migration replay applied the SQL. The validation register's historical V01 Prisma-validation PASS predates this V04.5.1 tenant-scope schema and does not establish that the current candidate passed validation. No D14-specific catalog inspection or delete/update behavior tests are recorded; this does not establish typed-scope/definition matching, immutable keys, definition retirement, or history behavior.
 - D6 suspension/terminal/regrant semantics are owner-approved policy. That policy approval is not evidence that transitions, slot retention/release, or history preservation were exercised.
 
 **Remaining NOT RUN:**
