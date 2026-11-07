@@ -92,20 +92,24 @@ Retain a compact evidence bundle in the temporary workspace for review: baseline
 
 ## 8. Gate and status boundary
 
-The existing register remains authoritative: V01–V03 are `PASS`; V04–V10 remain `BLOCKED`; Phase 1 remains `BLOCKED`. The V04.5.1 X06 note is limited to its seven-migration replay and the two X06 constraints' catalog/transaction checks; it does not establish D1–D15 enforcement, V04 tenant behavior, application authorization, protected operations, or RLS. V04 can change state only through its complete acceptance criteria and a separate evidence review; this plan does not update the execution register or any gate.
+The execution register remains authoritative: V01–V03 are `PASS`; V04–V10 remain `BLOCKED`; Phase 1 remains `BLOCKED`. The V04.5.1 X06 note remains bounded to its recorded X06 evidence. The separate V04.4 execution record documents partial tenant structural and behavior evidence, but does not establish complete D1–D15 enforcement, application authorization, protected operations, RLS, or application tenant isolation. V04 can change state only through its complete acceptance criteria and a separate evidence review.
 
-**Execution status:** The separate V04.5.1 X06 validation is documented in `v04.5.1-x06-forward-migration-note.md`: all seven migrations replayed to an empty database, status was up to date, both X06 FKs were catalog-checked as RESTRICT/RESTRICT, four transactional delete/update rejection cases were exercised, and the test transaction rolled back with zero residual fixtures. This does not validate the tenant schema's FK/index catalog or tenant behavior.
+**Execution status:** The separate V04.5.1 X06 validation is documented in `v04.5.1-x06-forward-migration-note.md`. The V04.4 execution record separately documents Prisma validation/generation, fresh and staged migration replay, FK/index catalog comparison, and selected tenant behavior tests.
 
-**Remaining NOT RUN:**
+**V04.4 execution summary:**
 
-- Prisma schema validation and Client generation from the committed V04.5.1 baseline (**NOT RUN / no independently verifiable execution evidence confirmed**).
-- The staged upgrade replay: first six historical migrations, then the committed seventh migration.
-- Tenant schema mapping/catalog checks for X01–X05: ordered source/target tuples, nullability and target keys, FK actions, and indexes; valid and missing-parent cases; wrong-parent rejection; X02 parent-mutation/child-insert concurrency; and the approved same-transaction fallback/rollback cases where ORM mapping is unsafe.
-- D1/D3 membership slot, lifecycle, suspension/restore, terminal/history, and concurrency behavior; D5 zero-to-many Organization→Company cardinality and absence of a permanent uniqueness constraint.
-- D6 CompanyMembership and PlantAssignment partial-unique behavior, duplicate/state-transition concurrency, suspension/restore, terminal release, and history preservation.
+The isolated execution recorded in `v04.4-execution-record-2026-11-07.md` passed Prisma 7.10.1 schema validation and Client generation, fresh seven-migration replay, staged six-plus-one upgrade replay, and migration status checks for both databases. The inspected FK/index catalogs matched across replay paths. Selected D1 OrganizationMembership slot behavior, D6 CompanyMembership and PlantAssignment pair-uniqueness behavior, and four composite FK positive/negative cases passed.
+
+**Remaining NOT RUN / not established:**
+
+- X01–X05 remaining mapping and behavior cases: missing-parent/direct-FK negative cases, complete nullability/target-key review, X02 parent-mutation/child-insert concurrency, and approved same-transaction fallback/rollback cases where ORM mapping is unsafe.
+- D1/D3 complete lifecycle, suspension/restore on the same row, terminal/history combinations, and concurrent activation across organizations.
+- D5 zero-to-many Organization→Company behavioral verification and explicit absence of a permanent uniqueness constraint.
+- D6 duplicate-creation and status-transition concurrency, suspension/restore on the same row, and complete terminal/history preservation cases for CompanyMembership and PlantAssignment.
 - D7/D8/D14 role-edge mapping, typed-scope/definition matching, referential actions, key immutability, definition retirement, and revoked-assignment/history behavior.
+- Application authorization, protected operations, RLS, application-level tenant isolation, and V05–V10 acceptance criteria.
 
-D2 invitation FKs and D15 Service Principal/permission-catalog behavior are not approved structural edges and are outside this spike. Application authorization, protected operations, RLS, and application tenant isolation are outside structural validation and remain unestablished. No V04 PASS is claimed. This documentation reconciliation ran no experiment, database/container operation, Prisma command, build, or test.
+D2 invitation FKs and D15 Service Principal/permission-catalog behavior are not approved structural edges and are outside this spike. Structural validation does not establish application authorization, protected operations, RLS, or application tenant isolation. No V04 PASS is claimed.
 
 ## D6 owner-policy update — 2026-11-07
 
@@ -116,3 +120,51 @@ D6's status vocabulary and pair-slot semantics are now owner-approved. Both enti
 This plan is reconciled to merged `main` at `d3e270cffa08bbe7f97f855e0999bb97abfa1882`. The checked-in candidate now includes the tenant-scope schema and the seventh migration, `20261107112700_v0451_tenant_scope_schema`; the six earlier migrations remain historical and unchanged. X06 is now `ON DELETE RESTRICT ON UPDATE RESTRICT` for Session→User and Account→User, as implemented by that forward migration.
 
 The V04.5.1 X06 note records the completed isolated seven-migration PostgreSQL 17.6 replay and the bounded X06 catalog and transactional behavior checks. Remaining V04.4 technical/structural and tenant behavior cases remain to be separately executed and reviewed. The X06 note is not evidence of D1–D15 enforcement, tenant lifecycle behavior, application authorization, protected operations, RLS, hosted/production state, or V04 PASS. V01–V03 remain `PASS`; V04–V10 and Phase 1 remain `BLOCKED`. This reconciliation changes no policy decision, register entry, or gate status.
+
+## V04.4 execution update — 2026-11-07
+
+The isolated V04.4 execution is recorded in
+`v04.4-execution-record-2026-11-07.md`.
+
+Prisma validation and Client generation passed using the pinned Prisma 7.10.1
+toolchain. Fresh and staged upgrade replay both applied all seven migrations
+successfully, and both databases reported up-to-date migration status.
+Inspected FK/index catalog definitions matched across both replay paths.
+
+Selected OrganizationMembership, CompanyMembership, and PlantAssignment
+partial-unique behavior cases passed. Four composite FK positive/negative
+transactional tests also passed. These are case-level results only; they do
+not establish all lifecycle, history, or concurrency requirements.
+
+The remaining NOT RUN cases and scope limitations are listed in the execution
+record. V01–V03 remain `PASS`; V04–V10 remain `BLOCKED`; Phase 1 remains
+`BLOCKED`. No gate is promoted by this update. Cleanup remains pending until
+the evidence has been reviewed and preserved.
+
+## V04.4 supplemental X01–X05 execution update — 2026-11-07
+
+A supplemental isolated PostgreSQL 17.6 execution (run ID `9e176ea3b14a4668acb4462c832cadd4`) exercised the approved X01–X05 tenant-scope FK relationships:
+
+- Two valid tenant hierarchies and associated membership/assignment chains passed positive insertion controls.
+- Six deliberately invalid relationship cases were rejected by their expected FK constraints: X01, X02, X03, X04, X05 membership tuple, and X05 plant tuple.
+- Updating either `Company.organizationId` or `Company.id` while the Company was referenced by Plant was rejected by `plant_organizationId_companyId_fkey`.
+- All fixtures were rolled back and subsequent checks found zero residual rows.
+
+See `v04.4-execution-record-2026-11-07.md`, “Supplemental X01–X05 runtime evidence”, for exact constraints and results.
+
+This update does not establish concurrency behavior, complete lifecycle semantics, D5 cardinality, role-edge behavior, authorization, protected operations, RLS, or application tenant isolation. It is supplemental evidence only; V04 and the downstream gates remain BLOCKED.
+
+## V04.4 supplemental D5/D1/D6 and role-edge execution update — 2026-11-07
+
+A further isolated PostgreSQL 17.6 execution (run ID `22e1b72960eb4eab910774b40a9181b7`) added bounded runtime evidence:
+
+- D5 Organization → Company one-to-many cardinality was exercised with one Organization and multiple Companies; an invalid Company parent reference was rejected.
+- D1 selected OrganizationMembership lifecycle cases passed. Two concurrent ACTIVE inserts for the same user were serialized by the unique index; the second insert was rejected.
+- D6 selected CompanyMembership and PlantAssignment lifecycle cases passed. Concurrent duplicate pair insertions were rejected by their respective partial unique indexes.
+- D7/D8/D14 role-edge FKs were inspected and exercised for RESTRICT/RESTRICT behavior. Referenced parent and Role Definition deletes/key updates were rejected; Role Definitions could be disabled.
+
+The run also confirmed enforcement gaps: direct deletion of revoked Role Assignment rows remains possible at database level; Core owner/kind and typed-scope validation was not demonstrated; unreferenced-key immutability remains unproven. Suspended-access authorization, permission catalog/grant matrix, cross-scope inheritance, protected operations, RLS, application tenant isolation, and concurrent parent mutation/child insertion remain outside the evidence obtained.
+
+All seven D1/D6 fixture categories were verified at zero after cleanup. See `v04.4-execution-record-2026-11-07.md` for detailed cases and limitations.
+
+This is supplemental case-level evidence, not completion of V04 acceptance criteria. No schema or policy decision is changed. V04–V10 and Phase 1 remain BLOCKED.
