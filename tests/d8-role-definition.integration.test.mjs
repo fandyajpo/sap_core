@@ -50,6 +50,7 @@ const fixture = {
 let client;
 let transactionOpen = false;
 let savepointCounter = 0;
+let transactionQueue = Promise.resolve();
 let allowCreate = true;
 let allowRevise = true;
 const authorizationCalls = [];
@@ -66,16 +67,30 @@ function createSession(databaseClient) {
 const database = {
   ...createSession({ query: (...args) => client.query(...args) }),
   async transaction(work) {
+    const previous = transactionQueue;
+    let release;
+    transactionQueue = new Promise((resolve) => {
+      release = resolve;
+    });
+    await previous;
+
     const savepoint = `d8_service_${++savepointCounter}`;
-    await client.query(`SAVEPOINT ${savepoint}`);
+    let savepointOpen = false;
     try {
+      await client.query(`SAVEPOINT ${savepoint}`);
+      savepointOpen = true;
       const result = await work(createSession(client));
       await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+      savepointOpen = false;
       return result;
     } catch (error) {
-      await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
-      await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+      if (savepointOpen) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+        await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+      }
       throw error;
+    } finally {
+      release();
     }
   },
 };
@@ -133,6 +148,37 @@ async function assertDatabaseRejects(operation) {
 async function auditCount() {
   const { rows } = await client.query(`SELECT COUNT(*)::int AS count FROM "core"."role_definition_audit"`);
   return rows[0].count;
+}
+
+async function withAuditInsertRejected(work) {
+  const suffix = randomUUID().replaceAll("-", "");
+  const triggerName = `d8_audit_fail_${suffix}`;
+  const functionName = `d8_audit_fail_${suffix}`;
+
+  try {
+    await client.query(`
+      CREATE FUNCTION "core"."${functionName}"()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        RAISE EXCEPTION 'D8 integration test rejected audit insert.' USING ERRCODE = 'P0001';
+      END;
+      $$
+    `);
+    await client.query(
+      `CREATE TRIGGER "${triggerName}"
+       BEFORE INSERT ON "core"."role_definition_audit"
+       FOR EACH ROW EXECUTE FUNCTION "core"."${functionName}"()`,
+    );
+    return await work({ triggerName, functionName });
+  } finally {
+    try {
+      await client.query(`DROP TRIGGER IF EXISTS "${triggerName}" ON "core"."role_definition_audit"`);
+    } finally {
+      await client.query(`DROP FUNCTION IF EXISTS "core"."${functionName}"()`);
+    }
+  }
 }
 
 async function insertSystemRole() {
@@ -557,6 +603,113 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       }),
       "ROLE_SCOPE_NOT_ALLOWED",
     );
+  });
+
+  await t.test("concurrent revision requests advance a family exactly once", async () => {
+    const initial = await roleDefinitions.createCustomRole({
+      actorUserId: fixture.actorId,
+      organizationId: fixture.organizationAId,
+      code: `d8-concurrent-${randomUUID()}`,
+      scope: "ORGANIZATION",
+    });
+
+    // Both requests are submitted together; the single-client savepoint adapter serializes
+    // their transaction callbacks to preserve the suite's outer rollback isolation.
+    const outcomes = await Promise.allSettled([
+      roleDefinitions.reviseCustomRole({
+        actorUserId: fixture.actorId,
+        roleDefinitionId: initial.id,
+        code: `${initial.code}-left`,
+      }),
+      roleDefinitions.reviseCustomRole({
+        actorUserId: fixture.actorId,
+        roleDefinitionId: initial.id,
+        code: `${initial.code}-right`,
+      }),
+    ]);
+    const fulfilled = outcomes.filter((outcome) => outcome.status === "fulfilled");
+    const rejected = outcomes.filter((outcome) => outcome.status === "rejected");
+    assert.equal(fulfilled.length, 1);
+    assert.equal(rejected.length, 1);
+    assert.ok(rejected[0].reason instanceof RoleDefinitionError);
+    assert.equal(rejected[0].reason.code, "ROLE_DEFINITION_VERSION_CONFLICT");
+
+    const { rows: versions } = await client.query(
+      `SELECT "id"::text AS "id", "version" FROM "core"."role_definition"
+       WHERE "role_family_id" = $1 ORDER BY "version"`,
+      [initial.roleFamilyId],
+    );
+    assert.deepEqual(versions.map((row) => row.version), [1, 2]);
+    assert.equal(new Set(versions.map((row) => row.id)).size, 2);
+    assert.equal(versions.filter((row) => row.version === 2).length, 1);
+
+    const { rows: reviseAudits } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM "core"."role_definition_audit"
+       WHERE "role_family_id" = $1 AND "event_type" = 'REVISE'`,
+      [initial.roleFamilyId],
+    );
+    assert.equal(reviseAudits[0].count, 1);
+  });
+
+  await t.test("audit insert failures roll back create and revision rows and clean up test trigger", async () => {
+    const revisionBase = await roleDefinitions.createCustomRole({
+      actorUserId: fixture.actorId,
+      organizationId: fixture.organizationAId,
+      code: `d8-audit-atomic-revision-${randomUUID()}`,
+      scope: "ORGANIZATION",
+    });
+    const failedCreateCode = `d8-audit-atomic-create-${randomUUID()}`;
+    const auditCountBefore = await auditCount();
+
+    const testObjects = await withAuditInsertRejected(async (objects) => {
+      await assert.rejects(roleDefinitions.createCustomRole({
+        actorUserId: fixture.actorId,
+        organizationId: fixture.organizationAId,
+        code: failedCreateCode,
+        scope: "ORGANIZATION",
+      }));
+      const { rows: failedCreateRows } = await client.query(
+        `SELECT "id" FROM "core"."role_definition"
+         WHERE "ownerOrganizationId" = $1 AND "code" = $2`,
+        [fixture.organizationAId, failedCreateCode],
+      );
+      assert.deepEqual(failedCreateRows, [], "failed create audit must roll back its RoleDefinition insert");
+      assert.equal(await auditCount(), auditCountBefore);
+
+      await assert.rejects(roleDefinitions.reviseCustomRole({
+        actorUserId: fixture.actorId,
+        roleDefinitionId: revisionBase.id,
+        code: `${revisionBase.code}-failed-revision`,
+      }));
+      const { rows: familyVersions } = await client.query(
+        `SELECT "version" FROM "core"."role_definition"
+         WHERE "role_family_id" = $1 ORDER BY "version"`,
+        [revisionBase.roleFamilyId],
+      );
+      assert.deepEqual(familyVersions, [{ version: 1 }], "failed revision audit must roll back its new version");
+      const { rows: familyAudits } = await client.query(
+        `SELECT "event_type" FROM "core"."role_definition_audit"
+         WHERE "role_family_id" = $1 ORDER BY "version"`,
+        [revisionBase.roleFamilyId],
+      );
+      assert.deepEqual(familyAudits, [{ event_type: "CREATE" }]);
+      assert.equal(await auditCount(), auditCountBefore);
+      return objects;
+    });
+
+    const { rows: cleanupRows } = await client.query(
+      `SELECT
+         NOT EXISTS (
+           SELECT 1 FROM pg_trigger
+           WHERE "tgname" = $1 AND "tgrelid" = '"core"."role_definition_audit"'::regclass
+         ) AS trigger_removed,
+         NOT EXISTS (
+           SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n."oid" = p."pronamespace"
+           WHERE n."nspname" = 'core' AND p."proname" = $2
+         ) AS function_removed`,
+      [testObjects.triggerName, testObjects.functionName],
+    );
+    assert.deepEqual(Object.values(cleanupRows[0]), [true, true]);
   });
 
   await t.test("SYSTEM definitions cannot be revised by the Organization service", async () => {
