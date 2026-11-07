@@ -75,6 +75,18 @@ function authRequest(path, { method = "GET", body, cookie } = {}) {
   });
 }
 
+function sessionCookieFromResponse(response) {
+  const cookies =
+    typeof response.headers.getSetCookie === "function"
+      ? response.headers.getSetCookie()
+      : [response.headers.get("set-cookie") ?? ""];
+
+  return cookies
+    .map((value) => value.split(";", 1)[0])
+    .filter(Boolean)
+    .join("; ");
+}
+
 async function insertTestUser(email) {
   const userId = randomUUID();
   await pool.query(
@@ -155,6 +167,22 @@ after(async () => {
 });
 
 test("V03 Better Auth identity integration and V01/V02 regression", async (t) => {
+  await t.test("authentication pages and protected home route", async () => {
+    const homeResponse = await fetch(`${authURL}/`, { redirect: "manual" });
+    assert.equal(homeResponse.status, 307, "anonymous home access must redirect");
+    const location = homeResponse.headers.get("location");
+    assert.ok(location, "anonymous home redirect must include a location");
+    assert.equal(new URL(location, authURL).pathname, "/sign-in");
+
+    const signInPageResponse = await fetch(`${authURL}/sign-in`);
+    assert.equal(signInPageResponse.status, 200);
+    assert.match(await signInPageResponse.text(), /Welcome back/);
+
+    const registerPageResponse = await fetch(`${authURL}/register`);
+    assert.equal(registerPageResponse.status, 200);
+    assert.match(await registerPageResponse.text(), /Create your account/);
+  });
+
   await t.test("V01/V02 ten-schema and cross-schema relation regression", async () => {
     const recordId = randomUUID();
     const referenceId = randomUUID();
@@ -264,14 +292,7 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       const userId = signupBody?.user?.id;
       assert.equal(typeof userId, "string");
 
-      const setCookies =
-        typeof signupResponse.headers.getSetCookie === "function"
-          ? signupResponse.headers.getSetCookie()
-          : [signupResponse.headers.get("set-cookie") ?? ""];
-      const cookie = setCookies
-        .map((value) => value.split(";", 1)[0])
-        .filter(Boolean)
-        .join("; ");
+      const cookie = sessionCookieFromResponse(signupResponse);
       assert.match(cookie, /session_token=/, "signup must set a session cookie");
 
       const { rows: userRows } = await pool.query(
@@ -443,6 +464,42 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       const afterSignoutResponse = await authRequest("/get-session", { cookie });
       const afterSignout = await readJson(afterSignoutResponse, "get session after sign-out");
       assert.equal(afterSignout, null);
+
+      const rejectedSignIn = await authRequest("/sign-in/email", {
+        method: "POST",
+        body: { email, password: `${password}-incorrect` },
+      });
+      assert.equal(rejectedSignIn.ok, false, "invalid credentials must not sign in");
+
+      const signInResponse = await authRequest("/sign-in/email", {
+        method: "POST",
+        body: { email, password },
+      });
+      await readJson(signInResponse, "email sign-in");
+      const signInCookie = sessionCookieFromResponse(signInResponse);
+      assert.match(signInCookie, /session_token=/, "sign-in must set a session cookie");
+
+      const signedInSessionResponse = await authRequest("/get-session", {
+        cookie: signInCookie,
+      });
+      const signedInSession = await readJson(signedInSessionResponse, "session after sign-in");
+      assert.equal(signedInSession?.user?.id, userId);
+
+      const protectedHomeResponse = await fetch(`${authURL}/`, {
+        headers: { cookie: signInCookie },
+      });
+      assert.equal(protectedHomeResponse.status, 200);
+      assert.match(
+        await protectedHomeResponse.text(),
+        /Authentication is not authorization/,
+      );
+
+      const signOutAfterSignIn = await authRequest("/sign-out", {
+        method: "POST",
+        cookie: signInCookie,
+        body: {},
+      });
+      await readJson(signOutAfterSignIn, "sign out after email sign-in");
 
       const verificationId = randomUUID();
       const verificationIdentifier = `${testPrefix}verification`;
