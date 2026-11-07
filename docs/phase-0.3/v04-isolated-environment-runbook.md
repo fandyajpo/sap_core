@@ -1,7 +1,7 @@
 # V04.5.1 Isolated Environment Setup & Safety Verification Runbook
 
 **Purpose:** Prepare and verify the disposable environment for the separately approved V04.4 feasibility spike.  
-**Expected source:** `fandyajpo/sap_core`, branch `main`, commit `64bf956648360b4ae9ea53ecd6605c9b309261da`.  
+**Technical baseline:** `fandyajpo/sap_core`, branch `main`, commit `a1cfa848ea3686ce04ddc77ea8042c257e9ef15a`. This is the verified technical-input baseline; later documentation-only commits are permitted if the technical-input diff remains empty.  
 **Status:** Owner-executed preparation instructions only. This document is not evidence that an environment was created.
 
 ## 1. Preparation-only boundary
@@ -16,7 +16,7 @@ The existing Compose setup is explicitly out of scope: `docker-compose.yml` name
 
 At the expected baseline, the inspected values are:
 
-- Commit/branch: `64bf956648360b4ae9ea53ecd6605c9b309261da` / `main`.
+- Technical-input baseline / branch: `a1cfa848ea3686ce04ddc77ea8042c257e9ef15a` / `main`.
 - Node.js: `.nvmrc` is `26.0.0`; `package.json` engine is `>=26.0.0 <27`.
 - pnpm: `package.json` pins `pnpm@10.20.0`; `pnpm-lock.yaml` uses lockfile version `9.0`.
 - Prisma CLI, `@prisma/client`, and `@prisma/adapter-pg`: `7.10.1` in the manifest and lockfile.
@@ -25,7 +25,7 @@ At the expected baseline, the inspected values are:
 - Existing root scripts (do not run them in this runbook): `db:validate`, `db:generate`, `db:migrate:dev`, `db:migrate:deploy`, `db:status`, and `test:v03`. There is no tenant-spike script. In particular, do not use a root script that could discover the repository's Prisma config or environment.
 - The only existing migration directories are the six listed in Stage C. Preserve their SQL and migration lock byte-for-byte.
 
-The runbook's expected baseline is exact, not “a later main.” If the commit, branch, remote, clean-tree check, runtime, or pinned values differ, stop and resolve the discrepancy before creating anything.
+The technical-input baseline is exact. Documentation-only commits after `a1cfa848ea3686ce04ddc77ea8042c257e9ef15a` are allowed only when that baseline is an ancestor of `HEAD` and the diff for the pinned manifests, runtime pin, Prisma schema, and migration history is empty. The branch, remote, clean-tree check, runtime, and pinned values must still match; otherwise stop before creating anything.
 
 ## 3. Safety rules
 
@@ -49,10 +49,10 @@ set -Eeuo pipefail
 set +x
 REPO="$(git rev-parse --show-toplevel)"
 REPO="$(cd "$REPO" && pwd -P)"
-EXPECTED_COMMIT="64bf956648360b4ae9ea53ecd6605c9b309261da"
-
-test "$(git -C "$REPO" rev-parse HEAD)" = "$EXPECTED_COMMIT"
+TECHNICAL_BASELINE="a1cfa848ea3686ce04ddc77ea8042c257e9ef15a"
 test "$(git -C "$REPO" branch --show-current)" = "main"
+git -C "$REPO" merge-base --is-ancestor "$TECHNICAL_BASELINE" HEAD
+git -C "$REPO" diff --exit-code "$TECHNICAL_BASELINE" HEAD -- package.json pnpm-lock.yaml pnpm-workspace.yaml .nvmrc prisma/schema.prisma prisma/migrations
 test "$(git -C "$REPO" remote get-url origin)" = "https://github.com/fandyajpo/sap_core"
 test -z "$(git -C "$REPO" status --porcelain)"
 test "$(cat "$REPO/.nvmrc")" = "26.0.0"
@@ -127,7 +127,8 @@ test "$(printf '%s\n' "$ACTUAL_DIRS" | wc -l | tr -d '[:space:]')" = "6"
 test "$(find "$WORKSPACE/prisma/migrations" -type f -name migration.sql | wc -l | tr -d '[:space:]')" = "6"
 test ! -e "$WORKSPACE/prisma.config.ts"
 test ! -e "$WORKSPACE/.env"
-test -z "$(find "$WORKSPACE" -type f -name .env -print -quit)"
+test ! -e "$WORKSPACE/.postgres-password"
+test -z "$(find "$WORKSPACE" -type f \( -name .env -o -name .postgres-password \) -print -quit)"
 
 sha256_file() {
   if command -v shasum >/dev/null 2>&1; then
@@ -230,18 +231,21 @@ fi
 test "$HOST_PORT" != '5433'
 (( HOST_PORT >= 1 && HOST_PORT <= 65535 ))
 printf 'Host port bindings JSON: %s\n' "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$CONTAINER_ID")"
-test "$(docker inspect --format '{{len .Mounts}}' "$CONTAINER_ID")" = '1'
-test "$(docker inspect --format '{{(index .Mounts 0).Type}}' "$CONTAINER_ID")" = 'tmpfs'
-test "$(docker inspect --format '{{(index .Mounts 0).Destination}}' "$CONTAINER_ID")" = '/var/lib/postgresql/data'
 test "$(docker inspect --format '{{len .HostConfig.Tmpfs}}' "$CONTAINER_ID")" = '1'
 test "$(docker inspect --format '{{index .HostConfig.Tmpfs "/var/lib/postgresql/data"}}' "$CONTAINER_ID")" = 'rw,nosuid,nodev,noexec,size=1g'
 test "$(docker inspect --format '{{len .HostConfig.Binds}}' "$CONTAINER_ID")" = '0'
-printf 'Mounts: %s; HostConfig.Binds count: %s\n' \
-  "$(docker inspect --format '{{json .Mounts}}' "$CONTAINER_ID")" \
+MOUNTS_JSON="$(docker inspect --format '{{json .Mounts}}' "$CONTAINER_ID")"
+printf 'Docker .Mounts representation: %s\nHostConfig.Tmpfs: %s\nHostConfig.Binds count: %s\n' \
+  "$MOUNTS_JSON" \
+  "$(docker inspect --format '{{json .HostConfig.Tmpfs}}' "$CONTAINER_ID")" \
   "$(docker inspect --format '{{len .HostConfig.Binds}}' "$CONTAINER_ID")"
+# Docker Desktop may report .Mounts as [] for a container tmpfs.
+# Require the tmpfs declaration and verify the actual mount inside the container.
+docker exec "$CONTAINER_ID" sh -c "awk '\$2 == \"/var/lib/postgresql/data\" && \$3 == \"tmpfs\" { found=1 } END { exit !found }' /proc/mounts"
+docker exec "$CONTAINER_ID" df -P /var/lib/postgresql/data
 ```
 
-Expected invariants: `postgres --version` reports PostgreSQL `17.6`; Docker reports the same unique ID/name and `postgres:17.6` image; the port line is exactly `127.0.0.1:<assigned-port>` and is not port `5433`; the bindings JSON contains exactly one host binding for container `5432/tcp`, with host IP `127.0.0.1` and that assigned port; there is exactly one mount, of type `tmpfs` at `/var/lib/postgresql/data`, with the requested options, and the bind-mount count is `0`. Any extra binding or mount, non-loopback address, named/bind mount, version/tag mismatch, or uncertainty means STOP.
+Expected invariants: `postgres --version` reports PostgreSQL `17.6`; Docker reports the same unique ID/name and `postgres:17.6` image; the port line is exactly `127.0.0.1:<assigned-port>` and is not port `5433`; the bindings JSON contains exactly one host binding for container `5432/tcp`, with host IP `127.0.0.1` and that assigned port; `HostConfig.Tmpfs` declares exactly `/var/lib/postgresql/data` with the requested options; `HostConfig.Binds` is empty; and `/proc/mounts` inside the container confirms that the data directory is actually `tmpfs`. Docker Desktop may render `.Mounts` as `[]` even when `HostConfig.Tmpfs` and the runtime mount prove tmpfs; record that representation as a platform deviation, not a failure. Any actual named/bind mount, missing runtime tmpfs, extra binding, non-loopback address, version/tag mismatch, or uncertainty means STOP.
 
 An optional liveness-only check may be used; it does not execute SQL or prove migration readiness:
 
@@ -275,7 +279,8 @@ EOF
 
 test -f "$WORKSPACE/prisma.config.ts"
 test ! -e "$WORKSPACE/.env"
-test -z "$(find "$WORKSPACE" -type f -name .env -print -quit)"
+test ! -e "$WORKSPACE/.postgres-password"
+test -z "$(find "$WORKSPACE" -type f \( -name .env -o -name .postgres-password \) -print -quit)"
 grep -F 'schema: "prisma/schema.prisma"' "$WORKSPACE/prisma.config.ts"
 grep -F 'path: "prisma/migrations"' "$WORKSPACE/prisma.config.ts"
 grep -F 'env("DATABASE_URL")' "$WORKSPACE/prisma.config.ts"
@@ -318,13 +323,13 @@ Before handoff, review every item in the checklist below. Record the evidence fi
 
 Every item must be confirmed before handoff; any failed or ambiguous item is STOP:
 
-- [ ] Repository origin, branch `main`, clean working tree, and exact baseline commit `64bf956648360b4ae9ea53ecd6605c9b309261da` verified.
+- [ ] Repository origin, branch `main`, clean working tree, technical baseline ancestor `a1cfa848ea3686ce04ddc77ea8042c257e9ef15a`, and empty technical-input diff from that baseline verified.
 - [ ] Node.js is exactly `26.0.0`; pnpm is exactly `10.20.0`; manifest/lock pins Prisma CLI, Client, and adapter-pg `7.10.1`; PostgreSQL tag is `postgres:17.6`.
 - [ ] Workspace absolute path is outside the repository; run ID is unique and recorded.
 - [ ] Exactly the six named migration directories and six `migration.sql` files exist in the copy; migration lock and SQL checksums match the repository byte-for-byte.
 - [ ] No `.env` was copied or loaded; no `.env.example`, Compose file, repository Prisma config, source, test, or generated file was copied.
 - [ ] The new exact container ID/name and run-ID label match; image tag and binary report PostgreSQL `17.6`.
-- [ ] Container has exactly one `tmpfs` mount at `/var/lib/postgresql/data` with the specified options, no named/bind mounts, and `HostConfig.Binds` count `0`.
+- [ ] `HostConfig.Tmpfs` declares only `/var/lib/postgresql/data` with the specified options; `HostConfig.Binds` is empty; `/proc/mounts` inside the container confirms runtime `tmpfs`; Docker `.Mounts` representation is recorded (it may be `[]` on Docker Desktop).
 - [ ] One dynamic host port is bound only to `127.0.0.1`; the port is not `5433`.
 - [ ] Fresh, upgrade, and shadow database names are unique throwaway names; URL host/port/name assertions pass without printing credentials; no URL references `5433` or `sap_core`.
 - [ ] The existing Compose service, current development database, and `sap_core_postgres_data` volume have not been used or touched.
@@ -357,7 +362,7 @@ Complete with sanitized values only. Do not paste passwords, `POSTGRES_PASSWORD`
 - Temporary container name and ID: `________________________________`
 - PostgreSQL image tag, binary version, image ID/digest: `________________________________`
 - Host binding and dynamically assigned port: `________________________________`
-- Mount inspection result (one `/var/lib/postgresql/data` tmpfs with specified options; no volume/bind mounts; binds count `0`): `________________________________`
+- Mount inspection result (`HostConfig.Tmpfs`, runtime `/proc/mounts`, `df -P`, `.Mounts` representation, and zero binds): `________________________________`
 - Historical migration directories/count (`6`) and migration SQL + lock SHA-256 values: `________________________________`
 - Temporary database names (fresh / upgrade / shadow): `________________________________`
 - Temporary Prisma config points to copied schema/migrations; no dotenv import: `________________________________`
@@ -405,3 +410,17 @@ After `docker rm`, do not run a Docker command that could select a replacement c
 Handoff is complete only when all preflight items pass, the evidence template is filled without secrets, and the owner explicitly accepts control of the verified temporary workspace/container. Otherwise stop and follow the recovery section. This runbook does not authorize the V04.4 Prisma/SQL/test phase.
 
 This runbook is not evidence that the environment has been created. No database operations or technical experiments have been performed while authoring it. Gate states remain unchanged: V01–V03 `PASS`; V04–V10 `BLOCKED`; Phase 1 `BLOCKED`. D6 guard testing remains blocked pending explicit status vocabulary and physical predicate resolution.
+
+## 10. Reconciliation record — 2026-11-07
+
+This record documents the observed V04.5.1 preparation attempt and its disposition. It does not authorize or report V04.4 execution.
+
+- **Source baseline deviation:** preparation ran from commit `a1cfa848ea3686ce04ddc77ea8042c257e9ef15a`, not the original expected `64bf956648360b4ae9ea53ecd6605c9b309261da`. The intervening change was documentation-only; the pinned manifests, runtime pin, Prisma schema, and six migration histories were verified unchanged. Future Stage A therefore validates ancestry from the technical-input baseline plus an empty diff for those technical paths, rather than requiring HEAD to equal an obsolete documentation baseline.
+- **Credential handling incident:** the first disposable run wrote its throwaway PostgreSQL password to a workspace file named `.postgres-password` (mode 0600). Treat that credential as exposed and never reuse it. The exact old container and workspace were subsequently removed after verifying the full container ID/name, run-ID and purpose labels, and workspace markers. No password value is recorded here.
+- **Retirement evidence:** container `f00dfa66e19bdcf734e5a239e4e8dbefbde0f08e0e5634901a8096415fa9623b` and workspace Run ID `d3b4280839ca831ec15e2ce8ee61cde2` were removed on 2026-11-07; the owner terminal printed `RETIREMENT COMPLETE`. The development volume, repository, and image were not targeted by the cleanup procedure.
+- **Docker Desktop tmpfs representation:** Docker inspection returned an empty `.Mounts` array, while `HostConfig.Tmpfs` declared the requested data-directory tmpfs and in-container `/proc/mounts` plus `df` confirmed the runtime tmpfs. Stage E now checks the configuration and runtime mount instead of requiring `.Mounts` to contain one entry.
+- **Development resource observation:** no `sap-core-postgres` container was present during the check. The Compose-created volume `sap_core_sap_core_postgres_data` (logical Compose volume `sap_core_postgres_data`) existed and was not modified. Its database contents/integrity were not verified.
+- **Abandoned preliminary workspace:** an earlier incomplete workspace associated with Run ID `2e9e7a88a02fa2fc0f2d7320d1a2ce2d` was observed separately and was not part of the approved retirement. It was not removed or reused; its current state must be checked by the owner before any future cleanup.
+- **Execution boundary:** no V04.4 Prisma validation/generation, SQL, migration, database test, application test, or build was run. V04 remains `BLOCKED`; V05–V10 and Phase 1 remain `BLOCKED`. D6 guard experiments remain `BLOCKED / NOT RUN` pending the exact status vocabulary and physical predicate.
+
+For any new preparation attempt, generate a new Run ID and password. Never reuse the retired identity or credential. Keep the password only in process memory; never write it to the workspace, a dotenv file, shell history, evidence, or terminal output. Docker necessarily retains the environment value in container metadata accessible to a Docker administrator; do not inspect or print `.Config.Env`. If the shell session is lost, do not recover the password from Docker metadata: retire only the exact verified disposable resources and start over with a new Run ID.
