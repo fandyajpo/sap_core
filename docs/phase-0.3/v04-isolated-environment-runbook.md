@@ -195,7 +195,9 @@ docker version --format 'Docker server={{.Server.Version}}'
 if ! docker image inspect postgres:17.6 >/dev/null 2>&1; then
   docker pull postgres:17.6
 fi
-docker image inspect --format 'Image ID={{.Id}} RepoDigests={{json .RepoDigests}}' postgres:17.6
+IMAGE_ID="$(docker image inspect --format '{{.Id}}' postgres:17.6)"
+IMAGE_REPODIGESTS="$(docker image inspect --format '{{json .RepoDigests}}' postgres:17.6)"
+printf 'PostgreSQL image ID=%s RepoDigests=%s\n' "$IMAGE_ID" "$IMAGE_REPODIGESTS"
 
 CONTAINER_NAME="sapcore-v04-4-$RUN_ID"
 POSTGRES_USER="v04_4_$RUN_ID"
@@ -229,6 +231,7 @@ CONTAINER_ID="$(docker run --detach \
   --env POSTGRES_DB \
   postgres:17.6)"
 test -n "$CONTAINER_ID"
+[[ "$CONTAINER_ID" =~ ^[0-9a-f]{64}$ ]]
 printf '%s\n' "$CONTAINER_ID" > "$WORKSPACE/.container-id"
 printf '%s\n' "$CONTAINER_NAME" > "$WORKSPACE/.container-name"
 printf '%s\n' "$DB_FRESH" "$DB_UPGRADE" "$DB_SHADOW" > "$WORKSPACE/.database-names"
@@ -246,6 +249,7 @@ test "$(docker inspect --format '{{.Id}}' "$CONTAINER_ID")" = "$CONTAINER_ID"
 test "$(docker inspect --format '{{.Name}}' "$CONTAINER_ID")" = "/$CONTAINER_NAME"
 test "$(docker inspect --format '{{.State.Status}}' "$CONTAINER_ID")" = "running"
 test "$(docker inspect --format '{{.Config.Image}}' "$CONTAINER_ID")" = 'postgres:17.6'
+test "$(docker inspect --format '{{.Image}}' "$CONTAINER_ID")" = "$IMAGE_ID"
 test "$(docker inspect --format '{{index .Config.Labels "com.sapcore.v04.run-id"}}' "$CONTAINER_ID")" = "$RUN_ID"
 test "$(docker inspect --format '{{index .Config.Labels "com.sapcore.v04.purpose"}}' "$CONTAINER_ID")" = 'v04.4'
 
