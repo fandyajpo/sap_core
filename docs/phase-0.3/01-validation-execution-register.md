@@ -111,3 +111,16 @@ This evidence update does not clear or promote any validation gate.
 V01, V02, and V03 are `PASS` based on the evidence recorded above. V04–V10 remain `BLOCKED` pending their own acceptance criteria. Phase 1 remains blocked until the applicable V04–V10 gates are completed and evidenced.
 
 This register is an execution tracker, not evidence that blocked validations have passed.
+
+### V04.4 supplemental X01–X05 evidence — 2026-11-07
+
+A second isolated PostgreSQL 17.6 run (run ID `9e176ea3b14a4668acb4462c832cadd4`) added the following evidence:
+
+- Two valid tenant hierarchies and their membership/assignment chains inserted successfully as positive controls.
+- Six negative FK cases across X01–X05 were rejected by their expected named constraints.
+- Two referenced Company parent-key updates (`organizationId` and `id`) were rejected by `plant_organizationId_companyId_fkey`.
+- All test fixtures were rolled back; verification returned zero residual rows for all seven fixture entity types.
+
+Detailed cases and limitations are recorded in `v04.4-execution-record-2026-11-07.md` under “Supplemental X01–X05 runtime evidence”.
+
+This evidence does not test concurrency, complete membership lifecycle behavior, D5 cardinality, role-edge behavior, authorization, protected operations, RLS, or application tenant isolation. V04 remains BLOCKED; no gate promotion is claimed.

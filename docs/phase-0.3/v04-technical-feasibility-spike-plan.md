@@ -140,3 +140,16 @@ The remaining NOT RUN cases and scope limitations are listed in the execution
 record. V01–V03 remain `PASS`; V04–V10 remain `BLOCKED`; Phase 1 remains
 `BLOCKED`. No gate is promoted by this update. Cleanup remains pending until
 the evidence has been reviewed and preserved.
+
+## V04.4 supplemental X01–X05 execution update — 2026-11-07
+
+A supplemental isolated PostgreSQL 17.6 execution (run ID `9e176ea3b14a4668acb4462c832cadd4`) exercised the approved X01–X05 tenant-scope FK relationships:
+
+- Two valid tenant hierarchies and associated membership/assignment chains passed positive insertion controls.
+- Six deliberately invalid relationship cases were rejected by their expected FK constraints: X01, X02, X03, X04, X05 membership tuple, and X05 plant tuple.
+- Updating either `Company.organizationId` or `Company.id` while the Company was referenced by Plant was rejected by `plant_organizationId_companyId_fkey`.
+- All fixtures were rolled back and subsequent checks found zero residual rows.
+
+See `v04.4-execution-record-2026-11-07.md`, “Supplemental X01–X05 runtime evidence”, for exact constraints and results.
+
+This update does not establish concurrency behavior, complete lifecycle semantics, D5 cardinality, role-edge behavior, authorization, protected operations, RLS, or application tenant isolation. It is supplemental evidence only; V04 and the downstream gates remain BLOCKED.
