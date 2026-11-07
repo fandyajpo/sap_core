@@ -36,6 +36,8 @@
 
 P05 X06 is `OWNER_APPROVED` and final: `core.session.userId` → `core.user.id` and `core.account.userId` → `core.user.id` both require `ON DELETE RESTRICT`. The Prisma schema and Better Auth config encode the policy, including explicit `user.deleteUser.enabled: false`; no Admin plugin or custom deletion endpoint is configured. Integration tests cover independent session/account FK restrictions, blocked hard deletion, database-backed sign-out revocation, successful and rejected account unlink attempts, and RESTRICT-safe cleanup. The forward migration preserves `ON UPDATE CASCADE`; previously applied migrations and migration history remain unchanged. Local validation, clean migration replay, direct FK inspection, and GitHub Actions run #19 provide the required V03 evidence. V03 is `PASS`; this does not clear V04–V10 or the Phase 1 gate.
 
+Historical V03 baseline: the earlier migration retained `ON UPDATE CASCADE`. The V04.5.1 forward migration supersedes that action with `ON UPDATE RESTRICT` for both Session and Account; see the [V04.5.1 X06 note](v04.5.1-x06-forward-migration-note.md).
+
 ### Reproduction commands
 
 From the `Sap Core` repository root, the following sequence reproduces the local validation checks. The GitHub Actions integration job independently runs V03 against its isolated PostgreSQL service:
