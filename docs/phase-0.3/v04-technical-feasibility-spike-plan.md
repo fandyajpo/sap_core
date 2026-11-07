@@ -98,7 +98,7 @@ The existing register remains authoritative: V01–V03 are `PASS`; V04–V10 rem
 
 **Remaining NOT RUN:**
 
-- Prisma schema validation and Client generation from the committed V04.5.1 baseline.
+- Prisma schema validation and Client generation from the committed V04.5.1 baseline (**NOT RUN / no independently verifiable execution evidence confirmed**).
 - The staged upgrade replay: first six historical migrations, then the committed seventh migration.
 - Tenant schema mapping/catalog checks for X01–X05: ordered source/target tuples, nullability and target keys, FK actions, and indexes; valid and missing-parent cases; wrong-parent rejection; X02 parent-mutation/child-insert concurrency; and the approved same-transaction fallback/rollback cases where ORM mapping is unsafe.
 - D1/D3 membership slot, lifecycle, suspension/restore, terminal/history, and concurrency behavior; D5 zero-to-many Organization→Company cardinality and absence of a permanent uniqueness constraint.
