@@ -151,7 +151,7 @@ Approved policy:
 2. Custom roles, when organization-owned, are owned by their organization and are limited to permissions within that organization's authority and the ceiling established by Core. A custom role cannot widen the tenant boundary or grant authority the owning organization does not possess.
 3. Role definitions must be versioned, and changes must be auditable. These requirements do not specify a versioning schema, permission catalog, grant lifecycle, or detailed grant matrix.
 
-**Implementation status:** D8 is policy approval only. Catalog ownership enforcement, custom-role boundaries, versioning, audit storage, and tests remain unimplemented and unvalidated; no schema or grant lifecycle is selected here.
+**Implementation status:** D8-A implements SYSTEM/custom ownership invariants, Organization-authorized custom-role creation and revision, immutable custom-role versions, and append-only create/revise audit. Revisions snapshot the existing code/scope fields; no permission payload or permission schema is introduced. D7 grant, break-glass lookup, and effective-role resolution validate custom-role ownership against the target Organization. The approved empty preflight inventory required no backfill. Permission catalog/grants, Organization authority ceilings, Platform Admin classification, and disable/delete operations remain out of scope; effective-role behavior does not depend on `disabledAt`.
 
 ## D9. P05 X01 — Company to Organization — OWNER_APPROVED
 

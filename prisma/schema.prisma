@@ -255,6 +255,7 @@ model PlantAssignment {
 // Candidate catalog structure only; no permission catalog or grant matrix is implied.
 model RoleDefinition {
   id                      String                       @id @default(uuid()) @db.Uuid
+  roleFamilyId            String?                      @map("role_family_id") @db.Uuid
   code                    String
   version                 Int
   kind                    RoleDefinitionKind
@@ -267,10 +268,29 @@ model RoleDefinition {
   companyAssignments      CompanyRoleAssignment[]
   plantAssignments        PlantRoleAssignment[]
 
-  // This minimal scope key supports typed Role Assignment matching; no permission catalog is implied.
+  // Typed assignment matching and family version identity; no permission catalog is implied.
   @@unique([id, scope], map: "role_definition_id_scope_key")
+  @@unique([roleFamilyId, version], map: "role_definition_role_family_version_key")
   @@index([ownerOrganizationId])
   @@map("role_definition")
+  @@schema("core")
+}
+
+model RoleDefinitionAudit {
+  id                   String    @id @default(uuid()) @db.Uuid
+  roleFamilyId         String    @map("role_family_id") @db.Uuid
+  roleDefinitionId     String    @map("role_definition_id") @db.Uuid
+  ownerOrganizationId  String    @map("owner_organization_id") @db.Uuid
+  actorUserId          String    @map("actor_user_id")
+  eventType            String    @map("event_type") @db.VarChar(8)
+  version              Int
+  code                 String
+  scope                RoleScope
+  occurredAt           DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  @@index([ownerOrganizationId, occurredAt])
+  @@index([roleFamilyId, version])
+  @@map("role_definition_audit")
   @@schema("core")
 }
 

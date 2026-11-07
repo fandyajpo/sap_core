@@ -8,6 +8,8 @@ export type RoleAssignmentErrorCode =
   | "INVALID_INPUT"
   | "ACTOR_NOT_FOUND"
   | "ROLE_DEFINITION_NOT_FOUND"
+  | "ROLE_DEFINITION_OWNERSHIP_INVALID"
+  | "ROLE_DEFINITION_OWNER_MISMATCH"
   | "SCOPE_NOT_ASSIGNABLE"
   | "SCOPE_MISMATCH"
   | "SCOPE_PARENT_NOT_FOUND"
@@ -91,6 +93,13 @@ export interface EffectiveRoleAssignmentInput {
 interface RoleDefinitionRow {
   id: string;
   scope: RoleScope;
+  kind: string;
+  ownerOrganizationId: string | null;
+}
+
+interface TypedParentRow {
+  id: string;
+  organizationId: string;
 }
 
 interface RoleAssignmentRow {
@@ -162,7 +171,8 @@ async function requireRoleDefinition(
   roleDefinitionId: string,
 ): Promise<RoleDefinitionRow> {
   const rows = await session.query<RoleDefinitionRow>(
-    `SELECT "id", "scope"::text AS "scope"
+    `SELECT "id", "scope"::text AS "scope", "kind"::text AS "kind",
+            "ownerOrganizationId"::text AS "ownerOrganizationId"
      FROM "core"."role_definition"
      WHERE "id" = $1
      FOR SHARE`,
@@ -182,16 +192,37 @@ async function requireTypedParent(
   session: ScopedAccessSession,
   scope: AssignableRoleScope,
   parentId: string,
-): Promise<void> {
+): Promise<TypedParentRow> {
   const mapping = assignmentTables[scope];
-  const rows = await session.query<{ id: string }>(
-    `SELECT "id" FROM ${mapping.parentTable} WHERE "id" = $1 FOR SHARE`,
+  const rows = await session.query<TypedParentRow>(
+    `SELECT "id", "organizationId"::text AS "organizationId"
+     FROM ${mapping.parentTable} WHERE "id" = $1 FOR SHARE`,
     [parentId],
   );
-  if (!rows[0]) {
+  const parent = rows[0];
+  if (!parent) {
     throw new RoleAssignmentError(
       "SCOPE_PARENT_NOT_FOUND",
       `The ${scope} Role Assignment parent ${parentId} does not exist in its typed table.`,
+    );
+  }
+  return parent;
+}
+
+function assertRoleDefinitionOwnership(roleDefinition: RoleDefinitionRow, organizationId: string): void {
+  if (roleDefinition.kind === "SYSTEM" && roleDefinition.ownerOrganizationId === null) {
+    return;
+  }
+  if (roleDefinition.kind !== "ORGANIZATION_CUSTOM" || roleDefinition.ownerOrganizationId === null) {
+    throw new RoleAssignmentError(
+      "ROLE_DEFINITION_OWNERSHIP_INVALID",
+      "The Role Definition has an invalid kind and Organization owner combination.",
+    );
+  }
+  if (roleDefinition.ownerOrganizationId !== organizationId) {
+    throw new RoleAssignmentError(
+      "ROLE_DEFINITION_OWNER_MISMATCH",
+      "An Organization-owned custom Role Definition can only be assigned within its owning Organization.",
     );
   }
 }
@@ -214,7 +245,12 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput): string {
       FROM ${parent.table} ra
       JOIN "core"."organization_membership" om
         ON om."id" = ra."organizationMembershipId"
+      JOIN "core"."role_definition" rd
+        ON rd."id" = ra."roleDefinitionId"
       WHERE om."userId" = $1 AND om."id" = $2 AND om."status" = 'ACTIVE'
+        AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+            AND rd."ownerOrganizationId" = om."organizationId"))
         AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE`;
   }
 
@@ -227,8 +263,13 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput): string {
         ON om."id" = cm."organizationMembershipId"
        AND om."userId" = cm."userId"
        AND om."organizationId" = cm."organizationId"
+      JOIN "core"."role_definition" rd
+        ON rd."id" = ra."roleDefinitionId"
       WHERE cm."userId" = $1 AND cm."id" = $2
         AND cm."status" = 'ACTIVE' AND om."status" = 'ACTIVE'
+        AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+            AND rd."ownerOrganizationId" = cm."organizationId"))
         AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE`;
   }
 
@@ -245,8 +286,13 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput): string {
       ON om."id" = cm."organizationMembershipId"
      AND om."userId" = cm."userId"
      AND om."organizationId" = cm."organizationId"
+    JOIN "core"."role_definition" rd
+      ON rd."id" = ra."roleDefinitionId"
     WHERE pa."userId" = $1 AND pa."id" = $2
       AND pa."status" = 'ACTIVE' AND cm."status" = 'ACTIVE' AND om."status" = 'ACTIVE'
+      AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+        OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+          AND rd."ownerOrganizationId" = pa."organizationId"))
       AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE`;
 }
 
@@ -262,10 +308,15 @@ function breakGlassUseQuery(scope: AssignableRoleScope): string {
       FROM ${mapping.table} ra
       JOIN "core"."organization_membership" om
         ON om."id" = ra."organizationMembershipId"
+      JOIN "core"."role_definition" rd
+        ON rd."id" = ra."roleDefinitionId"
+       AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+         OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+           AND rd."ownerOrganizationId" = om."organizationId"))
       WHERE ra."id" = $1 AND om."id" = $2
         AND om."status" = 'ACTIVE' AND ra."revoked_at" IS NULL
         AND ra."is_break_glass" = TRUE
-      FOR SHARE OF ra, om`;
+      FOR SHARE OF ra, om, rd`;
   }
 
   if (scope === "COMPANY") {
@@ -277,10 +328,15 @@ function breakGlassUseQuery(scope: AssignableRoleScope): string {
         ON om."id" = cm."organizationMembershipId"
        AND om."userId" = cm."userId"
        AND om."organizationId" = cm."organizationId"
+      JOIN "core"."role_definition" rd
+        ON rd."id" = ra."roleDefinitionId"
+       AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+         OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+           AND rd."ownerOrganizationId" = cm."organizationId"))
       WHERE ra."id" = $1 AND cm."id" = $2
         AND cm."status" = 'ACTIVE' AND om."status" = 'ACTIVE'
         AND ra."revoked_at" IS NULL AND ra."is_break_glass" = TRUE
-      FOR SHARE OF ra, cm, om`;
+      FOR SHARE OF ra, cm, om, rd`;
   }
 
   return `SELECT ${assignmentSelect}
@@ -296,10 +352,15 @@ function breakGlassUseQuery(scope: AssignableRoleScope): string {
       ON om."id" = cm."organizationMembershipId"
      AND om."userId" = cm."userId"
      AND om."organizationId" = cm."organizationId"
+    JOIN "core"."role_definition" rd
+      ON rd."id" = ra."roleDefinitionId"
+     AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+       OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+         AND rd."ownerOrganizationId" = pa."organizationId"))
     WHERE ra."id" = $1 AND pa."id" = $2
       AND pa."status" = 'ACTIVE' AND cm."status" = 'ACTIVE' AND om."status" = 'ACTIVE'
       AND ra."revoked_at" IS NULL AND ra."is_break_glass" = TRUE
-    FOR SHARE OF ra, pa, cm, om`;
+    FOR SHARE OF ra, pa, cm, om, rd`;
 }
 
 export function createRoleAssignmentService(
@@ -336,7 +397,8 @@ export function createRoleAssignmentService(
             `A ${roleDefinition.scope} Role Definition cannot be attached to a ${input.scope} parent.`,
           );
         }
-        await requireTypedParent(session, input.scope, input.parentId);
+        const parent = await requireTypedParent(session, input.scope, input.parentId);
+        assertRoleDefinitionOwnership(roleDefinition, parent.organizationId);
 
         const authorizationInput: RoleAssignmentGrantAuthorization = {
           scope: input.scope,
