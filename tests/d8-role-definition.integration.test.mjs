@@ -740,9 +740,9 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     ));
     await assertDatabaseRejects(() => client.query(
       `INSERT INTO "core"."role_definition"
-         ("id", "code", "version", "kind", "scope", "ownerOrganizationId", "updated_at")
-       VALUES ($1, 'd8-system-family', 1, 'SYSTEM', 'ORGANIZATION', NULL, NOW())`,
-      [randomUUID()],
+         ("id", "role_family_id", "code", "version", "kind", "scope", "ownerOrganizationId", "updated_at")
+       VALUES ($1, $2, 'd8-system-family', 1, 'SYSTEM', 'ORGANIZATION', NULL, NOW())`,
+      [randomUUID(), randomUUID()],
     ));
     await assertDatabaseRejects(() => client.query(
       `INSERT INTO "core"."role_definition"
