@@ -446,3 +446,20 @@ This update supersedes the older “current baseline” count in Section 11 with
 Later V04.4 supplemental runs recorded selected X01–X05 positive/negative insert cases and referenced Company key-update restrictions, plus separately selected D5/D1/D6 cases. They supersede only corresponding earlier “NOT RUN” case statements; they do not establish complete per-edge action/nullability/catalog coverage, concurrency, current database state, application authorization, or V04 PASS. Consult the V04.4 execution record and validation register for exact evidence and remaining gaps. Provisioning workflows remain distinct: the reviewed source has no Organization/Company/Plant creation flow, though scoped-access service code creates CompanyMembership and PlantAssignment with transactional parent checks.
 
 No database operation, migration, replay, test or environment inspection was performed for this documentation reconciliation.
+
+## 12. Pinned eight-migration recovery preparation — 2026-11-09
+
+**Result: PASS for source extraction and checksum verification only.** This record documents the owner's local preparation output; it does not report a database replay, Prisma validation, migration application, or D5/X01 case execution.
+
+- Run ID: `0fca2149a5834c06a5188599a8a28b58`.
+- Workspace: `/private/var/folders/08/c1f87l793rq84pmfkb0ph9sm0000gn/T/sap-core-v04-recovery.0fca2149a5834c06a5188599a8a28b58.LGsITel8`.
+- Pinned source commit: `928260b25309163e26cb616a50e2107e9a42e54d`.
+- Workspace `.run-id` and `.source-commit` markers matched the expected values.
+- The allow-listed archive extraction completed successfully. Exactly the eight migration directories listed in Section 1 were present; migration 9 (`20261108130000_d8_role_definition_governance`) was excluded.
+- All 14 allow-listed files were present and their SHA-256 values matched the corresponding Git blobs at the pinned commit: six support files (including the migration lock) and eight `migration.sql` files.
+- A `checksums.sha256` manifest was written in the workspace with all 14 verified entries.
+- The terminal output ended with `PREPARATION CHECKS PASSED`.
+
+The preparation did **not** run Node/pnpm installation, Prisma validation or generation, Docker, PostgreSQL, SQL, migration replay, catalog queries, application tests, or D5/X01 behavior cases. No database state was read or changed. The workspace is intentionally retained; no cleanup is authorized or recorded.
+
+**Next gate:** separately authorize and execute the two isolated replay paths in Sections 2 and 9. The fresh and staged targets must each prove exactly eight successful migration records, zero rolled-back records, and up-to-date status, with isolation and catalog evidence. D5 and X01/D9 remain NOT RUN until those replay prerequisites pass and their case execution is separately authorized. V04 remains BLOCKED.
