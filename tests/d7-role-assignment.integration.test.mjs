@@ -20,12 +20,13 @@ const databaseName = decodeURIComponent(parsedDatabaseURL.pathname.slice(1));
 const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 if (
+  process.env.D7_ALLOW_DISPOSABLE_DB !== "1" ||
   !localHosts.has(parsedDatabaseURL.hostname) ||
-  parsedDatabaseURL.port !== "5433" ||
-  databaseName !== "sap_core"
+  parsedDatabaseURL.port !== "55435" ||
+  databaseName !== "sap_core_d7_test"
 ) {
   throw new Error(
-    "D7 tests refuse non-disposable targets; use the local docker-compose database at localhost:5433/sap_core.",
+    "D7 tests require explicit disposable DB approval and localhost:55435/sap_core_d7_test.",
   );
 }
 
