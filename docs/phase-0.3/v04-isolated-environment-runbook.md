@@ -166,7 +166,7 @@ EXPECTED="$(printf '%s\n' \
   20261106090000_p05_x06_restrict_auth_user_deletion \
   20261107112700_v0451_tenant_scope_schema \
   20261107130000_d7_typed_role_assignments | LC_ALL=C sort)"
-ACTUAL="$(find "$WORKSPACE/prisma/migrations" -mindepth 1 -maxdepth 1 -type d -exec basename {} \\; | LC_ALL=C sort)"
+ACTUAL="$(find "$WORKSPACE/prisma/migrations" -mindepth 1 -maxdepth 1 -type d -print | sed 's#.*/##' | LC_ALL=C sort)"
 test "$ACTUAL" = "$EXPECTED"
 test "$(find "$WORKSPACE/prisma/migrations" -mindepth 2 -maxdepth 2 -name migration.sql -type f | wc -l | tr -d ' ')" = 8
 test -f "$WORKSPACE/prisma/migrations/migration_lock.toml"
