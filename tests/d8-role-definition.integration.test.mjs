@@ -24,15 +24,15 @@ const databaseName = decodeURIComponent(parsedDatabaseURL.pathname.slice(1));
 const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 if (
+  process.env.D8_ALLOW_DISPOSABLE_DB !== "1" ||
   !localHosts.has(parsedDatabaseURL.hostname) ||
-  parsedDatabaseURL.port !== "5433" ||
-  databaseName !== "sap_core"
+  parsedDatabaseURL.port !== "55434" ||
+  databaseName !== "sap_core_d8_test"
 ) {
   throw new Error(
-    "D8 tests refuse non-disposable targets; use the local docker-compose database at localhost:5433/sap_core.",
+    "D8 tests require explicit disposable DB approval and localhost:55434/sap_core_d8_test.",
   );
 }
-
 const pool = new Pool({ connectionString: databaseUrl, max: 1 });
 const fixture = {
   actorId: randomUUID(),
