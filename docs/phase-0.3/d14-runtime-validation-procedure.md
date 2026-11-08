@@ -1,8 +1,8 @@
 # D14 Role Assignment history — disposable runtime procedure
 
-**Status: PREPARED / NOT EXECUTED / NOT RUNTIME-VERIFIED.**
+**Procedure status: EXECUTED; result recorded for run `be466697eab242d59088eb6efb0f1c37`.**
 
-**D14 status: UNRESOLVED.** This procedure is not PASS evidence and changes no V04/V05–V10/Phase 1 gate.
+**Bounded D14 result: PASS for 42/42 SQL assertions on the recorded migration-1–8 baseline.** This does not establish complete D14 policy validation or promote V04, V05–V10, or Phase 1.
 
 **Scope:** one new, disposable PostgreSQL 17.6 container with a tmpfs data directory and a dynamically assigned loopback-only port. It applies migrations 1–7, checkpoints their Prisma history, inserts pre-D7 fixtures, applies the exact migration 8, and runs isolated SQL tests. Migration 9 is excluded. Do not use Compose, the development database, port 5433, or a persistent volume.
 
@@ -85,6 +85,26 @@ The post-migration test transaction rolls back, including the three successful r
 
 Before cleanup, run `d14_recovery_status`, then `d14_preserve_evidence` (optionally passing a run-specific directory under `$TMP_BASE`) in the same Bash session. It creates a mode-700 evidence directory without overwriting an existing one and copies available `.log`/`.tsv` files, run/source/container identity markers, and the filtered migration SQL directory when present. It verifies those copies against the retained workspace, and cleanup repeats the verification before removing anything. Inspect the preserved files before sharing; the helpers do not copy the process environment or create a separate credentials file, but any sensitive text in logs must be redacted before sharing. `d14_cleanup` removes only a container whose exact ID, name, run-ID label, and purpose label match, then returns to `$REPO` and removes only the validated run-specific workspace. If no container was created, it removes only the workspace; if Docker is unavailable when inspection is needed, state/labels mismatch, the container state is unexpected, or evidence is missing or changed, it stops without deleting the workspace or container. The evidence directory is never deleted, and no images or volumes are removed. Do not substitute broad Docker cleanup, `docker compose down -v`, `DROP SCHEMA`, `TRUNCATE`, trigger disabling, or a delete-based cleanup.
 
+## Recorded execution outcome
+
+- Run ID: `be466697eab242d59088eb6efb0f1c37`.
+- Source commit: `928260b25309163e26cb616a50e2107e9a42e54d`.
+- PostgreSQL image: `postgres:17.6`.
+- Exactly migrations 1–8 were applied; the migration history contained exactly eight successful, non-rolled-back migrations. Migration 8 was `20261107130000_d7_typed_role_assignments`; migration 9 was neither copied nor applied.
+- Six fixtures (two per Role Assignment table) were inserted and preserved. All 42/42 SQL assertions passed across `core.organization_role_assignment`, `core.company_role_assignment`, and `core.plant_role_assignment`. The first NULL → timestamp revocation succeeded in each table; every expected rejection returned SQLSTATE `55000`; all protected rows remained preserved; and the test transaction rolled back successfully.
+- Evidence preservation was verified at `/private/var/folders/08/c1f87l793rq84pmfkb0ph9sm0000gn/T/sap-core-d14-evidence-be466697eab242d59088eb6efb0f1c37`.
+- The exact disposable container and workspace were removed successfully. No Docker images or volumes were removed.
+
+**Result:** PASS for the tested migration-8 history-protection behavior on the verified migrations 1–8 baseline. The suite tests protection of valid fixtures against the specified mutations/deletions; it does not establish every D14 requirement or full V04 acceptance.
+
+## Historical run reconciliation
+
+The earlier run `22e1b72960eb4eab910774b40a9181b7` remains recorded without changes to its observed behavior, including successful direct deletion of revoked Role Assignment rows. Its exact applied migration baseline remains unverified because its applied migration list/source hash was not recorded. The current run proves migration-8 protection under its own verified migrations 1–8 history; it does not establish which migrations were present in the historical run or revise that run's observation.
+
+## Remaining D14 coverage and gate boundary
+
+The current run does not independently test insert-time mismatched-scope/Role Definition rejection, full FK catalog and referential-action behavior under this exact baseline, or Role Definition retirement/owner-kind governance. The historical run contains separate Role Definition and FK observations, but its unknown exact baseline prevents attributing those observations to migrations 1–8. V04 remains `BLOCKED`; V05–V10 and Phase 1 remain `BLOCKED`. No gate promotion is implied.
+
 ## Evidence boundary
 
-This is a proposed, unexecuted procedure. No database, migration, or test command was run while preparing it. Report D14 only from an actual disposable run after reviewing its migration history, exact SQL output, and row-preservation results. The prior supplemental run's applied migration list/source hash remains unrecorded; this procedure does not retrospectively prove that run's baseline.
+The outcome above records the supplied execution facts for one disposable PostgreSQL 17.6 run only. D14 must not be represented as fully validated, and no result from this run proves current/hosted/production database state, application authorization, protected operations, RLS, application tenant isolation, or complete V04 acceptance.
