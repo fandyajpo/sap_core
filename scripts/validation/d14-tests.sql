@@ -55,7 +55,9 @@ CREATE FUNCTION pg_temp.d14_expect_55000(
   p_table_name TEXT,
   p_assignment_id UUID,
   p_sql_text TEXT,
-  p_expected_revoked_at TIMESTAMPTZ
+  p_expected_revoked_at TIMESTAMPTZ,
+  p_unchanged_column TEXT DEFAULT NULL,
+  p_expected_unchanged_value TEXT DEFAULT NULL
 ) RETURNS VOID
 LANGUAGE plpgsql
 AS $d14$
@@ -64,6 +66,10 @@ DECLARE
   actual_message TEXT;
   preserved_count INTEGER;
 BEGIN
+  IF (p_unchanged_column IS NULL) IS DISTINCT FROM (p_expected_unchanged_value IS NULL) THEN
+    RAISE EXCEPTION 'D14 assertion requires both unchanged-column arguments or neither';
+  END IF;
+
   BEGIN
     EXECUTE p_sql_text;
   EXCEPTION WHEN OTHERS THEN
@@ -79,14 +85,21 @@ BEGIN
       COALESCE(actual_message, 'no database error'), p_sql_text;
   END IF;
 
-  EXECUTE format(
-    'SELECT COUNT(*) FROM "core".%I WHERE "id" = $1 AND "revoked_at" IS NOT DISTINCT FROM $2',
-    p_table_name
-  ) INTO preserved_count USING p_assignment_id, p_expected_revoked_at;
+  IF p_unchanged_column IS NULL THEN
+    EXECUTE format(
+      'SELECT COUNT(*) FROM "core".%I WHERE "id" = $1 AND "revoked_at" IS NOT DISTINCT FROM $2',
+      p_table_name
+    ) INTO preserved_count USING p_assignment_id, p_expected_revoked_at;
+  ELSE
+    EXECUTE format(
+      'SELECT COUNT(*) FROM "core".%I WHERE "id" = $1 AND "revoked_at" IS NOT DISTINCT FROM $2 AND %I::text IS NOT DISTINCT FROM $3',
+      p_table_name, p_unchanged_column
+    ) INTO preserved_count USING p_assignment_id, p_expected_revoked_at, p_expected_unchanged_value;
+  END IF;
 
   IF preserved_count <> 1 THEN
     RAISE EXCEPTION
-      'D14 assertion failed: row not preserved after %, table %, row %',
+      'D14 assertion failed: row or protected value not preserved after %, table %, row %',
       p_case_name, p_table_name, p_assignment_id;
   END IF;
 
@@ -152,10 +165,10 @@ BEGIN
   -- Test all three tables independently. Each first revocation must succeed.
   FOR item IN
     SELECT * FROM (VALUES
-      ('organization_role_assignment', '00000000-0000-4000-8000-000000000031'::UUID, '00000000-0000-4000-8000-000000000024'::UUID, '00000000-0000-4000-8000-000000000041'::UUID),
-      ('company_role_assignment', '00000000-0000-4000-8000-000000000032'::UUID, '00000000-0000-4000-8000-000000000025'::UUID, '00000000-0000-4000-8000-000000000042'::UUID),
-      ('plant_role_assignment', '00000000-0000-4000-8000-000000000033'::UUID, '00000000-0000-4000-8000-000000000026'::UUID, '00000000-0000-4000-8000-000000000043'::UUID)
-    ) AS f(table_name, revoked_id, alternate_role_definition_id, unrevoked_id)
+      ('organization_role_assignment', 'organizationMembershipId', '00000000-0000-4000-8000-000000000031'::UUID, '00000000-0000-4000-8000-000000000024'::UUID, '00000000-0000-4000-8000-000000000041'::UUID, '00000000-0000-4000-8000-000000000011'::UUID, 'ORGANIZATION', 'COMPANY'),
+      ('company_role_assignment', 'companyMembershipId', '00000000-0000-4000-8000-000000000032'::UUID, '00000000-0000-4000-8000-000000000025'::UUID, '00000000-0000-4000-8000-000000000042'::UUID, '00000000-0000-4000-8000-000000000012'::UUID, 'COMPANY', 'ORGANIZATION'),
+      ('plant_role_assignment', 'plantAssignmentId', '00000000-0000-4000-8000-000000000033'::UUID, '00000000-0000-4000-8000-000000000026'::UUID, '00000000-0000-4000-8000-000000000043'::UUID, '00000000-0000-4000-8000-000000000013'::UUID, 'PLANT', 'COMPANY')
+    ) AS f(table_name, parent_column, revoked_id, alternate_role_definition_id, unrevoked_id, parent_id, role_scope, alternate_role_scope)
   LOOP
     sql_text_value := format(
       'UPDATE "core".%I SET "revoked_at" = %L::timestamptz WHERE "id" = %L::uuid AND "revoked_at" IS NULL',
@@ -239,6 +252,20 @@ BEGIN
     );
 
     PERFORM pg_temp.d14_expect_55000(
+      'change_parent_foreign_key', item.table_name, item.revoked_id,
+      format('UPDATE "core".%I SET %I = %L::uuid WHERE "id" = %L::uuid',
+        item.table_name, item.parent_column, '00000000-0000-4000-8000-000000000099', item.revoked_id),
+      revoked_at_value, item.parent_column, item.parent_id::TEXT
+    );
+
+    PERFORM pg_temp.d14_expect_55000(
+      'change_role_scope', item.table_name, item.revoked_id,
+      format('UPDATE "core".%I SET "role_scope" = %L::"core"."RoleScope" WHERE "id" = %L::uuid',
+        item.table_name, item.alternate_role_scope, item.revoked_id),
+      revoked_at_value, 'role_scope', item.role_scope
+    );
+
+    PERFORM pg_temp.d14_expect_55000(
       'delete_unrevoked_assignment', item.table_name, item.unrevoked_id,
       format('DELETE FROM "core".%I WHERE "id" = %L::uuid', item.table_name, item.unrevoked_id),
       NULL
@@ -246,8 +273,8 @@ BEGIN
   END LOOP;
 
   SELECT COUNT(*) INTO rows_found FROM pg_temp.d14_results;
-  IF rows_found <> 36 THEN
-    RAISE EXCEPTION 'Expected 36 D14 evidence rows, got %', rows_found;
+  IF rows_found <> 42 THEN
+    RAISE EXCEPTION 'Expected 42 D14 evidence rows, got %', rows_found;
   END IF;
   SELECT COUNT(*) INTO rows_found FROM pg_temp.d14_results WHERE outcome <> 'PASS';
   IF rows_found <> 0 THEN

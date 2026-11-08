@@ -234,6 +234,8 @@ d14_cleanup() {
   test "$(docker inspect --format '{{.Name}}' "$CONTAINER_ID")" = "/$CONTAINER_NAME"
   test "$(docker inspect --format '{{index .Config.Labels "com.sapcore.d14.run-id"}}' "$CONTAINER_ID")" = "$RUN_ID"
   test "$(docker inspect --format '{{index .Config.Labels "com.sapcore.d14.purpose"}}' "$CONTAINER_ID")" = 'role-assignment-history'
+  cd "$REPO"
+  test "$(pwd -P)" = "$REPO"
   case "$(docker inspect --format '{{.State.Status}}' "$CONTAINER_ID")" in
     running) docker stop "$CONTAINER_ID" ;;
     exited|created) ;;

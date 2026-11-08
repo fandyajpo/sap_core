@@ -34,7 +34,7 @@ The copied current Prisma schema is used as the CLI schema input; Prisma Migrate
 
 ## Expected result matrix
 
-There should be 36 evidence rows in the SQL test output: six preserved/default-verified fixtures plus ten cases per assignment table (one successful first revocation and nine expected rejections).
+There should be 42 evidence rows in the SQL test output: six preserved/default-verified fixtures plus twelve cases per assignment table (one successful first revocation and eleven expected rejections).
 
 | Case | Organization | Company | Plant | Expected actual result |
 |---|---:|---:|---:|---|
@@ -48,6 +48,8 @@ There should be 36 evidence rows in the SQL test output: six preserved/default-v
 | Change break-glass reason | 1 | 1 | 1 | SQLSTATE `55000`; immutable identity/grant-details message; row remains |
 | Change assignment primary key | 1 | 1 | 1 | SQLSTATE `55000`; immutable identity/grant-details message; row remains |
 | Change Role Definition link to another valid same-scope definition | 1 | 1 | 1 | SQLSTATE `55000`; immutable identity/grant-details message; row remains |
+| Change the table-specific parent FK | 1 | 1 | 1 | SQLSTATE `55000`; row, original parent FK, and original `revoked_at` remain |
+| Change `role_scope` | 1 | 1 | 1 | SQLSTATE `55000`; row, original scope, and original `revoked_at` remain |
 | DELETE of an unrevoked assignment | 1 | 1 | 1 | SQLSTATE `55000`; “Role Assignment history cannot be deleted.”; row remains with NULL `revoked_at` |
 
 The test script records each attempted SQL statement, expected and actual SQLSTATE, returned PostgreSQL message, row-preservation check, and assertion outcome. Expected messages are corroborative; SQLSTATE and row-preservation assertions are the principal checks. The first successful update is recorded as `SUCCESS` (not a fabricated SQLSTATE). Per-case SQL assertions do not change D14's overall status.
@@ -56,7 +58,7 @@ The test script records each attempted SQL statement, expected and actual SQLSTA
 
 The post-migration test transaction rolls back, including the three successful revocations. The fixture transaction is committed before migration 8; after migration 8, those assignment rows intentionally cannot be deleted. Cleanup is therefore destruction of the disposable tmpfs-backed container, not row-level deletion.
 
-Before cleanup, preserve evidence in a separately chosen directory outside the repository and workspace. For example, verify that `$TMP_BASE/sap-core-d14-evidence-$RUN_ID` does not already exist, then run `EVIDENCE_DIR="$TMP_BASE/sap-core-d14-evidence-$RUN_ID"; mkdir -m 700 "$EVIDENCE_DIR"; cp -p "$WORKSPACE"/*.log "$WORKSPACE"/*.tsv "$WORKSPACE"/.source-commit "$EVIDENCE_DIR/"`. Verify the copied files and keep secrets/URLs/container configuration out of the evidence. Call `d14_cleanup` in the same Bash session after verifying the copy. It checks the exact recorded container ID/name and run-id/purpose labels, stops and removes only that container, removes only the run-specific workspace, and unsets process-local credentials. It does not remove images or volumes. Do not substitute broad Docker cleanup, `docker compose down -v`, `DROP SCHEMA`, `TRUNCATE`, trigger disabling, or a delete-based cleanup.
+Before cleanup, preserve evidence in a separately chosen directory outside the repository and workspace. For example, verify that `$TMP_BASE/sap-core-d14-evidence-$RUN_ID` does not already exist, then run `EVIDENCE_DIR="$TMP_BASE/sap-core-d14-evidence-$RUN_ID"; mkdir -m 700 "$EVIDENCE_DIR"; cp -p "$WORKSPACE"/*.log "$WORKSPACE"/*.tsv "$WORKSPACE"/.source-commit "$EVIDENCE_DIR/"`. Verify the copied files and keep secrets/URLs/container configuration out of the evidence. Call `d14_cleanup` in the same Bash session after verifying the copy. It checks the exact recorded workspace/run ID and container ID/name/run-id/purpose labels, returns to `$REPO`, stops and removes only that container, removes only the run-specific workspace, and unsets process-local credentials. It does not remove images or volumes. Do not substitute broad Docker cleanup, `docker compose down -v`, `DROP SCHEMA`, `TRUNCATE`, trigger disabling, or a delete-based cleanup.
 
 ## Evidence boundary
 
