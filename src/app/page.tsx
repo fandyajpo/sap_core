@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SignOutButton } from "@/components/sign-out-button";
 import { requireCurrentSession } from "@/lib/auth-session";
 
@@ -11,6 +12,9 @@ export default async function HomePage() {
           <span className="brand-mark" aria-hidden="true">SC</span>
           <span className="brand-name">SAP Core</span>
         </div>
+        <nav aria-label="Primary navigation">
+          <Link href="/account">Account settings</Link>
+        </nav>
         <SignOutButton />
       </header>
 
