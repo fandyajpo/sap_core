@@ -224,7 +224,7 @@ FRESH_CONTAINER_ID="$(
     "$POSTGRES_IMAGE_REF"
 )"
 test "${#FRESH_CONTAINER_ID}" -eq 64
-FRESH_PORT="$(docker port "$FRESH_CONTAINER_ID" 5432/tcp | sed -n 's#^127\\.0\\.0\\.1:\\([0-9][0-9]*\\)$#\\1#p')"
+FRESH_PORT="$(docker port "$FRESH_CONTAINER_ID" 5432/tcp | sed -n 's#^127\.0\.0\.1:\([0-9][0-9]*\)$#\1#p')"
 test -n "$FRESH_PORT"
 ```
 
@@ -282,18 +282,6 @@ done
 Require each full ID/name/label/image to match its recorded values; require `Mounts=[]`, the data directory in `HostConfig.Tmpfs`, and only a `127.0.0.1` host binding. Confirm the two container IDs, ports, and database names differ. Record redacted inspection output only. Do not inspect `.Config.Env`. If Docker cannot prove every condition, stop; never fall back to an existing container or database. Keep both containers until evidence is preserved and the owner separately approves exact-identity cleanup.
 
 
-Use the approved PostgreSQL 17.6 image, record its immutable image ID and repository digest, and use two separate containers with unique run-scoped names and labels. Each container must have:
-
-- A random, unique database password held only in the interactive shell/process environment; never echo it, place it in shell history, write it to a file, or include it in evidence. Docker stores container environment metadata, so do not inspect or print `.Config.Env`.
-- A distinct database name, for example `v04_fresh_<RUN_ID>` and `v04_staged_<RUN_ID>`.
-- A dynamically assigned host port published only on `127.0.0.1`.
-- PostgreSQL data on container tmpfs only; no named volume, bind mount, or host data directory.
-- Unique labels identifying this run and the purpose (`v04-d5-x01-fresh` or `v04-d5-x01-staged`).
-
-Before connecting, independently verify each full container ID, exact name, labels, image ID, port binding, tmpfs configuration, empty Docker mount list, and database name. Confirm the two container IDs, ports, and database names differ. Record redacted inspection output only. If Docker cannot prove every condition, stop; never fall back to an existing container or database.
-
-The exact `docker run` invocation is environment-specific because the image digest and generated credentials must be captured at execution time. Do not copy an old container command or reuse a prior Run ID. Do not use `--rm`, named volumes, bind mounts, `docker compose`, `docker system prune`, or broad container cleanup. Keep both containers until evidence is preserved and the owner separately approves exact-identity cleanup.
-
 ### 9.4 Install pinned tooling and create explicit Prisma configs
 
 The archive includes the pinned manifest and lockfile but no `node_modules`. Install dependencies only inside the external workspace after verifying the source/checksums. This is a network/package-install operation and requires the same separate execution authorization:
@@ -304,7 +292,7 @@ test "$(cat .nvmrc)" = "26.0.0"
 test "$(node --version)" = "v26.0.0"
 test "$(pnpm --version)" = "10.20.0"
 pnpm install --frozen-lockfile
-test "$(pnpm exec prisma --version | sed -n '1p' | awk '{print $2}')" = "7.10.1"
+test "$(pnpm exec prisma --version | sed -n '1p' | awk '{print $3}')" = "7.10.1"
 ```
 
 After creating the fresh and staged migration trees in the next subsection, write two config files. Both use the extracted schema and a distinct migration directory; neither imports dotenv or reads the repository config:
