@@ -56,6 +56,7 @@ Migration 9, `20261108130000_d8_role_definition_governance`, must not be copied 
 ## Recorded execution outcome — run `0ce2c3bc1f384957894e3c3c32b08595`
 
 - The isolated catalog verification applied exactly migrations 1–8. Migration 9 was not applied.
+- **Source provenance limitation:** the run's execution record does not identify the repository source commit used to prepare its isolated workspace. Therefore, this run cannot be attributed to D14 source commit `928260b25309163e26cb616a50e2107e9a42e54`, or to any other specific commit, from the retained record. Its eight-migration history and observed catalog output are bounded evidence for that run only; use the verified D14 commit as the source for a new reproducible baseline rather than retroactively assigning it to this run.
 - Exactly 19 FKs were found: 18 `core` FKs with `RESTRICT`/`RESTRICT`, plus the V02 `master_data.validation_references` control FK with `CASCADE`/`CASCADE`.
 - Every FK matched the expected matrix for ordered source/target columns, constraint name, delete/update actions, and `convalidated = true`.
 - The SQL and TSV output were preserved and verified. The temporary container and workspace were cleaned up; the evidence directory remains preserved.
