@@ -21,12 +21,13 @@ const databaseName = decodeURIComponent(parsedDatabaseURL.pathname.slice(1));
 const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 if (
+  process.env.V03_ALLOW_DISPOSABLE_DB !== "1" ||
   !localHosts.has(parsedDatabaseURL.hostname) ||
-  parsedDatabaseURL.port !== "5433" ||
-  databaseName !== "sap_core"
+  parsedDatabaseURL.port !== "55432" ||
+  databaseName !== "sap_core_v03_test"
 ) {
   throw new Error(
-    "V03 tests refuse non-disposable targets; use the local docker-compose database at localhost:5433/sap_core.",
+    "V03 tests require explicit disposable DB approval and localhost:55432/sap_core_v03_test.",
   );
 }
 

@@ -17,15 +17,15 @@ const databaseName = decodeURIComponent(parsedDatabaseURL.pathname.slice(1));
 const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 if (
+  process.env.D6_ALLOW_DISPOSABLE_DB !== "1" ||
   !localHosts.has(parsedDatabaseURL.hostname) ||
-  parsedDatabaseURL.port !== "5433" ||
-  databaseName !== "sap_core"
+  parsedDatabaseURL.port !== "55433" ||
+  databaseName !== "sap_core_d6_test"
 ) {
   throw new Error(
-    "D6 tests refuse non-disposable targets; use the local docker-compose database at localhost:5433/sap_core.",
+    "D6 tests require explicit disposable DB approval and localhost:55433/sap_core_d6_test.",
   );
 }
-
 const pool = new Pool({ connectionString: databaseUrl, max: 6 });
 const fixture = {
   users: [randomUUID(), randomUUID(), randomUUID()],
