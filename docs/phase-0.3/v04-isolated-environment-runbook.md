@@ -194,11 +194,143 @@ Use the approved PostgreSQL 17.6 image, record its immutable image ID and reposi
 - PostgreSQL data on container tmpfs only; no named volume, bind mount, or host data directory.
 - Unique labels identifying this run and the purpose (`v04-d5-x01-fresh` or `v04-d5-x01-staged`).
 
+Pull/resolve the image tag once, then run both containers by the same immutable repository digest (not by the mutable tag):
+
+```bash
+if ! docker image inspect postgres:17.6 >/dev/null 2>&1; then docker pull postgres:17.6; fi
+POSTGRES_IMAGE_ID="$(docker image inspect --format '{{.Id}}' postgres:17.6)"
+POSTGRES_IMAGE_REF="$(docker image inspect --format '{{index .RepoDigests 0}}' postgres:17.6)"
+test -n "$POSTGRES_IMAGE_ID"
+[[ "$POSTGRES_IMAGE_REF" == *@sha256:* ]]
+```
+
+Create the fresh target. This command passes the password through the Docker client's process environment, not as a literal command-line argument. Keep shell tracing disabled:
+
+```bash
+FRESH_CONTAINER_NAME="sapcore-v04-fresh-$RUN_ID"
+FRESH_DB="v04_fresh_${RUN_ID:0:12}"
+FRESH_USER="v04_${RUN_ID:0:12}"
+FRESH_PASSWORD="$(openssl rand -hex 32)"
+FRESH_CONTAINER_ID="$(
+  POSTGRES_PASSWORD="$FRESH_PASSWORD" POSTGRES_USER="$FRESH_USER" POSTGRES_DB="$FRESH_DB" \
+  docker run --detach --name "$FRESH_CONTAINER_NAME" \
+    --label "com.sapcore.v04.run-id=$RUN_ID" \
+    --label 'com.sapcore.v04.purpose=v04-d5-x01-fresh' \
+    --label "com.sapcore.v04.source=$RECOVERY_BASELINE" \
+    --publish 127.0.0.1::5432 \
+    --tmpfs /var/lib/postgresql/data:rw,nosuid,size=1g \
+    --shm-size=256m \
+    --env POSTGRES_PASSWORD --env POSTGRES_USER --env POSTGRES_DB \
+    "$POSTGRES_IMAGE_REF"
+)"
+test "${#FRESH_CONTAINER_ID}" -eq 64
+FRESH_PORT="$(docker port "$FRESH_CONTAINER_ID" 5432/tcp | sed -n 's#^127\\.0\\.0\\.1:\\([0-9][0-9]*\\)$#\\1#p')"
+test -n "$FRESH_PORT"
+```
+
+Create the staged target independently with a different password, name, database, port, and container ID:
+
+```bash
+STAGED_CONTAINER_NAME="sapcore-v04-staged-$RUN_ID"
+STAGED_DB="v04_staged_${RUN_ID:0:12}"
+STAGED_USER="v04s_${RUN_ID:0:12}"
+STAGED_PASSWORD="$(openssl rand -hex 32)"
+STAGED_CONTAINER_ID="$(
+  POSTGRES_PASSWORD="$STAGED_PASSWORD" POSTGRES_USER="$STAGED_USER" POSTGRES_DB="$STAGED_DB" \
+  docker run --detach --name "$STAGED_CONTAINER_NAME" \
+    --label "com.sapcore.v04.run-id=$RUN_ID" \
+    --label 'com.sapcore.v04.purpose=v04-d5-x01-staged' \
+    --label "com.sapcore.v04.source=$RECOVERY_BASELINE" \
+    --publish 127.0.0.1::5432 \
+    --tmpfs /var/lib/postgresql/data:rw,nosuid,size=1g \
+    --shm-size=256m \
+    --env POSTGRES_PASSWORD --env POSTGRES_USER --env POSTGRES_DB \
+    "$POSTGRES_IMAGE_REF"
+)"
+test "${#STAGED_CONTAINER_ID}" -eq 64
+STAGED_PORT="$(docker port "$STAGED_CONTAINER_ID" 5432/tcp | sed -n 's#^127\\.0\\.0\\.1:\\([0-9][0-9]*\\)$#\\1#p')"
+test -n "$STAGED_PORT"
+test "$FRESH_CONTAINER_ID" != "$STAGED_CONTAINER_ID"
+test "$FRESH_PORT" != "$STAGED_PORT"
+test "$FRESH_DB" != "$STAGED_DB"
+```
+
+Wait for readiness without printing credentials, then construct process-local URLs. The generated passwords are hexadecimal, so URL encoding is not needed:
+
+```bash
+for spec in "$FRESH_CONTAINER_ID:$FRESH_USER:$FRESH_DB" "$STAGED_CONTAINER_ID:$STAGED_USER:$STAGED_DB"; do
+  IFS=: read -r container_id db_user db_name <<< "$spec"
+  ready=0
+  for attempt in {1..60}; do
+    if docker exec "$container_id" pg_isready -U "$db_user" -d "$db_name" >/dev/null 2>&1; then ready=1; break; fi
+    sleep 1
+  done
+  test "$ready" -eq 1
+done
+FRESH_DATABASE_URL="postgresql://$FRESH_USER:$FRESH_PASSWORD@127.0.0.1:$FRESH_PORT/$FRESH_DB?schema=public"
+STAGED_DATABASE_URL="postgresql://$STAGED_USER:$STAGED_PASSWORD@127.0.0.1:$STAGED_PORT/$STAGED_DB?schema=public"
+```
+
+Before connecting, independently verify each full container ID, exact name, labels, image ID, port binding, tmpfs configuration, empty Docker mount list, and database name. For example, inspect only non-secret fields:
+
+```bash
+for container_id in "$FRESH_CONTAINER_ID" "$STAGED_CONTAINER_ID"; do
+  docker inspect --format 'id={{.Id}} name={{.Name}} image={{.Image}} mounts={{json .Mounts}} ports={{json .HostConfig.PortBindings}} tmpfs={{json .HostConfig.Tmpfs}} labels={{json .Config.Labels}}' "$container_id"
+done
+```
+
+Require each full ID/name/label/image to match its recorded values; require `Mounts=[]`, the data directory in `HostConfig.Tmpfs`, and only a `127.0.0.1` host binding. Confirm the two container IDs, ports, and database names differ. Record redacted inspection output only. Do not inspect `.Config.Env`. If Docker cannot prove every condition, stop; never fall back to an existing container or database. Keep both containers until evidence is preserved and the owner separately approves exact-identity cleanup.
+
+
+Use the approved PostgreSQL 17.6 image, record its immutable image ID and repository digest, and use two separate containers with unique run-scoped names and labels. Each container must have:
+
+- A random, unique database password held only in the interactive shell/process environment; never echo it, place it in shell history, write it to a file, or include it in evidence. Docker stores container environment metadata, so do not inspect or print `.Config.Env`.
+- A distinct database name, for example `v04_fresh_<RUN_ID>` and `v04_staged_<RUN_ID>`.
+- A dynamically assigned host port published only on `127.0.0.1`.
+- PostgreSQL data on container tmpfs only; no named volume, bind mount, or host data directory.
+- Unique labels identifying this run and the purpose (`v04-d5-x01-fresh` or `v04-d5-x01-staged`).
+
 Before connecting, independently verify each full container ID, exact name, labels, image ID, port binding, tmpfs configuration, empty Docker mount list, and database name. Confirm the two container IDs, ports, and database names differ. Record redacted inspection output only. If Docker cannot prove every condition, stop; never fall back to an existing container or database.
 
 The exact `docker run` invocation is environment-specific because the image digest and generated credentials must be captured at execution time. Do not copy an old container command or reuse a prior Run ID. Do not use `--rm`, named volumes, bind mounts, `docker compose`, `docker system prune`, or broad container cleanup. Keep both containers until evidence is preserved and the owner separately approves exact-identity cleanup.
 
-### 9.4 Build two allow-listed migration trees
+### 9.4 Install pinned tooling and create explicit Prisma configs
+
+The archive includes the pinned manifest and lockfile but no `node_modules`. Install dependencies only inside the external workspace after verifying the source/checksums. This is a network/package-install operation and requires the same separate execution authorization:
+
+```bash
+cd "$WORKSPACE"
+test "$(cat .nvmrc)" = "26.0.0"
+test "$(node --version)" = "v26.0.0"
+test "$(pnpm --version)" = "10.20.0"
+pnpm install --frozen-lockfile
+test "$(pnpm exec prisma --version | sed -n '1p' | awk '{print $2}')" = "7.10.1"
+```
+
+After creating the fresh and staged migration trees in the next subsection, write two config files. Both use the extracted schema and a distinct migration directory; neither imports dotenv or reads the repository config:
+
+```bash
+cat > "$WORKSPACE/prisma.fresh.config.ts" <<'EOF'
+import { defineConfig, env } from "prisma/config";
+
+export default defineConfig({
+  schema: env("V04_SCHEMA_PATH"),
+  migrations: { path: env("V04_MIGRATIONS_PATH") },
+  datasource: { url: env("DATABASE_URL") },
+});
+EOF
+cat > "$WORKSPACE/prisma.staged.config.ts" <<'EOF'
+import { defineConfig, env } from "prisma/config";
+
+export default defineConfig({
+  schema: env("V04_SCHEMA_PATH"),
+  migrations: { path: env("V04_MIGRATIONS_PATH") },
+  datasource: { url: env("DATABASE_URL") },
+});
+EOF
+```
+
+### 9.5 Build two allow-listed migration trees
 
 Create two independent migration directories from the verified workspace snapshot. Both receive the same migration lock and migrations 1–8; the staged tree initially contains only migrations 1–7:
 
@@ -228,29 +360,29 @@ test "$(find "$STAGED_MIGRATIONS" -mindepth 2 -maxdepth 2 -name migration.sql -t
 
 Create two separate Prisma config files in the workspace. Each must point to the same extracted schema, its own migration directory, and `process.env.DATABASE_URL`; neither may import `dotenv/config`. Keep the fresh and staged connection URLs in separate shell variables and never print them. Confirm each config's resolved schema/migration paths before applying anything.
 
-### 9.5 Execute and verify the fresh replay
+### 9.6 Execute and verify the fresh replay
 
 Only after explicit execution approval, set the fresh target's process-local `DATABASE_URL` and run:
 
 ```bash
-DATABASE_URL="$FRESH_DATABASE_URL" pnpm exec prisma migrate deploy --config "$WORKSPACE/prisma.fresh.config.ts"
-DATABASE_URL="$FRESH_DATABASE_URL" pnpm exec prisma migrate status --config "$WORKSPACE/prisma.fresh.config.ts"
+V04_SCHEMA_PATH="$WORKSPACE/prisma/schema.prisma" V04_MIGRATIONS_PATH="$FRESH_MIGRATIONS" DATABASE_URL="$FRESH_DATABASE_URL" pnpm exec prisma migrate deploy --config "$WORKSPACE/prisma.fresh.config.ts"
+V04_SCHEMA_PATH="$WORKSPACE/prisma/schema.prisma" V04_MIGRATIONS_PATH="$FRESH_MIGRATIONS" DATABASE_URL="$FRESH_DATABASE_URL" pnpm exec prisma migrate status --config "$WORKSPACE/prisma.fresh.config.ts"
 ```
 
 Capture redacted output and query `_prisma_migrations` directly. Require exactly the eight ordered migration names, eight successful records, zero rolled-back records, and Prisma status up to date. Capture the relevant FK, unique-index, predicate, nullability, and validation-state catalog rows. Do not run D5 or X01/D9 yet.
 
-### 9.6 Execute and verify the staged replay
+### 9.7 Execute and verify the staged replay
 
 Only after the fresh target passes its baseline checks, use the separate staged target and staged config:
 
 ```bash
-DATABASE_URL="$STAGED_DATABASE_URL" pnpm exec prisma migrate deploy --config "$WORKSPACE/prisma.staged.config.ts"
-DATABASE_URL="$STAGED_DATABASE_URL" pnpm exec prisma migrate status --config "$WORKSPACE/prisma.staged.config.ts"
+V04_SCHEMA_PATH="$WORKSPACE/prisma/schema.prisma" V04_MIGRATIONS_PATH="$STAGED_MIGRATIONS" DATABASE_URL="$STAGED_DATABASE_URL" pnpm exec prisma migrate deploy --config "$WORKSPACE/prisma.staged.config.ts"
+V04_SCHEMA_PATH="$WORKSPACE/prisma/schema.prisma" V04_MIGRATIONS_PATH="$STAGED_MIGRATIONS" DATABASE_URL="$STAGED_DATABASE_URL" pnpm exec prisma migrate status --config "$WORKSPACE/prisma.staged.config.ts"
 ```
 
 At this first checkpoint, require exactly migrations 1–7, all successful, no rolled-back records, and migration 8 absent. Preserve the intermediate history/status. Then copy migration 8's verified directory into the staged migration path and run `migrate deploy` and `migrate status` again. Require exactly migrations 1–8, all successful, zero rolled-back records, and up-to-date status. Compare relevant catalog definitions between fresh and staged targets. Any mismatch is a hard stop.
 
-### 9.7 Evidence handoff and next authorization gate
+### 9.8 Evidence handoff and next authorization gate
 
 Preserve source identity, tool versions, image ID/digest, redacted container identity/isolation proof, all checksums, exact ordered migration history/status at each checkpoint, catalog rows, and a concise deviation log. Never include credentials or full connection URLs. Do not automatically remove containers or workspaces. First verify and preserve evidence; then request separate approval for exact-identity cleanup. D5 and X01/D9 remain **NOT RUN** until the two replay baselines pass and separate case execution is approved.
 
