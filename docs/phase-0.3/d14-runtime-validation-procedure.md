@@ -30,6 +30,31 @@ Migration 8 adds per-table `role_scope` with the table's fixed-scope default, nu
 3. After reviewing that checkpoint, run `d14_apply_migration8_and_test` in the same Bash session. It inserts the fixtures while the DB is still at migration 7, copies the exact migration-8 SQL, verifies it byte-for-byte against the repository source, applies migration 8, captures and checks exactly eight successful migration records, confirms migration 9 is absent, and runs the SQL test script.
 4. Review `d14-test-results.log` and the migration/status/fixture logs. A SQL error, missing evidence row, unexpected SQLSTATE, failed assertion, or migration-history mismatch is a STOP/FAIL requiring investigation. Do not infer a result from the proposed script or from source inspection.
 
+## Failure recovery
+
+The sourced script defines `d14_recovery_status`, `d14_preserve_evidence`, and `d14_cleanup` after recording the run ID, source commit, deterministic container name, and initial `not-created` state, but before any Docker operation. It installs no failure trap: a setup error never automatically stops a container or deletes a workspace/evidence.
+
+If setup fails, keep the same interactive Bash session open and do not source the setup script again. Run `d14_recovery_status` first; it reports the retained workspace and available logs/TSVs. For `not-created`, it confirms that container creation was not attempted. For `creating` or `created`, it verifies the full container ID, exact name, run-ID label, and purpose label. When direct inspection by recorded ID or generated name cannot find a container, recovery uses only a `docker container ls --all --no-trunc` lookup filtered by this run's generated name, then accepts only an exact name match and verifies its ID and labels. It never performs a broad container listing, pruning, or resource removal.
+
+Before cleanup, call `d14_preserve_evidence` and inspect the copied files. The helper verifies copied identity markers, logs/TSVs, and the filtered migration directory against the retained workspace; `d14_cleanup` repeats that verification before removing anything. If Docker startup failed before an ID was written, the `creating` state lets recovery locate the container by the recorded ID when available, otherwise by its exact generated name and labels. If the container is absent, cleanup can remove only the verified workspace; if Docker is unavailable, metadata is inconsistent, or labels do not match, recovery refuses deletion and leaves resources intact.
+
+If setup stops before these recovery functions are defined, it has not reached any Docker operation. Leave the partial workspace in place as evidence; do not run Docker cleanup or rerun setup over it. Record the exact `$WORKSPACE` path and preserve its contents manually to a new, separate evidence directory. Only remove it manually after confirming it is a non-symlink directory whose basename matches `sap-core-d14.$RUN_ID.` plus eight alphanumeric characters, its canonical parent is exactly `$TMP_BASE`, and it is neither `$REPO` nor inside `$REPO`; change to `$REPO` before removing that exact path. If any check is uncertain, leave it untouched. After manually preserving the partial workspace, this guarded fallback removes only that workspace and never contacts Docker:
+
+```sh
+[[ "$RUN_ID" =~ ^[0-9a-f]{32}$ ]] &&
+test -d "$WORKSPACE" &&
+test ! -L "$WORKSPACE" &&
+test "$(cd "$WORKSPACE" && pwd -P)" = "$WORKSPACE" &&
+test -f "$WORKSPACE/.run-id" &&
+test "$(cat "$WORKSPACE/.run-id")" = "$RUN_ID" &&
+test "$WORKSPACE" != "$REPO" &&
+[[ "$WORKSPACE" != "$REPO/"* ]] &&
+test "$(cd "$(dirname "$WORKSPACE")" && pwd -P)" = "$TMP_BASE" &&
+[[ "$(basename "$WORKSPACE")" =~ ^sap-core-d14\.${RUN_ID}\.[[:alnum:]]{8}$ ]] &&
+cd "$REPO" &&
+rm -rf -- "$WORKSPACE"
+```
+
 The copied current Prisma schema is used as the CLI schema input; Prisma Migrate deploy applies pending checked-in migration directories and does not generate a new migration. The filtered migration directory is authoritative for this replay. Keep migration 9 absent throughout.
 
 ## Expected result matrix
@@ -58,7 +83,7 @@ The test script records each attempted SQL statement, expected and actual SQLSTA
 
 The post-migration test transaction rolls back, including the three successful revocations. The fixture transaction is committed before migration 8; after migration 8, those assignment rows intentionally cannot be deleted. Cleanup is therefore destruction of the disposable tmpfs-backed container, not row-level deletion.
 
-Before cleanup, preserve evidence in a separately chosen directory outside the repository and workspace. For example, verify that `$TMP_BASE/sap-core-d14-evidence-$RUN_ID` does not already exist, then run `EVIDENCE_DIR="$TMP_BASE/sap-core-d14-evidence-$RUN_ID"; mkdir -m 700 "$EVIDENCE_DIR"; cp -p "$WORKSPACE"/*.log "$WORKSPACE"/*.tsv "$WORKSPACE"/.source-commit "$EVIDENCE_DIR/"`. Verify the copied files and keep secrets/URLs/container configuration out of the evidence. Call `d14_cleanup` in the same Bash session after verifying the copy. It checks the exact recorded workspace/run ID and container ID/name/run-id/purpose labels, returns to `$REPO`, stops and removes only that container, removes only the run-specific workspace, and unsets process-local credentials. It does not remove images or volumes. Do not substitute broad Docker cleanup, `docker compose down -v`, `DROP SCHEMA`, `TRUNCATE`, trigger disabling, or a delete-based cleanup.
+Before cleanup, run `d14_recovery_status`, then `d14_preserve_evidence` (optionally passing a run-specific directory under `$TMP_BASE`) in the same Bash session. It creates a mode-700 evidence directory without overwriting an existing one and copies available `.log`/`.tsv` files, run/source/container identity markers, and the filtered migration SQL directory when present. It verifies those copies against the retained workspace, and cleanup repeats the verification before removing anything. Inspect the preserved files before sharing; the helpers do not copy the process environment or create a separate credentials file, but any sensitive text in logs must be redacted before sharing. `d14_cleanup` removes only a container whose exact ID, name, run-ID label, and purpose label match, then returns to `$REPO` and removes only the validated run-specific workspace. If no container was created, it removes only the workspace; if Docker is unavailable when inspection is needed, state/labels mismatch, the container state is unexpected, or evidence is missing or changed, it stops without deleting the workspace or container. The evidence directory is never deleted, and no images or volumes are removed. Do not substitute broad Docker cleanup, `docker compose down -v`, `DROP SCHEMA`, `TRUNCATE`, trigger disabling, or a delete-based cleanup.
 
 ## Evidence boundary
 
