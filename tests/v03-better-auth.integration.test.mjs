@@ -378,7 +378,7 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       const firstProfileHtml = await firstProfileResponse.text();
       assert.ok(firstProfileHtml.includes(updatedName));
       assert.ok(firstProfileHtml.includes(email));
-      assert.match(firstProfileHtml, /Email address:[\\s\\S]*not verified/);
+      assert.match(firstProfileHtml, /Email address:[\s\S]*not verified/);
       assert.ok(!firstProfileHtml.includes(userId), "the profile must not expose the user ID");
       assert.ok(!firstProfileHtml.includes("V03 Second User Name"));
       assert.ok(!firstProfileHtml.includes(secondEmail));
@@ -390,7 +390,7 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       const secondProfileHtml = await secondProfileResponse.text();
       assert.ok(secondProfileHtml.includes("V03 Second User Name"));
       assert.ok(secondProfileHtml.includes(secondEmail));
-      assert.match(secondProfileHtml, /Email address:[\\s\\S]*not verified/);
+      assert.match(secondProfileHtml, /Email address:[\s\S]*not verified/);
       assert.ok(!secondProfileHtml.includes(userId), "the profile must not expose another user ID");
       assert.ok(!secondProfileHtml.includes(updatedName));
       assert.ok(!secondProfileHtml.includes(email));
@@ -540,7 +540,7 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       assert.match(protectedHomeHtml, /Authentication is not authorization/);
       assert.match(
         protectedHomeHtml,
-        /<a href="\\/account"[^>]*>\\s*Account settings\\s*<\\/a>/,
+        /<a href="\/account"[^>]*>\s*Account settings\s*<\/a>/,
       );
 
       const signOutAfterSignIn = await authRequest("/sign-out", {
