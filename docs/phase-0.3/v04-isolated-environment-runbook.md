@@ -157,7 +157,7 @@ Record the printed non-secret identity in the evidence log. If any identity chec
 The source commit also contains the later D8 migration. Therefore, do **not** archive the entire `prisma/migrations` directory. Section 3's allow-listed archive command extracts only migration directories 1–8 and the migration lock. Verify the exact directory list before continuing:
 
 ```bash
-EXPECTED="$(printf '%s\\n' \
+EXPECTED="$(printf '%s\n' \
   20261106000513_phase_0_3_v01_initial \
   20261106001500_create_schemas_prerequisite \
   20261106002304_phase_0_3_v02_cross_schema_relation \
@@ -295,7 +295,7 @@ pnpm install --frozen-lockfile
 test "$(pnpm exec prisma --version | sed -n '1p' | awk '{print $3}')" = "7.10.1"
 ```
 
-After creating the fresh and staged migration trees in the next subsection, write two config files. Both use the extracted schema and a distinct migration directory; neither imports dotenv or reads the repository config:
+Write these two config files now; their explicit migration paths are created in the following subsection. Both use the extracted schema and a distinct migration directory; neither imports dotenv or reads the repository config:
 
 ```bash
 cat > "$WORKSPACE/prisma.fresh.config.ts" <<'EOF'
@@ -368,7 +368,25 @@ V04_SCHEMA_PATH="$WORKSPACE/prisma/schema.prisma" V04_MIGRATIONS_PATH="$STAGED_M
 V04_SCHEMA_PATH="$WORKSPACE/prisma/schema.prisma" V04_MIGRATIONS_PATH="$STAGED_MIGRATIONS" DATABASE_URL="$STAGED_DATABASE_URL" pnpm exec prisma migrate status --config "$WORKSPACE/prisma.staged.config.ts"
 ```
 
-At this first checkpoint, require exactly migrations 1–7, all successful, no rolled-back records, and migration 8 absent. Preserve the intermediate history/status. Then copy migration 8's verified directory into the staged migration path and run `migrate deploy` and `migrate status` again. Require exactly migrations 1–8, all successful, zero rolled-back records, and up-to-date status. Compare relevant catalog definitions between fresh and staged targets. Any mismatch is a hard stop.
+At this first checkpoint, require exactly migrations 1–7, all successful, no rolled-back records, and migration 8 absent. Preserve the intermediate history/status. Then copy migration 8's verified directory into the staged migration path and run `migrate deploy` and `migrate status` again:
+
+```bash
+cp -R "$WORKSPACE/prisma/migrations/20261107130000_d7_typed_role_assignments" "$STAGED_MIGRATIONS/"
+test "$(find "$STAGED_MIGRATIONS" -mindepth 2 -maxdepth 2 -name migration.sql -type f | wc -l | tr -d ' ')" = 8
+V04_SCHEMA_PATH="$WORKSPACE/prisma/schema.prisma" V04_MIGRATIONS_PATH="$STAGED_MIGRATIONS" DATABASE_URL="$STAGED_DATABASE_URL" pnpm exec prisma migrate deploy --config "$WORKSPACE/prisma.staged.config.ts"
+V04_SCHEMA_PATH="$WORKSPACE/prisma/schema.prisma" V04_MIGRATIONS_PATH="$STAGED_MIGRATIONS" DATABASE_URL="$STAGED_DATABASE_URL" pnpm exec prisma migrate status --config "$WORKSPACE/prisma.staged.config.ts"
+```
+
+Capture migration history directly from each isolated database without exposing a password:
+
+```bash
+docker exec "$FRESH_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U "$FRESH_USER" -d "$FRESH_DB" \
+  -c 'SELECT migration_name, finished_at, rolled_back_at FROM "_prisma_migrations" ORDER BY started_at;'
+docker exec "$STAGED_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U "$STAGED_USER" -d "$STAGED_DB" \
+  -c 'SELECT migration_name, finished_at, rolled_back_at FROM "_prisma_migrations" ORDER BY started_at;'
+```
+
+Require exactly migrations 1–8, all successful, zero rolled-back records, and up-to-date status. Compare relevant catalog definitions between fresh and staged targets. Any mismatch is a hard stop.
 
 ### 9.8 Evidence handoff and next authorization gate
 
