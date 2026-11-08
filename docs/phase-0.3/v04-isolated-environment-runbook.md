@@ -248,7 +248,7 @@ STAGED_CONTAINER_ID="$(
     "$POSTGRES_IMAGE_REF"
 )"
 test "${#STAGED_CONTAINER_ID}" -eq 64
-STAGED_PORT="$(docker port "$STAGED_CONTAINER_ID" 5432/tcp | sed -n 's#^127\\.0\\.0\\.1:\\([0-9][0-9]*\\)$#\\1#p')"
+STAGED_PORT="$(docker port "$STAGED_CONTAINER_ID" 5432/tcp | sed -n 's#^127\.0\.0\.1:\([0-9][0-9]*\)$#\1#p')"
 test -n "$STAGED_PORT"
 test "$FRESH_CONTAINER_ID" != "$STAGED_CONTAINER_ID"
 test "$FRESH_PORT" != "$STAGED_PORT"
