@@ -174,6 +174,12 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
     assert.ok(location, "anonymous home redirect must include a location");
     assert.equal(new URL(location, authURL).pathname, "/sign-in");
 
+    const accountResponse = await fetch(`${authURL}/account`, { redirect: "manual" });
+    assert.equal(accountResponse.status, 307, "anonymous account access must redirect");
+    const accountLocation = accountResponse.headers.get("location");
+    assert.ok(accountLocation, "anonymous account redirect must include a location");
+    assert.equal(new URL(accountLocation, authURL).pathname, "/sign-in");
+
     const signInPageResponse = await fetch(`${authURL}/sign-in`);
     assert.equal(signInPageResponse.status, 200);
     assert.match(await signInPageResponse.text(), /Welcome back/);
@@ -280,7 +286,7 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
   });
 
   await t.test(
-    "Better Auth signup, identity persistence, account unlink, disabled hard-delete, and sign-out",
+    "Better Auth signup, account profile isolation, identity persistence, account unlink, disabled hard-delete, and sign-out",
     async () => {
       const email = `${testPrefix}auth@example.test`;
       const password = `${randomUUID()}Aa1!`;
@@ -347,6 +353,47 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
         [userId],
       );
       assert.equal(updatedUserRows[0]?.name, updatedName);
+
+      const updatedProfileResponse = await fetch(`${authURL}/account`, {
+        headers: { cookie },
+      });
+      assert.equal(updatedProfileResponse.status, 200);
+      const updatedProfileHtml = await updatedProfileResponse.text();
+      assert.ok(updatedProfileHtml.includes(updatedName));
+      assert.ok(!updatedProfileHtml.includes("V03 Initial Name"));
+
+      const secondEmail = `${testPrefix}second@example.test`;
+      const secondSignupResponse = await authRequest("/sign-up/email", {
+        method: "POST",
+        body: { name: "V03 Second User Name", email: secondEmail, password },
+      });
+      await readJson(secondSignupResponse, "second email signup");
+      const secondCookie = sessionCookieFromResponse(secondSignupResponse);
+      assert.match(secondCookie, /session_token=/, "second signup must set a session cookie");
+
+      const firstProfileResponse = await fetch(`${authURL}/account`, {
+        headers: { cookie },
+      });
+      assert.equal(firstProfileResponse.status, 200);
+      const firstProfileHtml = await firstProfileResponse.text();
+      assert.ok(firstProfileHtml.includes(updatedName));
+      assert.ok(firstProfileHtml.includes(email));
+      assert.match(firstProfileHtml, /Email address:[\\s\\S]*not verified/);
+      assert.ok(!firstProfileHtml.includes(userId), "the profile must not expose the user ID");
+      assert.ok(!firstProfileHtml.includes("V03 Second User Name"));
+      assert.ok(!firstProfileHtml.includes(secondEmail));
+
+      const secondProfileResponse = await fetch(`${authURL}/account`, {
+        headers: { cookie: secondCookie },
+      });
+      assert.equal(secondProfileResponse.status, 200);
+      const secondProfileHtml = await secondProfileResponse.text();
+      assert.ok(secondProfileHtml.includes("V03 Second User Name"));
+      assert.ok(secondProfileHtml.includes(secondEmail));
+      assert.match(secondProfileHtml, /Email address:[\\s\\S]*not verified/);
+      assert.ok(!secondProfileHtml.includes(userId), "the profile must not expose another user ID");
+      assert.ok(!secondProfileHtml.includes(updatedName));
+      assert.ok(!secondProfileHtml.includes(email));
 
       const linkedAccountId = randomUUID();
       await pool.query(
@@ -489,9 +536,11 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
         headers: { cookie: signInCookie },
       });
       assert.equal(protectedHomeResponse.status, 200);
+      const protectedHomeHtml = await protectedHomeResponse.text();
+      assert.match(protectedHomeHtml, /Authentication is not authorization/);
       assert.match(
-        await protectedHomeResponse.text(),
-        /Authentication is not authorization/,
+        protectedHomeHtml,
+        /<a href="\\/account"[^>]*>\\s*Account settings\\s*<\\/a>/,
       );
 
       const signOutAfterSignIn = await authRequest("/sign-out", {
