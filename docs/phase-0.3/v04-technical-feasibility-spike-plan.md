@@ -220,3 +220,21 @@ The V04.4 record includes selected disposable-database X01–X05 valid inserts, 
 The [V04.5.1 execution record](v04.5.1-x06-forward-migration-note.md) separately records a successful local disposable-PostgreSQL fresh replay of all nine checked-in migrations and an up-to-date `prisma migrate status`. Its catalog audit reported 10 schemas, 18 tables, 19 foreign keys, 55 indexes, and 9 migration records; all 19 FKs were validated. Eighteen `core` FKs use `RESTRICT`/`RESTRICT`; `master_data.validation_references.validation_record_id` uses `CASCADE`/`CASCADE` as specified by the Prisma schema and migration. The 55-index count is not a claim that every index was individually checked.
 
 This local database evidence is distinct from the CI jobs for commit `472a920`, and does not establish a current/hosted database, a nine-migration staged-upgrade replay, application authorization, protected operations, RLS, or application tenant isolation. It does not promote V04 to `PASS`; V04 remains `BLOCKED` and V05–V10 and Phase 1 remain `BLOCKED`.
+
+## 9.1 Recovery preparation status update — 2026-11-09
+
+This dated update supersedes only the recovery-preparation prerequisite status in the earlier D5/X01 case plan. It does not change the selected baseline or authorize database work.
+
+The owner completed the pinned-source extraction described in the isolated-environment runbook:
+
+- Source commit: `928260b25309163e26cb616a50e2107e9a42e54d`.
+- Run ID: `0fca2149a5834c06a5188599a8a28b58`.
+- Exactly eight allow-listed migrations were extracted; D8 migration 9 was excluded.
+- Exactly 14 allow-listed files were verified against pinned Git content by SHA-256, and the workspace checksum manifest was created.
+- The preparation reported `PREPARATION CHECKS PASSED`.
+
+This closes the **source extraction/checksum preparation** prerequisite only. It does not satisfy either database replay path, Prisma validation/generation, migration status, catalog comparison, D5 cardinality, X01 FK/action behavior, or any remaining V04 acceptance criterion. No Docker, PostgreSQL, SQL, Prisma, migration, test, or build operation was performed in this preparation.
+
+**Current case state:** D5 and X01/D9 remain **NOT RUN** on the recovered baseline. Next required work is a separately authorized, isolated fresh replay and staged 1–7 then 8 replay, with exact migration history/status and catalog comparison. Only after both replay paths pass may D5 and X01/D9 case execution be separately authorized. Do not use current main's nine-migration history as a substitute for this pinned eight-migration case baseline.
+
+V04 remains **BLOCKED**. This update changes no policy, schema, migration, or gate state.
