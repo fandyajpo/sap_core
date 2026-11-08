@@ -1,6 +1,6 @@
 # V04 FK Catalog and Referential-Action Verification
 
-**Status: READY / NOT RUN.** This is a prepared, documentation-only validation for the exact migrations 1–8 baseline. No database was queried and no runtime PASS is claimed. V04 remains `BLOCKED`.
+**Recorded result: BOUNDED PASS — FK Catalog run `0ce2c3bc1f384957894e3c3c32b08595`.** The result applies only to the catalog metadata on the verified migrations 1–8 baseline; it is not a runtime referential-behavior test or a V04 acceptance result. V04 remains `BLOCKED`.
 
 ## Purpose and boundary
 
@@ -52,6 +52,15 @@ Migration 9, `20261108130000_d8_role_definition_governance`, must not be copied 
 - Migration 7 initially has single-column Role Assignment → Role Definition FKs. Migration 8 drops those three constraints and installs `(roleDefinitionId, role_scope) → (id, scope)` with `RESTRICT`/`RESTRICT`; the current Prisma schema declares the matching composite relations and mapped constraint names. The three typed-parent FKs already present from migration 7 remain single-column `RESTRICT`/`RESTRICT` relations.
 - The V02 Prisma relation for `validation_references.validationRecord` specifies `onDelete: Cascade` but omits `onUpdate`. PostgreSQL's Prisma default is `CASCADE`; migration 3 explicitly declares `ON UPDATE CASCADE`. This is an implicit schema default, not an observed DDL conflict. If explicit policy expression is required, record it for owner/documentation review; do not edit the schema or migration as part of this audit.
 - Migration 9 adds no FK in its SQL. D8's `ownerOrganizationId`, `role_family_id`, and `role_definition_audit` reference-like fields are not FKs in the applicable migration/schema and must not be added to this matrix. D7's break-glass audit references are also explicitly application-validated, not extra approved FK edges.
+
+## Recorded execution outcome — run `0ce2c3bc1f384957894e3c3c32b08595`
+
+- The isolated catalog verification applied exactly migrations 1–8. Migration 9 was not applied.
+- Exactly 19 FKs were found: 18 `core` FKs with `RESTRICT`/`RESTRICT`, plus the V02 `master_data.validation_references` control FK with `CASCADE`/`CASCADE`.
+- Every FK matched the expected matrix for ordered source/target columns, constraint name, delete/update actions, and `convalidated = true`.
+- The SQL and TSV output were preserved and verified. The temporary container and workspace were cleaned up; the evidence directory remains preserved.
+
+**Result: BOUNDED PASS for FK catalog metadata on migrations 1–8 only.** This result does not establish DELETE/UPDATE runtime behavior, other D14 cases, or complete V04 acceptance. V04 remains `BLOCKED`.
 
 ## Read-only PostgreSQL catalog query
 
@@ -131,7 +140,7 @@ COMMIT;
 
 ## Local isolated procedure
 
-**Execution is not authorized or performed by this document.** Run only after explicit authorization, and only against a new disposable PostgreSQL 17.6 instance. Do not use the repository's Compose service, port 5433, any shared/named volume, or a live/hosted database.
+**Procedure boundary:** The execution outcome is recorded above. This section documents the isolated procedure for reference or a separately authorized repeat; it is not an executable script. Any repeat must use a new disposable PostgreSQL 17.6 instance. Do not use the repository's Compose service, port 5433, any shared/named volume, or a live/hosted database.
 
 The existing `scripts/validation/d14-runtime-setup.sh` provides the applicable isolation setup. It is D14-specific, so this FK-only path uses its setup and migration-1–7 checkpoint but deliberately does not call `d14_apply_migration8_and_test()` (that helper inserts fixtures and runs D14 assertions). From the repository root, in a Bash session:
 
@@ -168,6 +177,6 @@ The query must return exactly 19 rows: the 18 `core` FKs and one `master_data` V
 
 - **PASS for this bounded catalog check only:** isolated migration history is exactly 1–8; migration 9 is absent; query returns exactly the 19 expected rows with exact tuples/names/actions and all validated; the SQL text and output are retained; and exact-resource cleanup is verified. A PASS does not promote V04.
 - **FAIL:** any missing, extra, duplicate, renamed, mistargeted, reordered, differently-actioned, or unvalidated FK; unexpected migration history; migration 9 present; or any isolation/evidence/cleanup check that fails. Stop and preserve evidence. Do not alter schema or migration history to make the result conform.
-- **NOT RUN / INCONCLUSIVE:** no authorized isolated runtime run, an unavailable/incompletely verified target, or insufficient retained output. This is the current status.
+- **NOT RUN / INCONCLUSIVE:** no authorized isolated runtime run, an unavailable/incompletely verified target, or insufficient retained output. The recorded run above is BOUNDED PASS for catalog metadata only.
 
 This check does not test runtime DELETE/UPDATE outcomes, D14 insert-time mismatch rejection, Role Definition governance, application-level authorization, RLS, production state, or complete V04 acceptance.
