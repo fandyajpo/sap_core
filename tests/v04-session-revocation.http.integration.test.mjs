@@ -286,3 +286,55 @@ test("database connection failure while acquiring the session row lock fails the
     holder.release();
   }
 });
+
+
+test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-assignment actors", async () => {
+  const actor = await createActor("tenant-route-boundary");
+  const foreignOrganizationId = randomUUID();
+  await pool.query(
+    'INSERT INTO "core"."organization" ("id", "created_at", "updated_at") VALUES ($1, NOW(), NOW())',
+    [foreignOrganizationId],
+  );
+  organizationIds.push(foreignOrganizationId);
+
+  const requests = [
+    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/members`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/roles`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}/plants/${randomUUID()}`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(
+      `${authURL}/api/organizations/${foreignOrganizationId}/roles/assignments?scope=ORGANIZATION&parentId=${randomUUID()}&userId=${actor.userId}`,
+      { headers: { cookie: actor.cookie } },
+    ),
+  ];
+  const responses = await Promise.all(requests);
+  for (const response of responses) {
+    const body = await response.text();
+    assert.equal(response.status, 403, body.slice(0, 500));
+  }
+
+  const spoofedAssignment = await fetch(
+    `${authURL}/api/organizations/${actor.organizationId}/roles/assignments`,
+    {
+      method: "POST",
+      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      body: JSON.stringify({
+        scope: "ORGANIZATION",
+        parentId: actor.membershipId,
+        roleDefinitionId: ownerRoleId,
+        actorUserId: randomUUID(),
+        userId: randomUUID(),
+      }),
+    },
+  );
+  const spoofedBody = await spoofedAssignment.text();
+  assert.equal(spoofedAssignment.status, 400, spoofedBody.slice(0, 500));
+});
