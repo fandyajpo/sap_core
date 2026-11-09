@@ -243,3 +243,14 @@ V04 remains **BLOCKED**. This update changes no policy, schema, migration, or ga
 ### V04.6 D5 execution status — 2026-11-09
 
 D5 Organization→Company zero-to-many cardinality completed with a bounded PASS on both recovered migrations 1–8 replay targets (fresh and staged). The exact assertions, index definitions, rollback checks, and run identity are recorded in [V04.6 D5 baseline execution record](v04.6-d5-baseline-execution-record-2026-11-09.md). X01 / D9 remains a separate NOT RUN case and requires separate authorization. V04 remains BLOCKED.
+
+
+## X01 / D9 bounded execution reconciliation — 2026-11-09
+
+The separately authorized X01 / D9 runtime case has now completed with a **BOUNDED PASS** on both recovered migrations 1–8 replay targets (fresh and staged). The execution record is [V04.6 X01/D9 referential-integrity execution record](v04.6-x01-d9-referential-integrity-execution-record-2026-11-09.md).
+
+Both targets passed the exact `core.company(organizationId)` → `core.organization(id)` NOT NULL / FK checks, RESTRICT delete and update behavior, absence of an organizationId-only unique index, positive insert, SQLSTATE `23502` NULL rejection, SQLSTATE `23503` nonexistent-parent rejection by the expected FK, referenced-parent delete and key-update rejection, unchanged parent/child checks, and explicit transaction rollback.
+
+Evidence boundary: the X01/D9 script did not independently assert `pg_constraint.convalidated` or run a separate post-rollback fixture-count query. The case is bounded to the pinned eight-migration recovery baseline and the two recorded disposable targets. It does not establish application authorization, protected operations, RLS, application tenant isolation, hosted/production database state, or complete V04 acceptance.
+
+**Case register update:** D5 = BOUNDED PASS; X01 / D9 = BOUNDED PASS. Continue with the remaining approved matrix cases in their documented order; do not repeat D5 or X01/D9 absent a specific evidence gap. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No policy decision, migration, or gate state is changed by this reconciliation.
