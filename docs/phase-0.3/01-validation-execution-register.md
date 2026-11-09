@@ -205,3 +205,14 @@ Transactional behavior assertions passed on both targets: a valid CompanyMembers
 See [X04 / D12 execution record](v04.6-x04-d12-referential-integrity-execution-record-2026-11-09.md) for exact target identities, catalog results, assertions, and limitations. The direct User FK was verified through catalog metadata only; a missing-User insert and direct User parent update/delete were not separately exercised. No X04 concurrency schedule was run. This result does not establish complete D6 lifecycle behavior, application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
 
 **Latest bounded case register:** D5, X01/D9, X02/D10, X03/D11, and X04/D12 = BOUNDED PASS; X05/D13 = NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. This is an evidence update only; no schema, migration, policy, or gate state changed.
+
+
+## V04.6 X05 / D13 PlantAssignment verification — 2026-11-09
+
+X05 / D13 achieved **BOUNDED PASS** on both recovered migrations 1–8 disposable replay targets (fresh and staged). Read-only preflight confirmed three validated core.plant_assignment foreign keys, all using ON UPDATE RESTRICT ON DELETE RESTRICT: direct userId → User.id; (companyMembershipId, userId, organizationId, companyId) → CompanyMembership(id, userId, organizationId, companyId); and (organizationId, companyId, plantId) → Plant(organizationId, companyId, id). The required unique composite target keys and supporting indexes were present; fresh and staged catalog output matched.
+
+Transactional assertions passed on both targets: a valid PlantAssignment inserted; User/CompanyMembership tuple mismatch, Company-scope mismatch, and Plant-scope mismatch were rejected by their expected composite FKs; referenced CompanyMembership and Plant key updates/deletes were rejected; the direct User FK was independently confirmed validated and RESTRICT/RESTRICT in catalog metadata; explicit rollback completed; and residual fixture counts were zero for all seven fixture entity types.
+
+See [V04.6 X05/D13 execution record](v04.6-x05-d13-referential-integrity-execution-record-2026-11-09.md) for target identities, exact constraint names, assertions, and limitations. The direct User FK was catalog-verified but not separately behavior-tested with a nonexistent User or direct User parent update/delete. The run did not isolate an organizationId-only tuple mismatch or run a concurrency schedule. D6 status lifecycle/partial-unique behavior is a separate case and is not established by this X05 result. This does not establish application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
+
+**Latest bounded case register:** D5, X01/D9, X02/D10, X03/D11, X04/D12, and X05/D13 = BOUNDED PASS. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No schema, migration, policy, or gate state changed.
