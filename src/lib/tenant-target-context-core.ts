@@ -1,4 +1,4 @@
-import type { TenantScopeRequest } from "@/lib/tenant-context-core";
+import type { TenantScopeRequest } from "./tenant-context-core.ts";
 
 export interface TenantTargetContext {
   userId: string;
