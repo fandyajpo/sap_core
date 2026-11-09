@@ -32,3 +32,20 @@ test("all tenant GUC writes are transaction-local and use the injected transacti
   assert.doesNotMatch(authorization, /from ["']@\/lib\/prisma["']/);
   assert.match(authorization, /tx\.\$queryRaw/);
 });
+
+test("Company and Plant target GUCs are installed only after each descendant is verified", async () => {
+  const target = await source("src/lib/tenant-target-context.ts");
+  const membershipQuery = target.indexOf("async findOrganizationMembership");
+  const organizationGuc = target.indexOf("set_config('app.organization_id'");
+  const companyQuery = target.indexOf("async findCompanyTarget");
+  const companyGuc = target.indexOf("set_config('app.company_id'");
+  const plantQuery = target.indexOf("async findPlantTarget");
+  const plantGuc = target.indexOf("set_config('app.plant_id'");
+
+  assert.ok(membershipQuery < organizationGuc && organizationGuc < companyQuery);
+  assert.ok(companyQuery < companyGuc && companyGuc < plantQuery);
+  assert.ok(plantQuery < plantGuc);
+  assert.match(target, /if \(membership\) \{[\s\S]*set_config\('app\.organization_id'/);
+  assert.match(target, /if \(company\) \{[\s\S]*set_config\('app\.company_id'/);
+  assert.match(target, /if \(plant\) \{[\s\S]*set_config\('app\.plant_id'/);
+});
