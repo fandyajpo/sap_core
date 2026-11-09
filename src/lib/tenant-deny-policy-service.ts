@@ -341,7 +341,9 @@ export async function listTenantDenyPolicyHistory(organizationId: string) {
     try {
       context = await resolveOwnerContext(tx, session, organizationId);
     } catch (error) {
-      await tx.$executeRaw`
+      // Commit this denial evidence independently because the current read
+      // transaction is about to roll back with the authorization error.
+      await prisma.$executeRaw`
         INSERT INTO "core"."tenant_deny_audit_event"
           ("id", "organization_id", "actor_user_id", "event_type", "outcome",
            "reason", "reason_code", "occurred_at")
