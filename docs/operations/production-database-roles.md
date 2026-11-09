@@ -91,8 +91,8 @@ The following code paths were inspected on `main`:
 This document is not a claim that every application call-site or every adversarial HTTP path has been exhaustively audited. The unbound `scopedAccessDatabase` export was removed from `src/lib/scoped-access.ts` in this change; production code must use `createSessionBoundScopedAccessDatabase` and still apply operation-specific authorization. Complete the remaining checks before production traffic:
 1. Inventory every Prisma client access, raw SQL call, service constructor, server action, route handler, server component, and background entry point.
 2. Prove each tenant-facing path is protected by the verified-session and permission boundary; keep all unbound adapters out of production call-sites.
-3. HTTP-level coverage on PR #69 now adds exact-scope Company/Plant allow checks, sibling Company/Plant denial, and rejection of non-delegable `roles.assign` during custom-role creation. The existing HTTP suite covers unauthenticated requests, spoofed actor/recipient IDs, cross-Organization identifiers, malformed input, revoked-session rejection, and suspended-membership rejection. CI run [#42627456571](https://github.com/fandyajpo/sap_core/actions/runs/42627456571) passed all 8 jobs on PR #69 head `67cdd677fb4ab778498ef34427a40b1b92ffb0fa`.
-4. Concurrency coverage proves request-first session revocation waits for the protected request, revocation-first rejects the later request, and Organization membership suspension waits behind a protected request that already locked the membership. A dedicated role-assignment revocation/disablement race test remains outstanding; row locks are present but that race is not yet independently demonstrated by an integration test.
+3. HTTP-level coverage on PR #69 adds exact-scope Company/Plant allow checks, sibling Company/Plant denial, and rejection of non-delegable `roles.assign` during custom-role creation. The existing HTTP suite covers unauthenticated requests, spoofed actor/recipient IDs, cross-Organization identifiers, malformed input, revoked-session rejection, and suspended-membership rejection. The HTTP suite passes 10/10 tests, including the deterministic concurrent role-assignment revocation lock test. CI run [#42629490606](https://github.com/fandyajpo/sap_core/actions/runs/42629490606) passed all 8 jobs on PR #69 head `7955f5f9a8d5979d4de5780a82d5a62dbf08e288`.
+4. Concurrency coverage proves request-first session revocation waits for the protected request, revocation-first rejects the later request, Organization membership suspension waits behind a protected request that already locked the membership, and the effective role-assignment/membership/role-definition/permission-grant lock set serializes a protected read against concurrent role-assignment revocation. The last case is exercised in the disposable PostgreSQL integration suite by acquiring the production-equivalent `FOR SHARE` lock set, performing the protected read in the same transaction, and verifying the revocation UPDATE waits until commit.
 5. PR #69's CI runs the adversarial suites against its disposable PostgreSQL integration database. Keep RLS tests, but distinguish what they prove locally from what Prisma Postgres enforces. No hosted database was used for this PR.
 6. Review production logs, error handling, and client payloads to ensure secrets, SQL, and internal authorization details are not disclosed.
 
@@ -112,10 +112,10 @@ When a Vercel project is created:
 ## Deployment gate
 
 Do not mark production security readiness complete until:
-- [ ] Application-layer call-site inventory is complete.
-- [ ] No tenant request path uses an unbound database/service adapter.
+- [x] Tracked application-source call-site inventory is complete for `src/` TypeScript/TSX; no server actions or in-repository background workers were found. External deployment cron/worker configuration remains outside this repository audit.
+- [x] No tenant request path in the inspected `src/` tree uses an unbound database/service adapter.
 - [x] HTTP-level adversarial authorization tests pass on PR #69 CI (8/8 jobs); merge and main-branch validation are still pending.
-- [ ] Concurrency coverage includes session revocation and membership suspension; add the dedicated role-assignment revocation/disablement race test before marking this gate complete.
+- [x] Concurrency coverage passes for session revocation, membership suspension, and effective role-assignment revocation ordering.
 - [ ] Secret handling and production environment separation are verified.
 - [ ] The residual risk of a full-access hosted database credential is explicitly accepted.
 - [ ] A backup/restore plan appropriate to the Prisma Postgres plan is verified.
