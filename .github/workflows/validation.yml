@@ -111,7 +111,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_d7_test
         ports:
           - "55435:5432"
@@ -229,6 +229,7 @@ jobs:
           import pg from "pg";
           const adminUrl = new URL(process.env.DATABASE_URL);
           adminUrl.pathname = "/postgres";
+          adminUrl.search = "";
           const client = new pg.Client({ connectionString: adminUrl.toString() });
           await client.connect();
           try {
@@ -254,7 +255,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_d1_test
         ports:
           - "55436:5432"
@@ -293,7 +294,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_d6_test
         ports:
           - "55433:5432"
@@ -332,7 +333,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_d7_test
         ports:
           - "55435:5432"
@@ -371,7 +372,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_d8_test
         ports:
           - "55434:5432"
