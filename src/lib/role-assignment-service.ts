@@ -196,7 +196,10 @@ function assertRoleDefinitionOwnership(roleDefinition: RoleDefinitionRow, organi
   }
 }
 
-function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput): string {
+function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput, enforceRoleDefinitionGovernance = false): string {
+  const governanceFilter = enforceRoleDefinitionGovernance
+    ? ' AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL'
+    : "";
   const parent = assignmentTables[input.scope];
   const baseColumns = `
     ra."id",
@@ -220,7 +223,7 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput): string {
         AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
           OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
             AND rd."ownerOrganizationId" = om."organizationId"))
-        AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE`;
+        AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}`;
   }
 
   if (input.scope === "COMPANY") {
@@ -269,6 +272,7 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput): string {
 export function createRoleAssignmentService(
   database: ScopedAccessDatabase,
   authorization: RoleAssignmentAuthorization,
+  options: { enforceRoleDefinitionGovernance?: boolean } = {},
 ) {
   if (
     typeof authorization?.authorizeGrant !== "function" ||
@@ -362,7 +366,7 @@ export function createRoleAssignmentService(
           throw new RoleAssignmentError("AUTHORIZATION_DENIED", "The effective Role Assignment read was not authorized.");
         }
         const rows = await session.query<RoleAssignmentRecordRow>(
-          effectiveAssignmentQuery(input),
+          effectiveAssignmentQuery(input, options.enforceRoleDefinitionGovernance === true),
           [input.userId, input.parentId],
         );
         return rows.map((row) => ({ ...row, scope: input.scope, parentId: input.parentId }));
