@@ -95,6 +95,7 @@ jobs:
           let stage = "connect";
           let transactionOpen = false;
           let socketListenerAttached = false;
+          let safeRuntimeRoleFlags;
 
           // Capture the original pg-protocol error before pg.Client can wrap or
           // suppress it. Only allowlisted scalar diagnostics are retained.
@@ -201,6 +202,13 @@ jobs:
               WHERE rolname = current_user
             `);
             assert.equal(role.rowCount, 1);
+            safeRuntimeRoleFlags = {
+              is_superuser: role.rows[0].rolsuper,
+              bypasses_rls: role.rows[0].rolbypassrls,
+              can_login: role.rows[0].rolcanlogin,
+              can_create_role: role.rows[0].rolcreaterole,
+              can_create_database: role.rows[0].rolcreatedb,
+            };
             assert.equal(role.rows[0].rolsuper, false, "runtime role must not be superuser");
             assert.equal(role.rows[0].rolbypassrls, false, "runtime role must not bypass RLS");
             assert.equal(role.rows[0].rolcanlogin, true, "runtime role must be able to log in");
@@ -361,6 +369,7 @@ jobs:
               code: isSafeCode(error?.code) ? error.code : "VERIFICATION_FAILED",
               error_chain: errorChain.length > 0 ? errorChain : undefined,
               connection_event_errors: connectionEventErrors.length > 0 ? connectionEventErrors : undefined,
+              runtime_role_flags: safeRuntimeRoleFlags,
               socket_listener_attached: stage === "connect" ? socketListenerAttached : undefined,
               syscall: ["connect", "getaddrinfo"].includes(error?.syscall) ? error.syscall : undefined,
               detail: "Connection strings, hostnames, server messages, stacks, and credentials are intentionally suppressed.",
