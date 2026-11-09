@@ -235,3 +235,16 @@ test("concurrent creates serialize on the exact target membership before duplica
     second.release();
   }
 });
+
+test("database refuses a DENY against a membership after it becomes revoked", async () => {
+  await pool.query(
+    `UPDATE "core"."organization_membership"
+        SET "status" = 'REVOKED'::"core"."OrganizationMembershipStatus"
+      WHERE "id" = $1`,
+    [ids.membership],
+  );
+  await assert.rejects(
+    insertPolicy(pool),
+    error => error.code === "23514",
+  );
+});
