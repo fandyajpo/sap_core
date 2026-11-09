@@ -129,7 +129,7 @@ jobs:
         if: always()
         run: |
           if [[ -f "$NEXT_SERVER_LOG" ]]; then
-            grep -E '\\[DENY history\\]|\\[DENY audit\\]' "$NEXT_SERVER_LOG" || true
+            grep -E 'DENY history|DENY audit' "$NEXT_SERVER_LOG" || true
           fi
 
   v04-pinned-replay:
