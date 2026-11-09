@@ -10,6 +10,7 @@ import { resolveTenantTargetContext } from "@/lib/tenant-target-context";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
 import { lockVerifiedSessionRow } from "@/lib/verified-session-lock";
 import type { TenantScopeRequest } from "@/lib/tenant-scope-types";
+import { prisma } from "@/lib/prisma";
 
 export class TenantAuthorizationError extends Error {
   readonly reason: string;
@@ -75,7 +76,9 @@ export async function requireTenantPermission(
   });
   if (!decision.allowed) {
     if (decision.reason === "EXPLICIT_DENY") {
-      await tx.$executeRaw`
+      // Persist the denial evidence outside the protected transaction: this
+      // transaction will be rolled back when the authorization error is thrown.
+      await prisma.$executeRaw`
         INSERT INTO "core"."tenant_deny_audit_event"
           ("id", "organization_id", "target_membership_id", "target_user_id",
            "permission_definition_id", "scope", "company_id", "plant_id",
