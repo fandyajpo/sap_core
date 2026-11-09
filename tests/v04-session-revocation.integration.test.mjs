@@ -94,7 +94,7 @@ test("request-first row lock makes session revocation wait and then complete wit
     await insertSession(`session-reuse-${randomUUID()}`);
     const reused = await pool.connect();
     const backendBefore = await reused.query("SELECT pg_backend_pid() AS pid");
-    const reusableSessionId = (await pool.query(
+    const reusableSessionId = (await reused.query(
       'SELECT "id" FROM "core"."session" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 1',
       [userId],
     )).rows[0].id;
