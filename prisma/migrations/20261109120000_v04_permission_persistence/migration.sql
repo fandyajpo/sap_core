@@ -1,5 +1,14 @@
 BEGIN;
 
+-- Freeze the role/assignment baseline while preflight runs so no concurrent writer
+-- can insert a role between the empty-baseline check and the migration DDL.
+LOCK TABLE
+  "core"."role_definition",
+  "core"."organization_role_assignment",
+  "core"."company_role_assignment",
+  "core"."plant_role_assignment"
+IN ACCESS EXCLUSIVE MODE;
+
 -- The P14 baseline is intentionally empty. Stop rather than reclassifying or
 -- overwriting any role definitions or assignments created after the approved D8 baseline.
 DO $$
