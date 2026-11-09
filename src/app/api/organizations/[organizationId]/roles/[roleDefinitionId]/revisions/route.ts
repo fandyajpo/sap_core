@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { RoleDefinitionError } from "@/lib/role-definition-service";
+import type { AuthorizationPermission } from "@/lib/authorization-policy-core";
 import { reviseCustomRoleForCurrentUser } from "@/lib/tenant-role-definition-service";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
 
@@ -34,7 +35,7 @@ export async function POST(
       roleDefinitionId,
       ...(body.code === undefined ? {} : { code: body.code as string }),
       ...(body.scope === undefined ? {} : { scope: "ORGANIZATION" as const }),
-      ...(body.permissions === undefined ? {} : { permissions: body.permissions as string[] }),
+      ...(body.permissions === undefined ? {} : { permissions: body.permissions as AuthorizationPermission[] }),
     });
     return NextResponse.json({ role });
   } catch (error) {
