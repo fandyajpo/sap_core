@@ -5,7 +5,7 @@
 **Base:** `main` after PR #69 merge (`31c0b0a7658df64470a60f7d3374d4f3b1af7593`)  
 **Scope:** Tenant-administration authorization for Organization, Company and Plant. ERP operational permissions remain out of scope.
 
-> The owner has approved the seven governance recommendations in §10 as the policy baseline. This approval does not authorize schema changes, migrations, permission seeding, service/API implementation, RLS changes, hosted database access, or production rollout. Those require separate review and explicit approval.
+> The owner has approved the seven governance recommendations in §10, including the initial 14-permission DENY allowlist with `audit.read` protected for the first iteration. This approval records policy only; it does not authorize schema changes, migrations, permission seeding, service/API implementation, RLS changes, hosted database access, or production rollout. Those require separate review and explicit approval.
 
 ## 1. Why a separate governance decision is required
 
@@ -47,7 +47,7 @@ Proposed decision rule:
 
 A DENY is not a negative role, does not grant any other permission, and must not alter role definitions or role assignments.
 
-## 4. Recommended governance model (proposal)
+## 4. Approved governance model
 
 ### 4.1 Who may issue or revoke
 
@@ -86,17 +86,37 @@ A DENY is bound to its specific target membership. It does not transfer to a dif
 
 If an Organization-wide restriction is required, it must be represented as an Organization-scope DENY and will only affect Organization-scope operations under this strict model. It will not automatically block Company/Plant operations.
 
-### 4.4 Permission eligibility
+### 4.4 Permission eligibility and approved initial allowlist
 
-**Approved:** DENY may refer only to known, explicitly approved tenant-administration permissions in the permission catalog, using a centrally reviewed allowlist.
+**Approved:** the initial DENY-eligible allowlist contains exactly these 14 existing tenant-administration permissions:
 
+| Permission | Initial DENY eligibility |
+|---|---|
+| `organization.read` | Eligible |
+| `organization.update` | Eligible |
+| `organization.members.read` | Eligible |
+| `organization.members.manage` | Eligible |
+| `company.read` | Eligible |
+| `company.manage` | Eligible |
+| `company.members.manage` | Eligible |
+| `plant.read` | Eligible |
+| `plant.manage` | Eligible |
+| `plant.assignments.manage` | Eligible |
+| `roles.read` | Eligible |
+| `roles.create` | Eligible |
+| `roles.revise` | Eligible |
+| `roles.assign` | Eligible |
+| `audit.read` | **Protected — not DENY-eligible in the first iteration** |
+
+Rules:
 - Reject unknown permission identifiers.
 - Reject platform permissions and any future operational permission until separately governed.
 - Do not accept arbitrary permission strings from clients.
-- Keep a centrally reviewed deny-eligibility allowlist; a permission being ALLOW-delegable does not automatically make it DENY-eligible.
+- A permission being ALLOW-delegable does not automatically make it DENY-eligible; only the explicit list above is eligible for the first iteration.
+- `audit.read` is protected initially to preserve tenant oversight and audit visibility. Changing this requires a separate policy revision and explicit owner approval.
 - Do not allow DENY to bypass authentication, session validation, membership validation, tenant-boundary checks, or platform security controls.
 
-**Deferred detail:** define the concrete permission codes that are DENY-eligible and which are protected against DENY to avoid administrative lockout. This allowlist must be reviewed and approved before implementation; the initial implementation must not guess it.
+This allowlist decision is a policy record only. It does not authorize permission seeding, database writes, or implementation.
 
 ### 4.5 Reason, duration, and lifecycle
 
@@ -199,8 +219,8 @@ Every test must exercise the real HTTP/service boundary as appropriate and use d
 
 ## 9. Rollout sequence if approved
 
-1. The seven governance principles in §10 have owner approval.
-2. Resolve the deferred permission allowlist and audit retention/reader details before implementation.
+1. The seven governance principles in §10, including the initial 14-permission allowlist and protected `audit.read`, have owner approval.
+2. Resolve the deferred audit retention/reader details before implementation.
 3. Version this policy as the approved governance baseline.
 4. Specify a database migration and backfill strategy separately; no existing role grants should be reinterpreted implicitly.
 5. Implement server-only policy repository/service and transaction locks.
@@ -213,12 +233,12 @@ Every test must exercise the real HTTP/service boundary as appropriate and use d
 
 ## 10. Owner-approved governance decisions
 
-The owner explicitly approved all seven recommended governance principles on 2026-11-09. The approved baseline is:
+The owner explicitly approved all seven governance principles on 2026-11-09. The approved baseline is:
 
 1. **Issuer authority — approved:** only an active `ORG_OWNER` may create or revoke DENY records within their own Organization. No second independent approver is required by this baseline.
 2. **Target model — approved:** each DENY targets one specific Organization membership, never a role or all holders of a role.
 3. **Scope — approved:** exact-scope only (Organization, Company, or Plant); no implicit inheritance or descendant propagation.
-4. **Permission eligibility — approved in principle:** only known tenant-administration permissions on a centrally reviewed allowlist may be denied. The concrete permission-code allowlist and protected permissions remain to be specified and approved before implementation.
+4. **Permission eligibility — approved:** exactly 14 permission codes listed in §4.4 are DENY-eligible for the first iteration; `audit.read` is protected and not DENY-eligible. Future additions or changes require a separate policy revision and explicit owner approval.
 5. **Expiry — approved:** expiry is optional. When present, it is evaluated using the database clock.
 6. **Membership lifecycle — approved:** DENY is bound to the exact membership, does not transfer to a newly created membership, and becomes historical/inactive when its target membership is revoked/ended. A new membership requires a new explicit DENY.
 7. **Audit — approved:** append-only audit events; access to policy/audit history must be authorized and logged. Concrete reader roles and retention period remain to be specified before implementation/production use.
@@ -227,7 +247,6 @@ The owner explicitly approved all seven recommended governance principles on 202
 
 This policy approval is not authorization to implement or deploy. The following remain gated:
 
-- final permission-code allowlist and lockout-protected permissions;
 - detailed audit reader roles and retention period;
 - schema/migration/backfill design;
 - service/API implementation and UI;
