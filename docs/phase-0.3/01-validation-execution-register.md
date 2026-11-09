@@ -235,3 +235,39 @@ The D14-A pinned source is commit `d27af783d3e9499a451331f720ec111e6b5e7049`, co
 **Result:** the PR #20 CI evidence closes the previously recorded D1 and D6 runtime test gaps, D14-A/B execution gaps on the specified baselines, and the nine-migration staged-upgrade replay gap. Treat these as bounded CI results for the test scenarios and baselines actually executed, not as blanket proof of all tenant isolation behavior.
 
 **V04 remains `BLOCKED`.** PR #20 does not establish the remaining application-level acceptance boundary: complete application authorization and tenant context enforcement, protected operations, RLS policy design/enforcement and pooled-session isolation, or end-to-end application tenant isolation. It also does not establish hosted/production database state. V05–V10 and Phase 1 remain independently blocked pending their own criteria.
+
+
+
+## V04 application-layer findings reconciliation — 2026-11-09
+
+**Reconciled main:** `b776451684c99f085ce5141b6e55324494d2c48d` (after PR #59).  
+**CI evidence:** PR #59 head `fcc9260b9f5ac944a112f6ef0ca3e06ee8c44de6`, workflow run [#42589940309](https://github.com/fandyajpo/sap_core/actions/runs/42589940309), conclusion `success`; all eight jobs passed.  
+**Database boundary:** Disposable PostgreSQL CI only. No hosted database was accessed or modified by this reconciliation.
+
+The original application-layer source audit remains a historical record of findings at its audited revision. Its F-01–F-05 statuses are superseded by the merged implementation and evidence below; see [V04 application-layer acceptance reconciliation](v04-application-layer-acceptance-reconciliation-2026-11-09.md).
+
+| Finding | Current disposition | Evidence |
+|---|---|---|
+| F-01 — unguarded membership/assignment persistence façade | **Implementation CLOSED** | PR #55 merged as `46a5c27943af26a856d855a80743d42cd545f780`. `scoped-access.ts` is server-only and exports only the transaction-capable persistence adapter; unguarded lifecycle convenience exports were removed. |
+| F-02 — role-assignment production adapter | **Implementation CLOSED; CI PASS** | PR #56 hardened the transaction-bound service contract; PR #59 merged as `b776451684c99f085ce5141b6e55324494d2c48d`, wiring verified-session actor identity, transaction-bound authorization, guarded GET/POST endpoints, role-definition governance and adversarial HTTP tests. |
+| F-03 — application-path adversarial integration coverage | **BOUNDED PASS for implemented API slice** | PR #57 merged as `8b3a5161f2c1c6fdbb23fb9f104b917ca2086e5d`; real Better Auth HTTP handlers are tested with a third principal in a separate Organization, anonymous and foreign-session denials, cross-Organization selector substitution, foreign role writes, and non-delegable custom-role create/revision checks. PR #59 adds role-assignment HTTP coverage. |
+| F-04 — legacy non-transactional tenant resolver | **Implementation CLOSED** | PR #58 merged as `609b2cad20f108412ec83158ebfd08f818555767`; unused root-Prisma resolver and its obsolete core/test were removed. |
+| F-05 — missing server-only markers | **Implementation CLOSED** | PR #55 adds `import "server-only"` to `src/lib/prisma.ts` and `src/lib/scoped-access.ts`; `test:v04-server-boundary` asserts the boundary and absence of unguarded lifecycle exports. |
+
+### Bounded validation evidence
+
+- The PR #59 workflow completed `static`, `v03-integration`, `d1-integration`, `d6-integration`, `d7-integration`, `d8-integration`, `v04-rls-integration`, and `v04-pinned-replay`: all eight succeeded.
+- The V03 integration suite now exercises the production HTTP path with Better Auth session cookies and disposable PostgreSQL fixtures. It includes foreign-Organization member, Company, Plant and role reads; cross-Organization Company/Plant selector substitution; foreign role writes; non-delegable permission rejection; and no-persistence assertions for denied role changes.
+- The role-assignment HTTP additions cover anonymous reads/writes, actor spoofing, unauthorized grants, cross-Organization grants/reads, successful verified-session grants, effective assignment reads and break-glass rejection.
+- Local checks reported by the repository owner at PR head `fcc9260b9f5ac944a112f6ef0ca3e06ee8c44de6`: typecheck, build, role-assignment unit suite, production role-assignment authorization suite passed; lint had zero errors and one pre-existing warning in `tests/d6-scoped-access.integration.test.mjs`.
+- These are bounded results for the implemented API paths and disposable CI targets. They do not prove that unimplemented future membership/assignment mutation routes or ERP operations are protected.
+
+### Remaining boundaries
+
+1. Hosted/production database role capability and deployment configuration remain **NOT VERIFIED**. The previously observed hosted credential had `rolsuper = true`; RLS must not be represented as a security boundary against arbitrary SQL executed with that credential. The accepted architecture keeps application-layer authorization as the primary request-path boundary and RLS as defense-in-depth, with backend/credential compromise remaining a residual risk.
+2. No hosted connection, privilege change, migration, secret change, or production smoke test was performed. Any hosted-provider verification or deployment action requires separate explicit authorization.
+3. Better Auth session lookup still occurs before the tenant transaction. The time-of-check/time-of-use window for session revocation racing with transaction start remains a separate design decision; do not claim the session lookup and protected transaction are atomic.
+4. Current protected API coverage is limited to the implemented Organization member, Company, Plant, custom-role and role-assignment operations. Future mutation, audit, webhook, scheduled-job, background-job and ERP routes require their own actor attribution, exact-scope authorization and adversarial tests.
+5. F-03 is bounded coverage, not a blanket proof of all application tenant isolation or hosted behavior.
+
+**Disposition:** F-01, F-02, F-04 and F-05 implementation findings are closed for the reviewed code paths; F-03 has bounded passing evidence for the implemented API slice. **V04 remains BLOCKED** pending the remaining hosted/production and owner-controlled acceptance decisions. V05–V10 and Phase 1 remain independently blocked. This reconciliation changes no schema, migration, policy, database role, credential, hosted resource or gate state.
