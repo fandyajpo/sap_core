@@ -541,129 +541,128 @@ test("D6 Company Membership and Plant Assignment lifecycles", async (t) => {
     );
     assert.equal(await scopedAccess.hasPlantAccess(userC, plantA), false);
   });
-});
 
-
-test("D6 concurrent status transitions release Company and Plant slots atomically", async () => {
-  assert.ok(concurrentCompanyMembership, "the prior D6 concurrency test must create its CompanyMembership");
-  const companyOld = await pool.query(
-    `SELECT "id" FROM "core"."company_membership"
-     WHERE "id" = $1`,
-    [concurrentCompanyMembership.id],
-  );
-  assert.equal(companyOld.rows.length, 1);
-  const [userC] = fixture.users.slice(2);
-  const [companyA] = fixture.companies;
-  const [plantA] = fixture.plants;
-  const [membershipC] = fixture.organizationMemberships;
-
-  const first = await pool.connect();
-  const second = await pool.connect();
-  const applicationName = `d6-company-transition-${randomUUID()}`;
-  let firstOpen = false;
-  let secondOpen = false;
-  let insertCompany;
-
-  try {
-    await first.query("BEGIN");
-    firstOpen = true;
-    await first.query(
-      `UPDATE "core"."company_membership"
-       SET "status" = 'REVOKED', "updated_at" = NOW()
+  await t.test("concurrent status transitions release Company and Plant slots atomically", async () => {
+    assert.ok(concurrentCompanyMembership, "the prior D6 concurrency test must create its CompanyMembership");
+    const companyOld = await pool.query(
+      `SELECT "id" FROM "core"."company_membership"
        WHERE "id" = $1`,
       [concurrentCompanyMembership.id],
     );
-
-    await second.query("BEGIN");
-    secondOpen = true;
-    await second.query("SELECT set_config('application_name', $1, false)", [applicationName]);
-    const replacementCompanyId = randomUUID();
-    insertCompany = second.query(
-      `INSERT INTO "core"."company_membership"
-         ("id", "userId", "organizationMembershipId", "organizationId", "companyId", "status", "created_at", "updated_at")
-       VALUES ($1, $2, $3, (SELECT "organizationId" FROM "core"."company" WHERE "id" = $4), $4, 'ACTIVE', NOW(), NOW())`,
-      [replacementCompanyId, userC, membershipC, companyA],
-    );
-    await waitForLockWait(applicationName);
-    await first.query("COMMIT");
-    firstOpen = false;
-    await insertCompany;
-    await second.query("COMMIT");
-    secondOpen = false;
-
-    const { rows } = await pool.query(
-      `SELECT "id", "status"::text AS "status" FROM "core"."company_membership"
-       WHERE "userId" = $1 AND "companyId" = $2
-       AND "id" = ANY($3::uuid[]) ORDER BY "id"`,
-      [userC, companyA, [concurrentCompanyMembership.id, replacementCompanyId]],
-    );
-    assert.deepEqual(
-      Object.fromEntries(rows.map((row) => [row.id, row.status])),
-      { [concurrentCompanyMembership.id]: "REVOKED", [replacementCompanyId]: "ACTIVE" },
-    );
-
-    const activeCompanyId = replacementCompanyId;
-    const activePlantRows = await pool.query(
-      `SELECT "id" FROM "core"."plant_assignment"
-       WHERE "userId" = $1 AND "plantId" = $2 AND "status" = 'SUSPENDED'`,
-      [userC, plantA],
-    );
-    assert.equal(activePlantRows.rows.length, 1);
-    const oldPlantId = activePlantRows.rows[0].id;
-
-    const plantFirst = await pool.connect();
-    const plantSecond = await pool.connect();
-    const plantApplicationName = `d6-plant-transition-${randomUUID()}`;
-    let plantFirstOpen = false;
-    let plantSecondOpen = false;
-    let insertPlant;
+    assert.equal(companyOld.rows.length, 1);
+    const [userC] = fixture.users.slice(2);
+    const [companyA] = fixture.companies;
+    const [plantA] = fixture.plants;
+    const [membershipC] = fixture.organizationMemberships;
+  
+    const first = await pool.connect();
+    const second = await pool.connect();
+    const applicationName = `d6-company-transition-${randomUUID()}`;
+    let firstOpen = false;
+    let secondOpen = false;
+    let insertCompany;
+  
     try {
-      await plantFirst.query("BEGIN");
-      plantFirstOpen = true;
-      await plantFirst.query(
-        `UPDATE "core"."plant_assignment"
-         SET "status" = 'ENDED', "updated_at" = NOW()
+      await first.query("BEGIN");
+      firstOpen = true;
+      await first.query(
+        `UPDATE "core"."company_membership"
+         SET "status" = 'REVOKED', "updated_at" = NOW()
          WHERE "id" = $1`,
-        [oldPlantId],
+        [concurrentCompanyMembership.id],
       );
-
-      await plantSecond.query("BEGIN");
-      plantSecondOpen = true;
-      await plantSecond.query("SELECT set_config('application_name', $1, false)", [plantApplicationName]);
-      const replacementPlantId = randomUUID();
-      insertPlant = plantSecond.query(
-        `INSERT INTO "core"."plant_assignment"
-           ("id", "userId", "companyMembershipId", "organizationId", "companyId", "plantId", "status", "created_at", "updated_at")
-         SELECT $1, $2, $3, "organizationId", "companyId", $4, 'ACTIVE', NOW(), NOW()
-         FROM "core"."company_membership" WHERE "id" = $3`,
-        [replacementPlantId, userC, activeCompanyId, plantA],
+  
+      await second.query("BEGIN");
+      secondOpen = true;
+      await second.query("SELECT set_config('application_name', $1, false)", [applicationName]);
+      const replacementCompanyId = randomUUID();
+      insertCompany = second.query(
+        `INSERT INTO "core"."company_membership"
+           ("id", "userId", "organizationMembershipId", "organizationId", "companyId", "status", "created_at", "updated_at")
+         VALUES ($1, $2, $3, (SELECT "organizationId" FROM "core"."company" WHERE "id" = $4), $4, 'ACTIVE', NOW(), NOW())`,
+        [replacementCompanyId, userC, membershipC, companyA],
       );
-      await waitForLockWait(plantApplicationName);
-      await plantFirst.query("COMMIT");
-      plantFirstOpen = false;
-      await insertPlant;
-      await plantSecond.query("COMMIT");
-      plantSecondOpen = false;
-
-      const { rows: plantRows } = await pool.query(
-        `SELECT "id", "status"::text AS "status" FROM "core"."plant_assignment"
-         WHERE "userId" = $1 AND "plantId" = $2 AND "id" = ANY($3::uuid[])`,
-        [userC, plantA, [oldPlantId, replacementPlantId]],
+      await waitForLockWait(applicationName);
+      await first.query("COMMIT");
+      firstOpen = false;
+      await insertCompany;
+      await second.query("COMMIT");
+      secondOpen = false;
+  
+      const { rows } = await pool.query(
+        `SELECT "id", "status"::text AS "status" FROM "core"."company_membership"
+         WHERE "userId" = $1 AND "companyId" = $2
+         AND "id" = ANY($3::uuid[]) ORDER BY "id"`,
+        [userC, companyA, [concurrentCompanyMembership.id, replacementCompanyId]],
       );
       assert.deepEqual(
-        Object.fromEntries(plantRows.map((row) => [row.id, row.status])),
-        { [oldPlantId]: "ENDED", [replacementPlantId]: "ACTIVE" },
+        Object.fromEntries(rows.map((row) => [row.id, row.status])),
+        { [concurrentCompanyMembership.id]: "REVOKED", [replacementCompanyId]: "ACTIVE" },
       );
+  
+      const activeCompanyId = replacementCompanyId;
+      const activePlantRows = await pool.query(
+        `SELECT "id" FROM "core"."plant_assignment"
+         WHERE "userId" = $1 AND "plantId" = $2 AND "status" = 'SUSPENDED'`,
+        [userC, plantA],
+      );
+      assert.equal(activePlantRows.rows.length, 1);
+      const oldPlantId = activePlantRows.rows[0].id;
+  
+      const plantFirst = await pool.connect();
+      const plantSecond = await pool.connect();
+      const plantApplicationName = `d6-plant-transition-${randomUUID()}`;
+      let plantFirstOpen = false;
+      let plantSecondOpen = false;
+      let insertPlant;
+      try {
+        await plantFirst.query("BEGIN");
+        plantFirstOpen = true;
+        await plantFirst.query(
+          `UPDATE "core"."plant_assignment"
+           SET "status" = 'ENDED', "updated_at" = NOW()
+           WHERE "id" = $1`,
+          [oldPlantId],
+        );
+  
+        await plantSecond.query("BEGIN");
+        plantSecondOpen = true;
+        await plantSecond.query("SELECT set_config('application_name', $1, false)", [plantApplicationName]);
+        const replacementPlantId = randomUUID();
+        insertPlant = plantSecond.query(
+          `INSERT INTO "core"."plant_assignment"
+             ("id", "userId", "companyMembershipId", "organizationId", "companyId", "plantId", "status", "created_at", "updated_at")
+           SELECT $1, $2, $3, "organizationId", "companyId", $4, 'ACTIVE', NOW(), NOW()
+           FROM "core"."company_membership" WHERE "id" = $3`,
+          [replacementPlantId, userC, activeCompanyId, plantA],
+        );
+        await waitForLockWait(plantApplicationName);
+        await plantFirst.query("COMMIT");
+        plantFirstOpen = false;
+        await insertPlant;
+        await plantSecond.query("COMMIT");
+        plantSecondOpen = false;
+  
+        const { rows: plantRows } = await pool.query(
+          `SELECT "id", "status"::text AS "status" FROM "core"."plant_assignment"
+           WHERE "userId" = $1 AND "plantId" = $2 AND "id" = ANY($3::uuid[])`,
+          [userC, plantA, [oldPlantId, replacementPlantId]],
+        );
+        assert.deepEqual(
+          Object.fromEntries(plantRows.map((row) => [row.id, row.status])),
+          { [oldPlantId]: "ENDED", [replacementPlantId]: "ACTIVE" },
+        );
+      } finally {
+        if (plantFirstOpen) await plantFirst.query("ROLLBACK");
+        if (plantSecondOpen) await plantSecond.query("ROLLBACK");
+        plantFirst.release();
+        plantSecond.release();
+      }
     } finally {
-      if (plantFirstOpen) await plantFirst.query("ROLLBACK");
-      if (plantSecondOpen) await plantSecond.query("ROLLBACK");
-      plantFirst.release();
-      plantSecond.release();
+      if (firstOpen) await first.query("ROLLBACK");
+      if (secondOpen) await second.query("ROLLBACK");
+      first.release();
+      second.release();
     }
-  } finally {
-    if (firstOpen) await first.query("ROLLBACK");
-    if (secondOpen) await second.query("ROLLBACK");
-    first.release();
-    second.release();
-  }
+  });
 });
