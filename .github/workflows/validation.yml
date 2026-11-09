@@ -27,6 +27,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test:tenant-context
+      - run: pnpm test:tenant-target-context
+      - run: pnpm test:authorization-policy
 
   v03-integration:
     runs-on: ubuntu-latest
