@@ -364,6 +364,37 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       `UPDATE "core"."role_definition" SET "code" = 'tampered' WHERE "id" = $1`,
       [orgOwnerId],
     ));
+    await assertDatabaseRejects(() => client.query(
+      `DELETE FROM "core"."role_permission_grant"
+        WHERE "id" = (
+          SELECT "id" FROM "core"."role_permission_grant"
+          WHERE "role_definition_id" = $1 LIMIT 1
+        )`,
+      [orgOwnerId],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `INSERT INTO "core"."role_definition"
+         ("id", "role_family_id", "code", "version", "kind", "scope", "ownerOrganizationId", "updated_at")
+       VALUES ($1, $2, 'd8-company-custom-bypass', 1, 'ORGANIZATION_CUSTOM',
+               'COMPANY'::"core"."RoleScope", $3, NOW())`,
+      [randomUUID(), randomUUID(), fixture.organizationAId],
+    ));
+
+    const unsealedCustomRoleId = randomUUID();
+    await client.query(
+      `INSERT INTO "core"."role_definition"
+         ("id", "role_family_id", "code", "version", "kind", "scope", "ownerOrganizationId", "updated_at")
+       VALUES ($1, $2, 'd8-deny-custom-bypass', 1, 'ORGANIZATION_CUSTOM',
+               'ORGANIZATION'::"core"."RoleScope", $3, NOW())`,
+      [unsealedCustomRoleId, randomUUID(), fixture.organizationAId],
+    );
+    await assertDatabaseRejects(() => client.query(
+      `INSERT INTO "core"."role_permission_grant"
+         ("id", "role_definition_id", "permission_definition_id", "effect")
+       SELECT $1, $2, pd."id", 'DENY'::"core"."PermissionGrantEffect"
+         FROM "core"."permission_definition" pd WHERE pd."code" = 'organization.read'`,
+      [randomUUID(), unsealedCustomRoleId],
+    ));
   });
 
   await t.test("create rejects missing human actors and Organizations", async () => {
