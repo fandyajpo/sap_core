@@ -148,6 +148,7 @@ function grantApplies(
 ): boolean {
   if (grant.isBreakGlass) return false;
 
+  if (grant.roleKind === "ORGANIZATION_CUSTOM" && Object.hasOwn(rolePermissions, grant.roleCode)) return false;
   const isBuiltInRole = Object.hasOwn(rolePermissions, grant.roleCode);
   const builtInRole = isBuiltInRole ? grant.roleCode as BuiltInTenantRole : null;
   if (builtInRole && builtInRoleScopes[builtInRole] !== grant.scope) return false;
