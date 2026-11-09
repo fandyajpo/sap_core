@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ScopedAccessDatabase, ScopedAccessSession } from "./scoped-access-service.ts";
 import type { RoleScope } from "./role-assignment-service.ts";
-import type { AuthorizationPermission } from "./authorization-policy-core.ts";
+import { isCustomRolePermissionSubset, type AuthorizationPermission } from "./authorization-policy-core.ts";
 
 export type CustomRoleScope = "ORGANIZATION";
 export type RoleDefinitionAuditEventType = "CREATE" | "REVISE";
@@ -58,6 +58,10 @@ export interface CustomRoleReviseAuthorization extends CustomRoleCreateAuthoriza
 
 /** Implementations must bind the human actor to the caller's approved Organization-admin policy. */
 export interface RoleDefinitionAuthorization {
+  getDelegablePermissions(input: {
+    actorUserId: string;
+    organizationId: string;
+  }): Promise<readonly AuthorizationPermission[]>;
   authorizeCreate(input: CustomRoleCreateAuthorization): Promise<boolean>;
   authorizeRevise(input: CustomRoleReviseAuthorization): Promise<boolean>;
 }
@@ -245,10 +249,11 @@ async function writeAudit(
 
 function requireAuthorization(authorization: RoleDefinitionAuthorization): void {
   if (
+    typeof authorization?.getDelegablePermissions !== "function" ||
     typeof authorization?.authorizeCreate !== "function" ||
     typeof authorization?.authorizeRevise !== "function"
   ) {
-    throw new Error("Organization custom-role create and revise authorization policies are required.");
+    throw new Error("Organization custom-role delegation, create, and revise authorization policies are required.");
   }
 }
 
@@ -270,6 +275,13 @@ export function createRoleDefinitionService(
         await requireOrganization(session, input.organizationId);
 
         const permissions = await requirePermissionSet(session, input.permissions);
+        const delegablePermissions = await authorization.getDelegablePermissions({
+          actorUserId: input.actorUserId,
+          organizationId: input.organizationId,
+        });
+        if (!isCustomRolePermissionSubset(permissions, delegablePermissions)) {
+          throw new RoleDefinitionError("AUTHORIZATION_DENIED", "The requested permission set exceeds the creator's delegable permissions.");
+        }
         const authorized = await authorization.authorizeCreate({
           actorUserId: input.actorUserId,
           organizationId: input.organizationId,
@@ -361,6 +373,13 @@ export function createRoleDefinitionService(
         }
         const priorPermissions = input.permissions ?? await readPermissionSnapshot(session, source.id);
         const permissions = await requirePermissionSet(session, priorPermissions);
+        const delegablePermissions = await authorization.getDelegablePermissions({
+          actorUserId: input.actorUserId,
+          organizationId: source.ownerOrganizationId,
+        });
+        if (!isCustomRolePermissionSubset(permissions, delegablePermissions)) {
+          throw new RoleDefinitionError("AUTHORIZATION_DENIED", "The revised permission set exceeds the creator's delegable permissions.");
+        }
         const nextVersion = source.version + 1;
         const authorized = await authorization.authorizeRevise({
           actorUserId: input.actorUserId,
