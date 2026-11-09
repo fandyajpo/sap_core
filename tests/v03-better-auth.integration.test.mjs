@@ -515,7 +515,7 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
         await authRequest("/get-session", { cookie: foreignCookie }),
         "foreign tenant get session",
       );
-      const foreignUserId = foreignSession.user.id;
+      const adversaryUserId = foreignSession.user.id;
       const foreignOrganizationId = randomUUID();
       const foreignCompanyId = randomUUID();
       const foreignPlantId = randomUUID();
@@ -538,14 +538,14 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
         `INSERT INTO "core"."organization_membership"
            ("id", "userId", "organizationId", "status", "created_at", "updated_at")
          VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())`,
-        [foreignMembershipId, foreignUserId, foreignOrganizationId],
+        [foreignMembershipId, adversaryUserId, foreignOrganizationId],
       );
       await pool.query(
         `INSERT INTO "core"."organization_role_assignment"
            ("id", "organizationMembershipId", "roleDefinitionId", "role_scope",
             "grant_actor_user_id", "is_break_glass", "created_at")
          VALUES ($1, $2, $3, 'ORGANIZATION'::"core"."RoleScope", $4, FALSE, NOW())`,
-        [randomUUID(), foreignMembershipId, ownerRoleRows[0].id, foreignUserId],
+        [randomUUID(), foreignMembershipId, ownerRoleRows[0].id, adversaryUserId],
       );
 
       const secondOrganizationMembershipId = randomUUID();
