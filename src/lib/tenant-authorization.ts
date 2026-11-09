@@ -1,6 +1,10 @@
 import "server-only";
 
-import { evaluateAuthorization, type AuthorizationPermission } from "@/lib/authorization-policy-core";
+import type { Prisma } from "@/generated/prisma/client";
+import {
+  evaluateAuthorization,
+  type AuthorizationPermission,
+} from "@/lib/authorization-policy-core";
 import { loadAuthorizationGrants } from "@/lib/authorization-grant-loader";
 import { resolveTenantTargetContext } from "@/lib/tenant-target-context";
 import type { TenantScopeRequest } from "@/lib/tenant-context-core";
@@ -16,16 +20,17 @@ export class TenantAuthorizationError extends Error {
 }
 
 /**
- * Server-side authorization boundary for tenant operations. Call this from
- * every protected Server Action / Route Handler before reading or mutating
- * tenant-owned data. The actor and target ancestry are resolved server-side.
+ * Authorization and its protected operation must share this transaction client.
+ * The verified session is resolved before the transaction is opened.
  */
 export async function requireTenantPermission(
+  tx: Prisma.TransactionClient,
+  session: { user: { id: string } } | null,
   request: TenantScopeRequest,
   permission: AuthorizationPermission,
 ) {
-  const context = await resolveTenantTargetContext(request);
-  const { actorUserId, grants, denies } = await loadAuthorizationGrants(context);
+  const context = await resolveTenantTargetContext(tx, session, request);
+  const { actorUserId, grants, denies } = await loadAuthorizationGrants(tx, context);
   if (actorUserId !== context.userId) {
     throw new TenantAuthorizationError(permission, "ACTOR_CONTEXT_MISMATCH");
   }
