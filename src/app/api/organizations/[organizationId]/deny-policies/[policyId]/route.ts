@@ -32,7 +32,7 @@ export async function PATCH(
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof TenantDenyPolicyError) {
-      if (error.code === "FORBIDDEN" || error.code !== "INVALID_SCOPE") {
+      if (error.code === "FORBIDDEN" || error.code === "UNAUTHENTICATED") {
         await recordDeniedTenantDenyWriteAttempt(organizationId, "REVOKE");
       }
       const status =
@@ -43,7 +43,7 @@ export async function PATCH(
       return NextResponse.json({ error: error.message }, { status });
     }
     if (error instanceof TenantTargetContextError) {
-      if (error.code === "UNAUTHENTICATED") {
+      if (error.code !== "INVALID_SCOPE") {
         await recordDeniedTenantDenyWriteAttempt(organizationId, "REVOKE");
       }
       const status = error.code === "UNAUTHENTICATED" ? 401 :
