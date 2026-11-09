@@ -24,6 +24,7 @@ export async function grantRoleAssignmentForCurrentUser(input: {
   const service = createRoleAssignmentService(
     scopedAccessDatabase,
     createRoleAssignmentAuthorization(actorUserId, input.organizationId),
+    { enforceRoleDefinitionGovernance: true },
   );
   return service.grantRoleAssignment({
     scope: input.scope,
