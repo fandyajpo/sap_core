@@ -193,7 +193,11 @@ after(async () => {
       }
 
       await pool.query(
-        `UPDATE "core"."permission_definition" SET "is_delegable" = FALSE WHERE "code" = 'organization.read'`,
+        `UPDATE "core"."permission_delegation_policy"
+            SET "is_delegable" = FALSE, "approved_at" = NULL, "approved_by" = NULL
+          WHERE "permission_definition_id" = (
+            SELECT "id" FROM "core"."permission_definition" WHERE "code" = 'organization.read'
+          )`,
       );
 
       const cleanupQueries = [
@@ -604,7 +608,12 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
 
       // Simulate an owner-approved delegable permission in this disposable fixture.
       await pool.query(
-        `UPDATE "core"."permission_definition" SET "is_delegable" = TRUE WHERE "code" = 'organization.read'`,
+        `UPDATE "core"."permission_delegation_policy"
+            SET "is_delegable" = TRUE, "approved_at" = NOW(), "approved_by" = $1
+          WHERE "permission_definition_id" = (
+            SELECT "id" FROM "core"."permission_definition" WHERE "code" = 'organization.read'
+          )`,
+        [userId],
       );
 
       const spoofedRoleCreate = await fetch(
@@ -657,7 +666,11 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       assert.equal(revisedCustomRole.role.code, customRoleCode + "-v2");
 
       await pool.query(
-        `UPDATE "core"."permission_definition" SET "is_delegable" = FALSE WHERE "code" = 'organization.read'`,
+        `UPDATE "core"."permission_delegation_policy"
+            SET "is_delegable" = FALSE, "approved_at" = NULL, "approved_by" = NULL
+          WHERE "permission_definition_id" = (
+            SELECT "id" FROM "core"."permission_definition" WHERE "code" = 'organization.read'
+          )`,
       );
 
       const firstProfileResponse = await fetch(`${authURL}/account`, {
