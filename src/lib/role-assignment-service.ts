@@ -265,7 +265,7 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput, enforceRo
       AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
         OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
           AND rd."ownerOrganizationId" = pa."organizationId"))
-      AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE`;
+      AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}`;
 }
 
 
