@@ -418,3 +418,74 @@ model BreakGlassAccessAudit {
   @@map("break_glass_access_audit")
   @@schema("core")
 }
+
+
+enum DenyAuditEventType {
+  POLICY_CREATED
+  POLICY_REVOKED
+  POLICY_READ
+  POLICY_READ_DENIED
+
+  @@schema("core")
+}
+
+enum DenyAuditOutcome {
+  SUCCESS
+  DENIED
+  FAILURE
+
+  @@schema("core")
+}
+
+// Dedicated principal-bound DENY policy. It is intentionally separate from
+// reusable RolePermissionGrant snapshots.
+model TenantDenyPolicy {
+  id                     String     @id @default(uuid()) @db.Uuid
+  organizationId         String     @map("organization_id") @db.Uuid
+  targetMembershipId     String     @map("target_membership_id") @db.Uuid
+  targetUserId           String     @map("target_user_id")
+  permissionDefinitionId String     @map("permission_definition_id") @db.Uuid
+  scope                  RoleScope
+  companyId              String?    @map("company_id") @db.Uuid
+  plantId                String?    @map("plant_id") @db.Uuid
+  reason                 String     @db.Text
+  issuedByUserId         String     @map("issued_by_user_id")
+  issuedAt               DateTime   @default(now()) @map("issued_at") @db.Timestamptz(6)
+  expiresAt              DateTime?  @map("expires_at") @db.Timestamptz(6)
+  revokedAt              DateTime?  @map("revoked_at") @db.Timestamptz(6)
+  revokedByUserId        String?    @map("revoked_by_user_id")
+  revokeReason           String?    @map("revoke_reason") @db.Text
+
+  @@index([organizationId, targetMembershipId, issuedAt])
+  @@index([targetMembershipId, scope, companyId, plantId, permissionDefinitionId])
+  @@map("tenant_deny_policy")
+  @@schema("core")
+}
+
+// Append-only evidence for policy lifecycle and DENY-history read attempts.
+// Nullable actor/target fields allow recording unauthenticated or malformed
+// read attempts without trusting client-supplied identity.
+model TenantDenyAuditEvent {
+  id                     String              @id @default(uuid()) @db.Uuid
+  policyId               String?             @map("policy_id") @db.Uuid
+  organizationId         String?             @map("organization_id") @db.Uuid
+  targetMembershipId     String?             @map("target_membership_id") @db.Uuid
+  targetUserId           String?             @map("target_user_id")
+  permissionDefinitionId String?             @map("permission_definition_id") @db.Uuid
+  scope                  RoleScope?
+  companyId              String?             @map("company_id") @db.Uuid
+  plantId                String?             @map("plant_id") @db.Uuid
+  actorUserId            String?             @map("actor_user_id")
+  eventType              DenyAuditEventType  @map("event_type")
+  outcome                DenyAuditOutcome
+  reason                 String?             @db.Text
+  reasonCode             String?             @map("reason_code") @db.VarChar(64)
+  requestId              String?             @map("request_id") @db.VarChar(128)
+  occurredAt             DateTime            @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  @@index([organizationId, occurredAt])
+  @@index([policyId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("tenant_deny_audit_event")
+  @@schema("core")
+}
