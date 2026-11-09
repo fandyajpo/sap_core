@@ -74,6 +74,24 @@ export async function requireTenantPermission(
     denies,
   });
   if (!decision.allowed) {
+    if (decision.reason === "EXPLICIT_DENY") {
+      await tx.$executeRaw`
+        INSERT INTO "core"."tenant_deny_audit_event"
+          ("id", "organization_id", "target_membership_id", "target_user_id",
+           "permission_definition_id", "scope", "company_id", "plant_id",
+           "actor_user_id", "event_type", "outcome", "reason_code", "occurred_at")
+        SELECT gen_random_uuid(), ${context.organizationId}::uuid,
+          ${context.organizationMembershipId}::uuid, ${context.userId},
+          pd."id", ${context.scope}::"core"."RoleScope",
+          ${context.companyId}::uuid, ${context.plantId}::uuid,
+          ${context.userId},
+          'POLICY_ENFORCEMENT_DENIED'::"core"."DenyAuditEventType",
+          'DENIED'::"core"."DenyAuditOutcome",
+          'EXPLICIT_DENY', clock_timestamp()
+        FROM "core"."permission_definition" pd
+        WHERE pd."code" = ${permission}
+      `;
+    }
     throw new TenantAuthorizationError(permission, decision.reason);
   }
 
