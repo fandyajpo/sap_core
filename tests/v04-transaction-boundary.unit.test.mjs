@@ -49,3 +49,15 @@ test("Company and Plant target GUCs are installed only after each descendant is 
   assert.match(target, /if \(company\) \{[\s\S]*set_config\('app\.company_id'/);
   assert.match(target, /if \(plant\) \{[\s\S]*set_config\('app\.plant_id'/);
 });
+
+
+test("custom role create and revise hold an active Organization membership lock through commit", async () => {
+  const adapter = await source("src/lib/tenant-role-definition-service.ts");
+  const membershipCheck = adapter.indexOf('FROM "core"."organization_membership"');
+  const membershipLock = adapter.indexOf("FOR SHARE", membershipCheck);
+  const membershipCheckEnd = adapter.indexOf(");", membershipCheck);
+
+  assert.notEqual(membershipCheck, -1);
+  assert.notEqual(membershipLock, -1);
+  assert.ok(membershipLock < membershipCheckEnd, "the active actor membership row is locked by the operation transaction");
+});
