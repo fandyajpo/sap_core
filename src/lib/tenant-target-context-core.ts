@@ -65,8 +65,8 @@ export function createTenantTargetContextResolver(dependencies: {
     const userId = session.user.id;
 
     const membership = await dependencies.repository.findOrganizationMembership(userId, request.organizationId);
-    if (!membership) {
-      throw new TenantTargetContextError("TENANT_ACCESS_DENIED", "No active Organization Membership exists for this session.");
+    if (!membership || membership.organizationId !== request.organizationId) {
+      throw new TenantTargetContextError("TENANT_ACCESS_DENIED", "No active, Organization-consistent Membership exists for this session.");
     }
 
     if (request.kind === "ORGANIZATION") {
@@ -81,7 +81,7 @@ export function createTenantTargetContextResolver(dependencies: {
     }
 
     const company = await dependencies.repository.findCompanyTarget(request.organizationId, request.companyId);
-    if (!company || company.organizationId !== membership.organizationId) {
+    if (!company || company.id !== request.companyId || company.organizationId !== membership.organizationId) {
       throw new TenantTargetContextError("TENANT_ACCESS_DENIED", "The target Company is not a descendant of the active Organization.");
     }
 
@@ -97,7 +97,7 @@ export function createTenantTargetContextResolver(dependencies: {
     }
 
     const plant = await dependencies.repository.findPlantTarget(request.organizationId, request.companyId, request.plantId);
-    if (!plant || plant.organizationId !== membership.organizationId || plant.companyId !== company.id) {
+    if (!plant || plant.id !== request.plantId || plant.organizationId !== membership.organizationId || plant.companyId !== company.id) {
       throw new TenantTargetContextError("TENANT_ACCESS_DENIED", "The target Plant is not a descendant of the active Organization and Company.");
     }
 
