@@ -1,0 +1,286 @@
+name: V04 production read-only verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v04-production-readonly-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Inspect hosted PostgreSQL metadata (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Check out the approved revision
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Install production dependencies
+        run: pnpm install --frozen-lockfile --prod
+
+      - name: Verify hosted database without writes
+        env:
+          NODE_OPTIONS: --disable-warning=ExperimentalWarning
+        run: |
+          set +x
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+
+          const expectedRlsTables = [
+            "organization",
+            "company",
+            "plant",
+            "organization_membership",
+            "company_membership",
+            "plant_assignment",
+            "organization_role_assignment",
+            "company_role_assignment",
+            "plant_role_assignment",
+            "role_definition",
+            "role_permission_grant",
+            "role_definition_audit",
+            "break_glass_access_audit",
+          ];
+
+          const expectedDelegable = [
+            "company.read",
+            "organization.read",
+            "plant.read",
+            "roles.read",
+          ];
+
+          const expectedMigrations = [
+            "20261106000513_phase_0_3_v01_initial",
+            "20261106001500_create_schemas_prerequisite",
+            "20261106002304_phase_0_3_v02_cross_schema_relation",
+            "20261106010425_phase_0_3_v03_better_auth_identity",
+            "20261106080734_create_remaining_schemas",
+            "20261106090000_p05_x06_restrict_auth_user_deletion",
+            "20261107112700_v0451_tenant_scope_schema",
+            "20261107130000_d7_typed_role_assignments",
+            "20261108130000_d8_role_definition_governance",
+            "20261109120000_v04_permission_persistence",
+            "20261109130000_v04_tenant_rls",
+            "20261109140000_v04_permission_delegation",
+            "20261109150000_v04_owner_approved_delegation_allowlist",
+          ];
+
+          const client = new pg.Client({
+            connectionString: process.env.DATABASE_URL,
+            connectionTimeoutMillis: 15000,
+            query_timeout: 15000,
+            statement_timeout: 15000,
+            application_name: "sap-core-v04-readonly-verification",
+          });
+
+          let stage = "connect";
+          let transactionOpen = false;
+
+          try {
+            if (!process.env.DATABASE_URL) {
+              throw Object.assign(new Error("missing secret"), { code: "MISSING_DATABASE_URL" });
+            }
+
+            await client.connect();
+            stage = "begin-read-only";
+            await client.query("BEGIN READ ONLY");
+            transactionOpen = true;
+
+            stage = "connection-identity";
+            const identity = await client.query(`
+              SELECT
+                current_database() AS database_name,
+                current_user AS current_role,
+                session_user AS session_role,
+                current_setting('transaction_read_only') AS transaction_read_only,
+                current_setting('server_version') AS server_version
+            `);
+            assert.equal(identity.rows[0].transaction_read_only, "on");
+
+            stage = "runtime-role-flags";
+            const role = await client.query(`
+              SELECT rolname, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolcanlogin
+              FROM pg_roles
+              WHERE rolname = current_user
+            `);
+            assert.equal(role.rowCount, 1);
+            assert.equal(role.rows[0].rolsuper, false, "runtime role must not be superuser");
+            assert.equal(role.rows[0].rolbypassrls, false, "runtime role must not bypass RLS");
+            assert.equal(role.rows[0].rolcanlogin, true, "runtime role must be able to log in");
+
+            stage = "rls-table-catalog";
+            const tableResult = await client.query(
+              `
+              SELECT
+                c.relname AS table_name,
+                owner.rolname AS table_owner,
+                c.relrowsecurity AS rls_enabled,
+                c.relforcerowsecurity AS rls_forced,
+                (owner.rolname = current_user OR pg_has_role(current_user, owner.oid, 'MEMBER')) AS runtime_is_owner_or_member,
+                has_table_privilege(current_user, c.oid, 'SELECT') AS can_select,
+                has_table_privilege(current_user, c.oid, 'INSERT') AS can_insert,
+                has_table_privilege(current_user, c.oid, 'UPDATE') AS can_update,
+                has_table_privilege(current_user, c.oid, 'DELETE') AS can_delete
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              JOIN pg_roles owner ON owner.oid = c.relowner
+              WHERE n.nspname = 'core'
+                AND c.relkind IN ('r', 'p')
+                AND c.relname = ANY($1::text[])
+              ORDER BY c.relname
+              `,
+              [expectedRlsTables],
+            );
+            const byTable = new Map(tableResult.rows.map(row => [row.table_name, row]));
+            assert.equal(byTable.size, expectedRlsTables.length);
+            for (const tableName of expectedRlsTables) {
+              const row = byTable.get(tableName);
+              assert.ok(row, `missing RLS table: ${tableName}`);
+              assert.equal(row.rls_enabled, true, `RLS not enabled: ${tableName}`);
+              assert.equal(row.runtime_is_owner_or_member, false, `runtime role owns or inherits owner: ${tableName}`);
+              assert.equal(row.can_select, true, `runtime cannot SELECT: ${tableName}`);
+            }
+
+            stage = "identity-table-exclusions";
+            const identityTables = await client.query(`
+              SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'core'
+                AND c.relname = ANY(ARRAY['user','session','account','verification'])
+                AND c.relkind IN ('r', 'p')
+              ORDER BY c.relname
+            `);
+            assert.deepEqual(
+              identityTables.rows.map(row => row.table_name),
+              ["account", "session", "user", "verification"],
+            );
+            assert.ok(identityTables.rows.every(row => row.rls_enabled === false));
+
+            stage = "rls-policies";
+            const policies = await client.query(`
+              SELECT c.relname AS table_name, p.polname AS policy_name, p.polcmd AS command
+              FROM pg_policy p
+              JOIN pg_class c ON c.oid = p.polrelid
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'core'
+                AND c.relname = ANY($1::text[])
+              ORDER BY c.relname, p.polname
+            `, [expectedRlsTables]);
+            assert.ok(policies.rowCount > 0);
+            const tablesWithPolicies = new Set(policies.rows.map(row => row.table_name));
+            for (const tableName of expectedRlsTables) {
+              assert.ok(tablesWithPolicies.has(tableName), `no RLS policy found: ${tableName}`);
+            }
+
+            stage = "permission-catalog";
+            const policyResult = await client.query(`
+              SELECT
+                pd.code,
+                dp.is_delegable,
+                dp.approved_at IS NOT NULL AS has_approval_timestamp,
+                dp.approved_by
+              FROM core.permission_delegation_policy dp
+              JOIN core.permission_definition pd
+                ON pd.id = dp.permission_definition_id
+              ORDER BY pd.code
+            `);
+            const enabled = policyResult.rows
+              .filter(row => row.is_delegable)
+              .map(row => row.code)
+              .sort();
+            assert.deepEqual(enabled, expectedDelegable);
+            assert.ok(policyResult.rows.filter(row => row.is_delegable).every(
+              row => row.has_approval_timestamp && row.approved_by === "project-owner-approval:2026-11-09",
+            ));
+
+            stage = "delegation-policy-runtime-privileges";
+            const delegationPrivileges = await client.query(`
+              SELECT
+                has_table_privilege(current_user, 'core.permission_delegation_policy', 'SELECT') AS can_select,
+                has_table_privilege(current_user, 'core.permission_delegation_policy', 'INSERT') AS can_insert,
+                has_table_privilege(current_user, 'core.permission_delegation_policy', 'UPDATE') AS can_update,
+                has_table_privilege(current_user, 'core.permission_delegation_policy', 'DELETE') AS can_delete,
+                has_table_privilege(current_user, 'core.permission_definition', 'SELECT') AS can_read_catalog,
+                has_table_privilege(current_user, 'core.permission_definition', 'INSERT') AS can_insert_catalog,
+                has_table_privilege(current_user, 'core.permission_definition', 'UPDATE') AS can_update_catalog,
+                has_table_privilege(current_user, 'core.permission_definition', 'DELETE') AS can_delete_catalog
+            `);
+            const dp = delegationPrivileges.rows[0];
+            assert.equal(dp.can_select, true);
+            assert.equal(dp.can_insert, false);
+            assert.equal(dp.can_update, false);
+            assert.equal(dp.can_delete, false);
+            assert.equal(dp.can_read_catalog, true);
+            assert.equal(dp.can_insert_catalog, false);
+            assert.equal(dp.can_update_catalog, false);
+            assert.equal(dp.can_delete_catalog, false);
+
+            stage = "migration-history";
+            const migrationResult = await client.query(`
+              SELECT migration_name, rolled_back_at, finished_at
+              FROM public."_prisma_migrations"
+              ORDER BY migration_name
+            `);
+            assert.equal(migrationResult.rowCount, expectedMigrations.length);
+            assert.deepEqual(
+              migrationResult.rows.map(row => row.migration_name).sort(),
+              [...expectedMigrations].sort(),
+            );
+            assert.ok(migrationResult.rows.every(
+              row => row.rolled_back_at === null && row.finished_at !== null,
+            ));
+
+            stage = "commit-read-only";
+            await client.query("ROLLBACK");
+            transactionOpen = false;
+
+            const result = {
+              status: "PASS",
+              transaction: "READ ONLY; rolled back after inspection",
+              identity: identity.rows[0],
+              runtime_role: role.rows[0],
+              rls_tables: tableResult.rows,
+              identity_table_exclusions: identityTables.rows,
+              rls_policy_count: policies.rowCount,
+              delegation_allowlist: enabled,
+              delegation_runtime_privileges: dp,
+              migration_count: migrationResult.rowCount,
+              migrations: migrationResult.rows.map(row => row.migration_name),
+            };
+            console.log(JSON.stringify(result, null, 2));
+          } catch (error) {
+            if (transactionOpen) {
+              try { await client.query("ROLLBACK"); } catch {}
+            }
+            // Never print error.message, stack, connection config, or the client object.
+            console.error(JSON.stringify({
+              status: "FAIL",
+              stage,
+              code: typeof error?.code === "string" ? error.code : "VERIFICATION_FAILED",
+              detail: "Sensitive connection details and server error text were intentionally suppressed.",
+            }));
+            process.exitCode = 1;
+          } finally {
+            try { await client.end(); } catch {}
+          }
+          NODE
