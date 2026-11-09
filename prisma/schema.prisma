@@ -187,7 +187,6 @@ model Plant {
   company        Company           @relation("CompanyPlants", fields: [organizationId, companyId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict)
   assignments    PlantAssignment[]
   tenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyPlant")
-  tenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyPlant")
 
   // Composite target required for the X05 Plant reference; id remains the primary key.
   @@unique([organizationId, companyId, id], map: "plant_organization_company_id_key")
