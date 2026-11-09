@@ -120,7 +120,6 @@ jobs:
           POSTGRES_DB: sap_core_d7_test
         ports:
           - "55435:5432"
-          - "55434:5432"
         options: >-
           --health-cmd "pg_isready -U sap_core -d sap_core_d7_test"
           --health-interval 10s
@@ -290,7 +289,7 @@ jobs:
           NODE
       - name: Deploy all twelve migrations and execute D14-B
         env:
-          CI_DATABASE_PORT: "55434"
+          CI_DATABASE_PORT: "55435"
           CI_DATABASE_NAME: sap_core_d8_test
         run: |
           export DATABASE_URL="postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public"
