@@ -8,7 +8,7 @@ import {
 import { loadAuthorizationGrants } from "@/lib/authorization-grant-loader";
 import { resolveTenantTargetContext } from "@/lib/tenant-target-context";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
-import type { TenantScopeRequest } from "@/lib/tenant-context-core";
+import type { TenantScopeRequest } from "@/lib/tenant-scope-types";
 
 export class TenantAuthorizationError extends Error {
   readonly reason: string;

@@ -1,5 +1,5 @@
 import type { AuthorizationPermission } from "./authorization-policy-core.ts";
-import type { TenantScopeRequest } from "./tenant-context-core.ts";
+import type { TenantScopeRequest } from "./tenant-scope-types.ts";
 
 export interface OrganizationMemberSummary {
   membershipId: string;
