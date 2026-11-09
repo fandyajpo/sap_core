@@ -46,24 +46,18 @@ test("session-bound adapter acquires the row lock inside the same interactive tr
 });
 
 
-test("session database failure propagates before any protected work can run", async () => {
+test("session lock propagates database errors before protected callback execution", async () => {
   const lock = await source("src/lib/verified-session-lock.ts");
-  assert.match(lock, /await query\(/);
-  let protectedWorkStarted = false;
-  const failClosedQuery = async () => {
-    throw Object.assign(new Error("simulated database connection failure"), {
-      code: "08006",
-    });
-  };
-  const { lockVerifiedSessionRow } = await import("../src/lib/verified-session-lock.ts").catch(() => ({
-    lockVerifiedSessionRow: null,
-  }));
-  // The TypeScript server module is intentionally not imported by Node's unit runner.
-  // Verify the transaction adapter awaits the lock before invoking its callback.
+  assert.match(lock, /const rows = await query\(/);
+  assert.doesNotMatch(lock, /\.catch\(/);
+
   const adapter = await source("src/lib/scoped-access.ts");
   const lockPosition = adapter.indexOf("await lockVerifiedSessionRow(session.query, identity)");
   const callbackPosition = adapter.indexOf("return work(session)");
   assert.ok(lockPosition >= 0 && callbackPosition > lockPosition);
-  await assert.rejects(failClosedQuery(), (error) => error.code === "08006");
-  assert.equal(protectedWorkStarted, false);
+
+  const authorization = await source("src/lib/tenant-authorization.ts");
+  const authorizationLock = authorization.indexOf("await lockVerifiedSessionRow(");
+  const actorContext = authorization.indexOf("set_config('app.user_id'");
+  assert.ok(authorizationLock >= 0 && actorContext > authorizationLock);
 });
