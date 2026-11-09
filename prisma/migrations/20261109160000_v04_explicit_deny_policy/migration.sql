@@ -60,6 +60,12 @@ CREATE TABLE "core"."tenant_deny_policy" (
   CONSTRAINT "tenant_deny_policy_revoker_fkey"
     FOREIGN KEY ("revoked_by_user_id") REFERENCES "core"."user" ("id")
     ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT "tenant_deny_policy_company_id_fkey"
+    FOREIGN KEY ("company_id") REFERENCES "core"."company" ("id")
+    ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT "tenant_deny_policy_plant_id_fkey"
+    FOREIGN KEY ("plant_id") REFERENCES "core"."plant" ("id")
+    ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT "tenant_deny_policy_company_fkey"
     FOREIGN KEY ("organization_id", "company_id")
     REFERENCES "core"."company" ("organizationId", "id")
