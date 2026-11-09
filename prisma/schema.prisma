@@ -470,6 +470,7 @@ model TenantDenyPolicy {
   revoker User? @relation("TenantDenyPolicyRevoker", fields: [revokedByUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   company Company? @relation("TenantDenyPolicyCompany", fields: [organizationId, companyId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict)
   plant Plant? @relation("TenantDenyPolicyPlant", fields: [organizationId, companyId, plantId], references: [organizationId, companyId, id], onDelete: Restrict, onUpdate: Restrict)
+  auditEvents TenantDenyAuditEvent[]
 
   @@index([organizationId, targetMembershipId, issuedAt])
   @@index([permissionDefinitionId])
