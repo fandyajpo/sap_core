@@ -213,6 +213,12 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
   assert.equal(roleState[0].rolsuper, false);
   assert.equal(roleState[0].rolbypassrls, false);
   assert.equal(roleState[0].owned_rls_tables, 0);
+  const { rows: delegationPrivileges } = await owner.query(
+    `SELECT has_table_privilege('sap_core_runtime', 'core.permission_delegation_policy', 'SELECT') AS can_read,
+            has_table_privilege('sap_core_runtime', 'core.permission_delegation_policy', 'UPDATE') AS can_update`,
+  );
+  assert.equal(delegationPrivileges[0].can_read, true);
+  assert.equal(delegationPrivileges[0].can_update, false, "runtime role cannot approve or change delegation policy");
 
   const { rows: rlsTables } = await owner.query(
     `SELECT COUNT(*)::int AS n FROM pg_class
