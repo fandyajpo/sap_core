@@ -42,6 +42,11 @@ export async function GET(
     const history = await listTenantDenyPolicyHistory(organizationId);
     return NextResponse.json({ organizationId, ...history });
   } catch (error) {
+    console.error("[DENY history] request failed", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+      errorCode: error instanceof TenantDenyPolicyError || error instanceof TenantTargetContextError ? error.code : undefined,
+    });
     return await errorResponse(error, organizationId);
   }
 }
