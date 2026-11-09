@@ -32,7 +32,7 @@ export async function PATCH(
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof TenantDenyPolicyError) {
-      if (error.code === "FORBIDDEN" || error.code === "UNAUTHENTICATED") {
+      if (error.code === "FORBIDDEN" || error.code !== "INVALID_SCOPE") {
         await recordDeniedTenantDenyWriteAttempt(organizationId, "REVOKE");
       }
       const status =
