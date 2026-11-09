@@ -123,6 +123,9 @@ jobs:
               WHERE rolname = current_user
             `);
             assert.equal(role.rowCount, 1);
+            assert.equal(role.rows[0].rolsuper, false, "runtime role must not be superuser");
+            assert.equal(role.rows[0].rolbypassrls, false, "runtime role must not bypass RLS");
+            assert.equal(role.rows[0].rolcanlogin, true, "runtime role must be able to log in");
 
             stage = "rls-table-catalog";
             const tableResult = await client.query(
