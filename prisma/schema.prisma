@@ -169,6 +169,7 @@ model Company {
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   plants         Plant[]             @relation("CompanyPlants")
   memberships    CompanyMembership[] @relation("CompanyMemberships")
+  tenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyCompany")
 
   // Composite target required for X02 and X04 references; id remains the primary key.
   @@unique([organizationId, id], map: "company_organization_id_id_key")
@@ -185,6 +186,7 @@ model Plant {
   updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
   company        Company           @relation("CompanyPlants", fields: [organizationId, companyId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict)
   assignments    PlantAssignment[]
+  tenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyPlant")
   tenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyPlant")
 
   // Composite target required for the X05 Plant reference; id remains the primary key.
@@ -469,7 +471,8 @@ model TenantDenyPolicy {
   permissionDefinition PermissionDefinition @relation(fields: [permissionDefinitionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   issuer User @relation("TenantDenyPolicyIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   revoker User? @relation("TenantDenyPolicyRevoker", fields: [revokedByUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  plant Plant? @relation("TenantDenyPolicyPlant", fields: [organizationId, companyId, plantId], references: [organizationId, companyId, id], onDelete: Restrict, onUpdate: Restrict)
+  company Company? @relation("TenantDenyPolicyCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  plant Plant? @relation("TenantDenyPolicyPlant", fields: [plantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   auditEvents TenantDenyAuditEvent[]
 
   @@index([organizationId, targetMembershipId, issuedAt])
