@@ -3,7 +3,7 @@
 **Status:** Findings reconciled; V04 overall remains **BLOCKED**.  
 **Reconciled main baseline:** `35e3686e0d22ba0362ae39b634a653de06066204`.  
 **Latest relevant CI:** [Run #42597366143](https://github.com/fandyajpo/sap_core/actions/runs/42597366143), PR #64 head `03f1086293e7635aac6a8f1afb8629333144f8f9`, all eight jobs `success`.  
-**Scope:** Application-layer source findings F-01–F-05 and the bounded evidence now present on main.  
+**Scope:** Application-layer source findings F-01–F-05, merged main evidence, and the session-revocation adversarial evidence currently on PR #64 (pending merge).  
 **Database boundary:** Disposable PostgreSQL CI only. No hosted database was accessed, inspected, migrated, seeded or modified for this reconciliation.
 
 ## 1. Why this reconciliation exists
