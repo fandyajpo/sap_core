@@ -44,6 +44,13 @@ enum RoleScope {
   @@schema("core")
 }
 
+enum PermissionGrantEffect {
+  ALLOW
+  DENY
+
+  @@schema("core")
+}
+
 // Minimal technical-validation model only. This is not the production entity catalog.
 model ValidationRecord {
   id        String   @id @default(uuid()) @db.Uuid
@@ -262,17 +269,46 @@ model RoleDefinition {
   scope                   RoleScope
   ownerOrganizationId     String?                      @db.Uuid
   disabledAt              DateTime?                    @map("disabled_at") @db.Timestamptz(6)
+  permissionsLockedAt     DateTime?                    @map("permissions_locked_at") @db.Timestamptz(6)
   createdAt               DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt               DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
   organizationAssignments OrganizationRoleAssignment[]
   companyAssignments      CompanyRoleAssignment[]
   plantAssignments        PlantRoleAssignment[]
+  permissionGrants        RolePermissionGrant[]
 
-  // Typed assignment matching and family version identity; no permission catalog is implied.
+  // Typed assignment matching, family version identity, and sealed permission snapshots.
   @@unique([id, scope], map: "role_definition_id_scope_key")
   @@unique([roleFamilyId, version], map: "role_definition_role_family_version_key")
   @@index([ownerOrganizationId])
   @@map("role_definition")
+  @@schema("core")
+}
+
+model PermissionDefinition {
+  id          String                @id @default(uuid()) @db.Uuid
+  code        String                @unique
+  description String                @db.Text
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  grants      RolePermissionGrant[]
+
+  @@map("permission_definition")
+  @@schema("core")
+}
+
+model RolePermissionGrant {
+  id                   String                @id @default(uuid()) @db.Uuid
+  roleDefinitionId     String                @map("role_definition_id") @db.Uuid
+  permissionDefinitionId String              @map("permission_definition_id") @db.Uuid
+  effect               PermissionGrantEffect
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  roleDefinition       RoleDefinition        @relation(fields: [roleDefinitionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  permissionDefinition PermissionDefinition  @relation(fields: [permissionDefinitionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([roleDefinitionId, permissionDefinitionId], map: "role_permission_grant_role_permission_key")
+  @@index([roleDefinitionId])
+  @@index([permissionDefinitionId])
+  @@map("role_permission_grant")
   @@schema("core")
 }
 
