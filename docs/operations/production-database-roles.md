@@ -62,7 +62,7 @@ Required invariants:
 - Resolve the actor only from a verified Better Auth session.
 - Revalidate and hold a shared lock on the exact session row and expiry inside the protected transaction.
 - Hold shared locks on the active Organization membership and validated Company/Plant ancestry rows until the protected transaction completes, so concurrent suspension or ancestry changes serialize with the protected operation.
-- Hold shared locks on the effective role-assignment, membership/assignment ancestry, role-definition, and permission-grant rows used to calculate the decision, so concurrent revocation or role disablement cannot invalidate a decision mid-operation.
+- Hold shared locks on the effective role-assignment, membership/assignment ancestry, role-definition, and permission-grant rows used to calculate the decision, so concurrent revocation or role disablement cannot invalidate a decision mid-operation. Effective-assignment listing also locks the rows it returns until commit.
 - Derive actor identity server-side; reject caller-supplied actor identity fields.
 - Verify active Organization membership before accessing tenant resources.
 - Verify Company belongs to the requested Organization and Plant belongs to both the requested Company and Organization.
