@@ -4,8 +4,9 @@
 
 **Repository and disposable-CI acceptance:** PASS  
 **Hosted/production acceptance:** BLOCKED pending separate approval and provider verification.  
-**Audited ref:** `main` at `f8995b2f84a7e34f209e358d55a976a0e8a71be8` (after PR #62).  
-**CI evidence:** [GitHub Actions run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) — all 8 jobs succeeded on the PR #62 head; merge tree matches the tested PR head tree.  
+**Audited main baseline:** `35e3686e0d22ba0362ae39b634a653de06066204` (after PR #63).  
+**Session implementation:** PR #62 merged at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; [CI run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667), all 8 jobs passed.  
+**Adversarial session tests:** PR #64 head `03f1086293e7635aac6a8f1afb8629333144f8f9`; [CI run #42597366143](https://github.com/fandyajpo/sap_core/actions/runs/42597366143), all 8 jobs passed. PR #64 is pending merge.  
 **Database boundary:** Disposable PostgreSQL CI was used. No hosted database was connected to, inspected, migrated, seeded, or modified.
 
 ## Executive summary
