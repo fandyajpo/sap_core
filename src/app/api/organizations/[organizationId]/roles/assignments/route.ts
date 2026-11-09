@@ -25,6 +25,11 @@ function isScope(value: unknown): value is AssignableScope {
   return value === "ORGANIZATION" || value === "COMPANY" || value === "PLANT";
 }
 
+function isUserId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 128 &&
+    value.trim() === value && !/[\\u0000-\\u001F\\u007F]/.test(value);
+}
+
 function errorResponse(error: unknown) {
   if (error instanceof SyntaxError) {
     return NextResponse.json({ error: "A valid JSON request body is required." }, { status: 400 });
@@ -67,7 +72,7 @@ export async function GET(
     const parentId = query.get("parentId");
     const userId = query.get("userId");
 
-    if (!isScope(scope) || !isUuid(parentId) || !isUuid(userId)) {
+    if (!isScope(scope) || !isUuid(parentId) || !isUserId(userId)) {
       return NextResponse.json(
         { error: "scope, parentId, and userId query parameters are required." },
         { status: 400 },
