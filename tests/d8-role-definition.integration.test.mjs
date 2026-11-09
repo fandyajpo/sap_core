@@ -26,11 +26,11 @@ const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 if (
   process.env.D8_ALLOW_DISPOSABLE_DB !== "1" ||
   !localHosts.has(parsedDatabaseURL.hostname) ||
-  parsedDatabaseURL.port !== "55434" ||
+  !["55434", "55435"].includes(parsedDatabaseURL.port) ||
   databaseName !== "sap_core_d8_test"
 ) {
   throw new Error(
-    "D8 tests require explicit disposable DB approval and localhost:55434/sap_core_d8_test.",
+    "D8 tests require explicit disposable DB approval and an approved localhost D8 port (55434 or 55435).",
   );
 }
 const pool = new Pool({ connectionString: databaseUrl, max: 1 });
