@@ -31,7 +31,7 @@ export async function requireTenantPermission(
   request: TenantScopeRequest,
   permission: AuthorizationPermission,
 ) {
-  if (!session?.user?.id) {
+  if (!session?.session?.id || !session.user?.id) {
     throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
   }
 
