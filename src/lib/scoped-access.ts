@@ -15,7 +15,7 @@ function createSession(client: unknown): ScopedAccessSession {
   return {
     query: async <Row extends object>(statement: string, values: unknown[] = []): Promise<Row[]> => {
       const command = statement.trimStart();
-      if (/^(INSERT|UPDATE|DELETE)\\b/i.test(command) && !/\\bRETURNING\\b/i.test(command)) {
+      if (/^(INSERT|UPDATE|DELETE)\b/i.test(command) && !/\bRETURNING\b/i.test(command)) {
         await rawClient.$executeRawUnsafe(statement, ...values);
         return [];
       }
