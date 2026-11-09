@@ -196,10 +196,6 @@ after(async () => {
         `UPDATE "core"."permission_definition" SET "is_delegable" = FALSE WHERE "code" = 'organization.read'`,
       );
 
-      await pool.query(
-        `UPDATE "core"."permission_definition" SET "is_delegable" = FALSE WHERE "code" = 'organization.read'`,
-      );
-
       const cleanupQueries = [
         `DELETE FROM "core"."session"
          WHERE "userId" IN (
