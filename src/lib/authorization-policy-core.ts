@@ -127,6 +127,7 @@ function targetId(target: AuthorizationTarget): string | null {
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isValidTarget(target: AuthorizationTarget): boolean {
+  if (!['ORGANIZATION', 'COMPANY', 'PLANT'].includes(target.scope)) return false;
   if (!uuidPattern.test(target.organizationId)) return false;
   if (target.scope === "COMPANY") return Boolean(target.companyId && uuidPattern.test(target.companyId));
   if (target.scope === "PLANT") return Boolean(target.companyId && uuidPattern.test(target.companyId) && target.plantId && uuidPattern.test(target.plantId));
@@ -185,6 +186,9 @@ function grantApplies(
 }
 
 export function evaluateAuthorization(input: AuthorizationDecisionInput): AuthorizationDecision {
+  if (!authorizationPermissions.includes(input.permission)) {
+    return { allowed: false, reason: "INVALID_TARGET" };
+  }
   if (!isValidTarget(input.target)) {
     return { allowed: false, reason: "INVALID_TARGET" };
   }
