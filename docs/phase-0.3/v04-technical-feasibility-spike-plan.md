@@ -254,3 +254,14 @@ Both targets passed the exact `core.company(organizationId)` → `core.organizat
 Evidence boundary: the X01/D9 script did not independently assert `pg_constraint.convalidated` or run a separate post-rollback fixture-count query. The case is bounded to the pinned eight-migration recovery baseline and the two recorded disposable targets. It does not establish application authorization, protected operations, RLS, application tenant isolation, hosted/production database state, or complete V04 acceptance.
 
 **Case register update:** D5 = BOUNDED PASS; X01 / D9 = BOUNDED PASS. Continue with the remaining approved matrix cases in their documented order; do not repeat D5 or X01/D9 absent a specific evidence gap. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No policy decision, migration, or gate state is changed by this reconciliation.
+
+
+## X02 / D10 bounded execution reconciliation — 2026-11-09
+
+The separately authorized X02 / D10 case is now **BOUNDED PASS** on both recovered migrations 1–8 replay targets (fresh and staged). The detailed target identity, schema mapping, behavior assertions, concurrency schedules, observed outcomes, and evidence boundary are recorded in [V04.6 X02/D10 referential-integrity execution record](v04.6-x02-d10-referential-integrity-execution-record-2026-11-09.md).
+
+The run confirmed the exact composite FK core.plant(organizationId, companyId) → core.company(organizationId, id) with ON DELETE RESTRICT ON UPDATE RESTRICT, plus the matching unique target key (organizationId, id). Positive same-parent insertion succeeded. A cross-Organization Company/Plant tuple was rejected by plant_organizationId_companyId_fkey with SQLSTATE 23503. Updating either referenced Company key component and deleting the referenced Company were rejected. Both concurrency interleavings passed on both targets: parent update first followed by rollback allowed the waiting Plant insert; Plant insert first followed by commit caused the waiting parent update to fail with SQLSTATE 23503. Both target runs verified that the tenant invariant remained intact and that no X02 fixtures remained after explicit cleanup.
+
+This is a database-level bounded result for the pinned eight-migration recovery baseline only. It is not evidence of Core application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or complete V04 acceptance. No fallback validator was used or needed; the expected composite FK enforced the tested invariant.
+
+**Current case register:** D5 = BOUNDED PASS; X01 / D9 = BOUNDED PASS; X02 / D10 = BOUNDED PASS; X03–X05 = NOT RUN. Do not repeat D5, X01/D9, or X02/D10 without identifying a specific evidence gap. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No schema, migration, policy decision, or gate state is changed by this reconciliation.

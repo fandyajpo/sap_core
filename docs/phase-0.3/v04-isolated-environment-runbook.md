@@ -475,3 +475,12 @@ Evidence boundary: this SQL run did not separately query `pg_constraint.convalid
 ## Current case-state reconciliation — 2026-11-09
 
 The dated recovery-preparation and D5 sections above preserve their original historical context. Their earlier statement that X01 / D9 was NOT RUN is superseded by the separately authorized execution recorded in [V04.6 X01/D9 referential-integrity execution record](v04.6-x01-d9-referential-integrity-execution-record-2026-11-09.md). D5 and X01/D9 are now each BOUNDED PASS on both fresh and staged replay targets for the exact pinned migrations 1–8 baseline. Do not repeat either case without identifying a specific evidence gap. X02–X05 and the other remaining acceptance cases are not thereby passed. V04 remains BLOCKED.
+
+
+## X02 / D10 bounded execution reconciliation — 2026-11-09
+
+The separately authorized X02 / D10 case completed with **BOUNDED PASS** on both recovered migrations 1–8 replay targets (fresh and staged). See [V04.6 X02/D10 referential-integrity execution record](v04.6-x02-d10-referential-integrity-execution-record-2026-11-09.md).
+
+The case verified the exact composite FK core.plant(organizationId, companyId) → core.company(organizationId, id), the matching composite target key, and RESTRICT for both delete and update. Same-Organization Company/Plant insertion succeeded; a Plant pairing an Organization with a Company belonging to another Organization was rejected by the expected FK with SQLSTATE 23503. Updating either referenced Company key component and deleting the referenced Company were rejected. Both concurrency orders were exercised on each target: a parent-key update that rolled back allowed the waiting child insert; a child insert that committed caused the waiting parent-key update to fail with SQLSTATE 23503. Both targets passed final invariant checks and an explicit zero-residual-fixture query after cleanup.
+
+The result is bounded to the exact pinned migrations 1–8 recovery baseline and the two recorded disposable targets. It does not establish application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or complete V04 acceptance. No schema, migration, policy, or gate state changed. **Case register:** D5 = BOUNDED PASS; X01/D9 = BOUNDED PASS; X02/D10 = BOUNDED PASS; X03–X05 remain NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**.
