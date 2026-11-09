@@ -186,7 +186,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$;
+$$;
 CREATE TRIGGER "role_permission_grant_immutable"
   BEFORE INSERT OR UPDATE OR DELETE ON "core"."role_permission_grant"
   FOR EACH ROW EXECUTE FUNCTION "core"."protect_role_permission_grant"();
