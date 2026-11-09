@@ -348,7 +348,7 @@ async function recordDeniedTenantDenyAttempt(
       // Serialize per Organization / event category so concurrent actors
       // cannot race past the tenant-wide append-only audit budget.
       const lockKey = `${actor.organizationId}:${eventType}`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      await tx.$queryRaw<Array<{ locked: number }>>`WITH lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))) SELECT 1::int AS locked FROM lock`;
 
       const recent = await tx.$queryRaw<Array<{ actorCount: number; organizationCount: number }>>`
         SELECT
@@ -437,7 +437,7 @@ export async function listTenantDenyPolicyHistory(organizationId: string) {
       // resolved the active membership, and installed the tenant GUCs.
       const eventType = "POLICY_READ_DENIED" as const;
       const lockKey = `${organizationId}:${eventType}`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      await tx.$queryRaw<Array<{ locked: number }>>`WITH lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))) SELECT 1::int AS locked FROM lock`;
 
       const recent = await tx.$queryRaw<Array<{ actorCount: number; organizationCount: number }>>`
         SELECT
