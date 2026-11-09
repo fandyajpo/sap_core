@@ -500,6 +500,54 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
         "second get session",
       );
       const secondUserId = secondSession.user.id;
+
+      // A third authenticated principal belongs to a completely separate Organization.
+      // Exercise the production HTTP handlers with a valid but foreign Better Auth session.
+      const foreignEmail = `${testPrefix}foreign-tenant@example.test`;
+      const foreignSignupResponse = await authRequest("/sign-up/email", {
+        method: "POST",
+        body: { name: "V04 Foreign Tenant Owner", email: foreignEmail, password },
+      });
+      await readJson(foreignSignupResponse, "foreign tenant signup");
+      const foreignCookie = sessionCookieFromResponse(foreignSignupResponse);
+      assert.match(foreignCookie, /session_token=/);
+      const foreignSession = await readJson(
+        await authRequest("/get-session", { cookie: foreignCookie }),
+        "foreign tenant get session",
+      );
+      const adversaryUserId = foreignSession.user.id;
+      const foreignOrganizationId = randomUUID();
+      const foreignCompanyId = randomUUID();
+      const foreignPlantId = randomUUID();
+      const foreignMembershipId = randomUUID();
+      tenantFixtureOrganizationIds.push(foreignOrganizationId);
+
+      await pool.query(
+        `INSERT INTO "core"."organization" ("id", "created_at", "updated_at") VALUES ($1, NOW(), NOW())`,
+        [foreignOrganizationId],
+      );
+      await pool.query(
+        `INSERT INTO "core"."company" ("id", "organizationId", "created_at", "updated_at") VALUES ($1, $2, NOW(), NOW())`,
+        [foreignCompanyId, foreignOrganizationId],
+      );
+      await pool.query(
+        `INSERT INTO "core"."plant" ("id", "organizationId", "companyId", "created_at", "updated_at") VALUES ($1, $2, $3, NOW(), NOW())`,
+        [foreignPlantId, foreignOrganizationId, foreignCompanyId],
+      );
+      await pool.query(
+        `INSERT INTO "core"."organization_membership"
+           ("id", "userId", "organizationId", "status", "created_at", "updated_at")
+         VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())`,
+        [foreignMembershipId, adversaryUserId, foreignOrganizationId],
+      );
+      await pool.query(
+        `INSERT INTO "core"."organization_role_assignment"
+           ("id", "organizationMembershipId", "roleDefinitionId", "role_scope",
+            "grant_actor_user_id", "is_break_glass", "created_at")
+         VALUES ($1, $2, $3, 'ORGANIZATION'::"core"."RoleScope", $4, FALSE, NOW())`,
+        [randomUUID(), foreignMembershipId, ownerRoleRows[0].id, adversaryUserId],
+      );
+
       const secondOrganizationMembershipId = randomUUID();
       const secondCompanyMembershipId = randomUUID();
       const secondPlantAssignmentId = randomUUID();
@@ -545,6 +593,63 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
          VALUES ($1, $2, $3, 'PLANT'::"core"."RoleScope", $4, FALSE)`,
         [randomUUID(), secondPlantAssignmentId, plantViewerRoles[0].id, userId],
       );
+
+      // Anonymous and cross-Organization requests must fail through the actual HTTP routes.
+      const anonymousMembers = await fetch(`${authURL}/api/organizations/${organizationId}/members`);
+      assert.equal(anonymousMembers.status, 401, "anonymous tenant requests must be rejected");
+
+      const foreignMembers = await fetch(
+        `${authURL}/api/organizations/${organizationId}/members`,
+        { headers: { cookie: foreignCookie } },
+      );
+      assert.equal(foreignMembers.status, 403, "a valid session in Organization B cannot read Organization A members");
+      assert.ok(!(await foreignMembers.text()).includes(email), "denied response must not disclose Organization A member data");
+
+      const foreignCompany = await fetch(
+        `${authURL}/api/organizations/${organizationId}/companies/${companyId}`,
+        { headers: { cookie: foreignCookie } },
+      );
+      assert.equal(foreignCompany.status, 403, "Organization B actor cannot read Organization A Company");
+
+      const foreignPlant = await fetch(
+        `${authURL}/api/organizations/${organizationId}/companies/${companyId}/plants/${plantId}`,
+        { headers: { cookie: foreignCookie } },
+      );
+      assert.equal(foreignPlant.status, 403, "Organization B actor cannot read Organization A Plant");
+
+      const foreignRoles = await fetch(
+        `${authURL}/api/organizations/${organizationId}/roles`,
+        { headers: { cookie: foreignCookie } },
+      );
+      assert.equal(foreignRoles.status, 403, "Organization B actor cannot enumerate Organization A roles");
+
+      const ownForeignCompany = await fetch(
+        `${authURL}/api/organizations/${foreignOrganizationId}/companies/${foreignCompanyId}`,
+        { headers: { cookie: foreignCookie } },
+      );
+      assert.equal(ownForeignCompany.status, 200, "foreign actor's own tenant remains accessible");
+
+      const crossOrganizationCompanySelector = await fetch(
+        `${authURL}/api/organizations/${organizationId}/companies/${foreignCompanyId}`,
+        { headers: { cookie } },
+      );
+      assert.equal(crossOrganizationCompanySelector.status, 403, "Company ID from Organization B cannot be paired with Organization A");
+
+      const crossOrganizationPlantSelector = await fetch(
+        `${authURL}/api/organizations/${organizationId}/companies/${companyId}/plants/${foreignPlantId}`,
+        { headers: { cookie } },
+      );
+      assert.equal(crossOrganizationPlantSelector.status, 403, "Plant ID from Organization B cannot be paired with Organization A ancestry");
+
+      const foreignRoleWrite = await fetch(
+        `${authURL}/api/organizations/${organizationId}/roles`,
+        {
+          method: "POST",
+          headers: { cookie: foreignCookie, "content-type": "application/json" },
+          body: JSON.stringify({ code: "foreign-write-" + randomUUID(), scope: "ORGANIZATION", permissions: ["organization.read"] }),
+        },
+      );
+      assert.equal(foreignRoleWrite.status, 403, "foreign tenant actor cannot create a role in Organization A");
 
       const deniedMembersResponse = await fetch(
         authURL + "/api/organizations/" + organizationId + "/members",
@@ -631,6 +736,22 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       );
       assert.equal(spoofedRoleCreate.status, 403, "the API must ignore a browser-supplied actorUserId and use the verified session");
 
+      const nonDelegableRoleCode = "nondelegable-" + randomUUID();
+      const nonDelegableRoleCreate = await fetch(
+        `${authURL}/api/organizations/${organizationId}/roles`,
+        {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ code: nonDelegableRoleCode, scope: "ORGANIZATION", permissions: ["organization.update"] }),
+        },
+      );
+      assert.equal(nonDelegableRoleCreate.status, 403, "Organization Owner cannot delegate a permission outside the approved read-only allowlist");
+      const { rows: nonDelegableRows } = await pool.query(
+        `SELECT "id" FROM "core"."role_definition" WHERE "ownerOrganizationId" = $1 AND "code" = $2`,
+        [organizationId, nonDelegableRoleCode],
+      );
+      assert.equal(nonDelegableRows.length, 0, "denied non-delegable role creation must not persist a Role Definition");
+
       const customRoleCode = "api-role-" + randomUUID();
       const customRoleCreate = await fetch(
         authURL + "/api/organizations/" + organizationId + "/roles",
@@ -651,6 +772,16 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       assert.equal(createdCustomRole.role.ownerOrganizationId, organizationId);
       assert.equal(createdCustomRole.role.version, 1);
 
+      const nonDelegableRevision = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/roles/" + createdCustomRole.role.id + "/revisions",
+        {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ permissions: ["organization.update"] }),
+        },
+      );
+      assert.equal(nonDelegableRevision.status, 403, "custom-role revision cannot introduce a non-delegable permission");
+
       const customRoleRevision = await fetch(
         authURL + "/api/organizations/" + organizationId + "/roles/" + createdCustomRole.role.id + "/revisions",
         {
@@ -664,6 +795,17 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       const revisedCustomRole = JSON.parse(customRoleRevisionText);
       assert.equal(revisedCustomRole.role.version, 2);
       assert.equal(revisedCustomRole.role.code, customRoleCode + "-v2");
+
+      const { rows: preservedRevisionRows } = await pool.query(
+        `SELECT "version" FROM "core"."role_definition"
+         WHERE "role_family_id" = $1 ORDER BY "version" DESC`,
+        [createdCustomRole.role.roleFamilyId],
+      );
+      assert.deepEqual(
+        preservedRevisionRows.map((row) => row.version),
+        [2, 1],
+        "denied non-delegable revision must leave immutable role history unchanged",
+      );
 
       await pool.query(
         `UPDATE "core"."permission_delegation_policy"
