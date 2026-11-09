@@ -57,6 +57,9 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: "A valid JSON request body is required." }, { status: 400 });
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "A JSON object is required." }, { status: 400 });
+  }
 
   try {
     const policy = await createTenantDenyPolicy(organizationId, body);
