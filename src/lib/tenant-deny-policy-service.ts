@@ -307,6 +307,29 @@ export async function revokeTenantDenyPolicy(
   });
 }
 
+
+export async function recordDeniedTenantDenyWriteAttempt(
+  organizationId: string,
+  action: "CREATE" | "REVOKE",
+) {
+  if (!uuidPattern.test(organizationId)) return;
+  const session = await getCurrentSession();
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      INSERT INTO "core"."tenant_deny_audit_event"
+        ("id", "organization_id", "actor_user_id", "event_type", "outcome",
+         "reason", "reason_code", "occurred_at")
+      VALUES
+        (gen_random_uuid(), ${organizationId}::uuid, ${session?.user?.id ?? null},
+         'POLICY_WRITE_DENIED'::"core"."DenyAuditEventType",
+         'DENIED'::"core"."DenyAuditOutcome",
+         'DENY policy write was not authorized.',
+         ${action === "CREATE" ? "CREATE_NOT_AUTHORIZED" : "REVOKE_NOT_AUTHORIZED"},
+         clock_timestamp())
+    `;
+  });
+}
+
 export async function listTenantDenyPolicyHistory(organizationId: string) {
   if (!uuidPattern.test(organizationId)) {
     throw new TenantDenyPolicyError("INVALID_INPUT", "Organization ID must be a UUID.");
