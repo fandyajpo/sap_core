@@ -18,7 +18,7 @@ function createHarness({ allowGrant = true, allowList = true } = {}) {
       calls.push({ statement, values });
       if (statement.includes('FROM "core"."user"')) return [{ id: actorUserId }];
       if (statement.includes('FROM "core"."role_definition"')) {
-        return [{ id: roleDefinitionId, scope: "ORGANIZATION", kind: "SYSTEM", ownerOrganizationId: null }];
+        return [{ id: roleDefinitionId, scope: "ORGANIZATION", kind: "SYSTEM", ownerOrganizationId: null, disabledAt: null, permissionsLockedAt: new Date("2026-11-09T00:00:00.000Z") }];
       }
       if (statement.includes('FROM "core"."organization_membership"')) {
         return [{ id: parentId, organizationId }];
