@@ -2,16 +2,19 @@ import "server-only";
 
 import { getCurrentSession } from "@/lib/auth-session";
 import { createRoleAssignmentService } from "@/lib/role-assignment-service";
-import { scopedAccessDatabase } from "@/lib/scoped-access";
+import { createSessionBoundScopedAccessDatabase } from "@/lib/scoped-access";
 import { createRoleAssignmentAuthorization } from "@/lib/role-assignment-authorization-core";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
 
-async function getVerifiedActor() {
+async function getVerifiedSession() {
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
   }
-  return session.user.id;
+  if (!session.session?.id) {
+    throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
+  }
+  return session;
 }
 
 export async function grantRoleAssignmentForCurrentUser(input: {
@@ -20,9 +23,10 @@ export async function grantRoleAssignmentForCurrentUser(input: {
   parentId: string;
   roleDefinitionId: string;
 }) {
-  const actorUserId = await getVerifiedActor();
+  const session = await getVerifiedSession();
+  const actorUserId = session.user.id;
   const service = createRoleAssignmentService(
-    scopedAccessDatabase,
+    createSessionBoundScopedAccessDatabase({ sessionId: session.session.id, userId: actorUserId }),
     createRoleAssignmentAuthorization(actorUserId, input.organizationId),
     { enforceRoleDefinitionGovernance: true },
   );
