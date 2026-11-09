@@ -115,7 +115,7 @@ export async function loadAuthorizationGrants(
     JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
     JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
     WHERE \${context.companyId}::uuid IS NOT NULL
-      AND ra."revokedAt" IS NULL AND ra."isBreakGlass" = FALSE
+      AND ra."revokedAt" IS NULL AND ra."is_break_glass" = FALSE
 
     UNION ALL
 
@@ -151,7 +151,7 @@ export async function loadAuthorizationGrants(
     JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
     JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
     WHERE \${context.scope} = 'PLANT'
-      AND ra."revokedAt" IS NULL AND ra."isBreakGlass" = FALSE
+      AND ra."revokedAt" IS NULL AND ra."is_break_glass" = FALSE
   \`;
 
   const byAssignment = new Map<string, {
