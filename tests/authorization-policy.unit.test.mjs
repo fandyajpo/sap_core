@@ -191,3 +191,14 @@ test("persisted SYSTEM permission snapshots are authoritative when supplied by t
     grants: [grant],
   }).allowed, false);
 });
+
+
+test("a target-scope DENY overrides an Organization child-administration ALLOW", () => {
+  const result = evaluateAuthorization({
+    permission: "company.manage",
+    target: { scope: "COMPANY", organizationId: org, companyId: companyA },
+    grants: [{ roleCode: "ORG_ADMIN", scope: "ORGANIZATION", scopeId: org }],
+    denies: [{ scope: "COMPANY", scopeId: companyA, permissions: ["company.manage"] }],
+  });
+  assert.deepEqual(result, { allowed: false, reason: "EXPLICIT_DENY" });
+});
