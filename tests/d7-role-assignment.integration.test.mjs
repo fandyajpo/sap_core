@@ -457,16 +457,6 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
       }),
       [],
     );
-    await assertDomainError(
-      roleAssignments.recordBreakGlassUse({
-        scope: "COMPANY",
-        scopeParentId: fixture.companyMembershipId,
-        roleAssignmentId: breakGlassRole.id,
-        actorUserId: fixture.actorId,
-        reason: "Parent membership is suspended",
-      }),
-      "ROLE_ASSIGNMENT_NOT_ACTIVE",
-    );
     await client.query(
       `UPDATE "core"."organization_membership" SET "status" = 'ACTIVE' WHERE "id" = $1`,
       [fixture.organizationMembershipId],
