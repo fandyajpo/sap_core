@@ -61,3 +61,11 @@ test("custom role create and revise hold an active Organization membership lock 
   assert.notEqual(membershipLock, -1);
   assert.ok(membershipLock < membershipCheckEnd, "the active actor membership row is locked by the operation transaction");
 });
+
+
+test("tenant target ancestry rows are shared-locked until the protected transaction completes", async () => {
+  const target = await source("src/lib/tenant-target-context.ts");
+  assert.match(target, /FROM "core"\."organization_membership" om[\s\S]*?FOR SHARE OF om/);
+  assert.match(target, /FROM "core"\."company" c[\s\S]*?FOR SHARE OF c/);
+  assert.match(target, /FROM "core"\."plant" p[\s\S]*?FOR SHARE OF p, c/);
+});
