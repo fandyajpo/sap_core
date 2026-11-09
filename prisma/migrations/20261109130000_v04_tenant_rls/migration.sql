@@ -264,14 +264,14 @@ CREATE POLICY "break_glass_access_audit_tenant_read"
   USING (
     (
       "scope" = 'ORGANIZATION'::"core"."RoleScope"
-      AND "scopeParentId"::text = NULLIF(current_setting('app.organization_id', true), '')
+      AND "scope_parent_id"::text = NULLIF(current_setting('app.organization_id', true), '')
       AND NULLIF(current_setting('app.company_id', true), '') IS NULL
     )
     OR (
       "scope" = 'COMPANY'::"core"."RoleScope"
       AND EXISTS (
         SELECT 1 FROM "core"."company" c
-        WHERE c."id" = "break_glass_access_audit"."scopeParentId"
+        WHERE c."id" = "break_glass_access_audit"."scope_parent_id"
           AND c."organizationId"::text = NULLIF(current_setting('app.organization_id', true), '')
           AND (
             NULLIF(current_setting('app.company_id', true), '') IS NULL
@@ -284,7 +284,7 @@ CREATE POLICY "break_glass_access_audit_tenant_read"
       "scope" = 'PLANT'::"core"."RoleScope"
       AND EXISTS (
         SELECT 1 FROM "core"."plant" p
-        WHERE p."id" = "break_glass_access_audit"."scopeParentId"
+        WHERE p."id" = "break_glass_access_audit"."scope_parent_id"
           AND p."organizationId"::text = NULLIF(current_setting('app.organization_id', true), '')
           AND (
             NULLIF(current_setting('app.company_id', true), '') IS NULL
@@ -304,14 +304,14 @@ CREATE POLICY "break_glass_access_audit_tenant_insert"
   WITH CHECK (
     (
       "scope" = 'ORGANIZATION'::"core"."RoleScope"
-      AND "scopeParentId"::text = NULLIF(current_setting('app.organization_id', true), '')
+      AND "scope_parent_id"::text = NULLIF(current_setting('app.organization_id', true), '')
       AND NULLIF(current_setting('app.company_id', true), '') IS NULL
     )
     OR (
       "scope" = 'COMPANY'::"core"."RoleScope"
       AND EXISTS (
         SELECT 1 FROM "core"."company" c
-        WHERE c."id" = "break_glass_access_audit"."scopeParentId"
+        WHERE c."id" = "break_glass_access_audit"."scope_parent_id"
           AND c."organizationId"::text = NULLIF(current_setting('app.organization_id', true), '')
           AND (
             NULLIF(current_setting('app.company_id', true), '') IS NULL
@@ -324,7 +324,7 @@ CREATE POLICY "break_glass_access_audit_tenant_insert"
       "scope" = 'PLANT'::"core"."RoleScope"
       AND EXISTS (
         SELECT 1 FROM "core"."plant" p
-        WHERE p."id" = "break_glass_access_audit"."scopeParentId"
+        WHERE p."id" = "break_glass_access_audit"."scope_parent_id"
           AND p."organizationId"::text = NULLIF(current_setting('app.organization_id', true), '')
           AND (
             NULLIF(current_setting('app.company_id', true), '') IS NULL
