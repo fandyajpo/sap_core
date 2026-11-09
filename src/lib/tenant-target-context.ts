@@ -2,7 +2,7 @@ import "server-only";
 
 import { getCurrentSession } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
-import { createTenantTargetContextResolver } from "@/lib/tenant-target-context-core";
+import { createTenantTargetContextResolver, TenantTargetContextError } from "@/lib/tenant-target-context-core";
 
 const resolveWithSession = createTenantTargetContextResolver({
   getSession: getCurrentSession,
