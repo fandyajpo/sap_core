@@ -579,8 +579,10 @@ test("D6 Company Membership and Plant Assignment lifecycles", async (t) => {
       insertCompany = second.query(
         `INSERT INTO "core"."company_membership"
            ("id", "userId", "organizationMembershipId", "organizationId", "companyId", "status", "created_at", "updated_at")
-         VALUES ($1, $2, $3, (SELECT "organizationId" FROM "core"."company" WHERE "id" = $4), $4, 'ACTIVE', NOW(), NOW())`,
-        [replacementCompanyId, userC, membershipC, companyA],
+         SELECT $1, "userId", "organizationMembershipId", "organizationId", "companyId", 'ACTIVE', NOW(), NOW()
+         FROM "core"."company_membership"
+         WHERE "id" = $2`,
+        [replacementCompanyId, concurrentCompanyMembership.id],
       );
       await waitForLockWait(applicationName);
       await first.query("COMMIT");
