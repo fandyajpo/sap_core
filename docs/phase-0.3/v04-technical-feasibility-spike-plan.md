@@ -300,3 +300,14 @@ Transactional assertions passed on both targets: valid assignment insertion; rej
 The direct User FK was catalog-verified but not separately behavior-tested with a nonexistent User or direct User parent update/delete. An organizationId-only tuple mismatch and concurrency schedule were not tested. D6 status lifecycle/partial-unique behavior remains separate. This is bounded database-level evidence only; it does not establish application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
 
 **Latest bounded case register:** D5, X01/D9, X02/D10, X03/D11, X04/D12, and X05/D13 = BOUNDED PASS. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No schema, migration, policy, or gate state changed.
+
+
+## PR #20 CI execution reconciliation — 2026-11-09
+
+PR [#20](https://github.com/fandyajpo/sap_core/pull/20) merged as `f0a3f362ee22858d96933c940d3437b0a6533a81`. Pull-request workflow run [#42557097851](https://github.com/fandyajpo/sap_core/actions/runs/42557097851) completed successfully with all seven jobs green: static, V03 integration, D1 integration, D6 integration, D7 integration, D8 integration, and V04 pinned replay.
+
+The D1 and D6 jobs passed against isolated PostgreSQL CI databases. The D1 suite includes the approved OrganizationMembership slot states and concurrent activation across Organizations. The D6 suite includes CompanyMembership and PlantAssignment lifecycle behavior and concurrent terminal-status transitions racing with replacement inserts.
+
+The pinned replay job recovered the exact eight-migration D14-A snapshot from commit `d27af783d3e9499a451331f720ec111e6b5e7049`, verified and executed D14-A, applied migration 9 as a staged upgrade, and then deployed all nine migrations to a separate fresh database before executing D14-B. Each stage's migration history/status assertions passed. This supersedes the earlier statement that a nine-migration staged-upgrade replay was not recorded, for this CI workflow and its disposable database.
+
+These results close those specific recorded test-execution gaps only. They do not validate application authorization, protected operations, RLS policies, pooled-session tenant context isolation, application-level tenant isolation, or hosted/production database state. **V04 remains BLOCKED** pending those remaining acceptance criteria; this plan does not promote the gate.
