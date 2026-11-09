@@ -10,7 +10,6 @@ import {
 } from "@/lib/authorization-policy-core";
 import { prisma } from "@/lib/prisma";
 import { createSessionBoundScopedAccessDatabase } from "@/lib/scoped-access";
-import { lockVerifiedSessionRow } from "@/lib/verified-session-lock";
 import {
   createRoleDefinitionService,
   RoleDefinitionError,
@@ -228,8 +227,10 @@ export async function createCustomRoleForCurrentUser(
 export async function reviseCustomRoleForCurrentUser(
   input: Omit<CustomRoleReviseInput, "actorUserId">,
 ): Promise<RoleDefinitionRecord> {
-  const actorUserId = await getVerifiedActor();
-  const service = createRoleDefinitionService(scopedAccessDatabase, createAuthorization(actorUserId));
+  const session = await getVerifiedSession();
+  const actorUserId = session.user.id;
+  const database = createSessionBoundScopedAccessDatabase({ sessionId: session.session.id, userId: actorUserId });
+  const service = createRoleDefinitionService(database, createAuthorization(actorUserId));
   return service.reviseCustomRole({ ...input, actorUserId });
 }
 
@@ -250,10 +251,6 @@ export async function listOrganizationRoles(organizationId: string): Promise<Org
     throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
   }
   return prisma.$transaction(async (tx) => {
-    await lockVerifiedSessionRow((statement, values = []) => tx.$queryRawUnsafe<Array<{ id: string }>>(statement, ...values), {
-      sessionId: session.session.id,
-      userId: session.user.id,
-    });
     await requireTenantPermission(tx, session, { kind: "ORGANIZATION", organizationId }, "roles.read");
     return tx.$queryRaw<OrganizationRoleSummary[]>`
       SELECT
