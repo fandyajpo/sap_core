@@ -516,3 +516,16 @@ Transactional assertions passed on both targets: a valid CompanyMembership inser
 Detailed target identities, constraint names, test assertions, and evidence limitations are recorded in [V04.6 X04/D12 execution record](v04.6-x04-d12-referential-integrity-execution-record-2026-11-09.md). The direct User FK was catalog-verified but not separately subjected to a missing-User insert or direct User parent update/delete test. No X04 concurrency schedule was run. This does not establish complete D6 lifecycle semantics, application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
 
 **Latest case register:** D5 = BOUNDED PASS; X01/D9 = BOUNDED PASS; X02/D10 = BOUNDED PASS; X03/D11 = BOUNDED PASS; X04/D12 = BOUNDED PASS; X05/D13 = NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No schema, migration, policy, or gate state changed.
+
+
+## V04.6 X05 / D13 execution reconciliation — 2026-11-09
+
+X05 / D13 completed with **BOUNDED PASS** on both recovered migrations 1–8 disposable replay targets (fresh and staged), recovery run 816b14f53d594d1d9eb89b625608737d.
+
+Read-only preflight confirmed the direct User FK and both exact composite PlantAssignment FKs are validated and use RESTRICT/RESTRICT. The CompanyMembership composite target key (id, userId, organizationId, companyId) and Plant composite target key (organizationId, companyId, id) were present, together with the supporting indexes. Fresh and staged returned matching columns, FK definitions, index definitions, and ScopedAccessStatus labels.
+
+Transactional behavior passed on both targets: valid PlantAssignment insertion; rejection of User/CompanyMembership tuple mismatch, Company scope mismatch, and Plant scope mismatch by their expected named composite FKs; RESTRICT on referenced CompanyMembership and Plant key updates/deletes; direct User FK catalog confirmation; explicit transaction rollback; and zero residual fixture rows across User, Organization, OrganizationMembership, Company, CompanyMembership, Plant, and PlantAssignment.
+
+The direct User FK was not separately tested with a nonexistent User or direct User parent update/delete. No isolated organizationId-only tuple mismatch or concurrency schedule was run. D6 lifecycle and partial-unique status semantics remain separate evidence. See [V04.6 X05/D13 execution record](v04.6-x05-d13-referential-integrity-execution-record-2026-11-09.md) for exact target identities and test boundaries.
+
+**Case register:** D5, X01/D9, X02/D10, X03/D11, X04/D12, and X05/D13 = BOUNDED PASS. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. This is evidence reconciliation only; no schema, migration, policy, or gate state changed.
