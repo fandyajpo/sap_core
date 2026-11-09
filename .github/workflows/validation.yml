@@ -38,7 +38,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_v03_test
         ports:
           - "55432:5432"
@@ -48,9 +48,12 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55432/sap_core_v03_test?schema=public
+      CI_DATABASE_USER: sap_core
+      CI_DATABASE_HOST: 127.0.0.1
+      CI_DATABASE_PORT: "55432"
+      CI_DATABASE_NAME: sap_core_v03_test
       V03_ALLOW_DISPOSABLE_DB: "1"
-      BETTER_AUTH_SECRET: ci-only-v03-secret-0123456789abcdef
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
       BETTER_AUTH_URL: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +63,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Configure disposable DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
@@ -106,7 +111,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_d7_test
         ports:
           - "55435:5432"
@@ -117,7 +122,10 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55435/sap_core_d7_test?schema=public
+      CI_DATABASE_USER: sap_core
+      CI_DATABASE_HOST: 127.0.0.1
+      CI_DATABASE_PORT: "55435"
+      CI_DATABASE_NAME: sap_core_d7_test
       D7_ALLOW_DISPOSABLE_DB: "1"
       D8_ALLOW_DISPOSABLE_DB: "1"
     steps:
@@ -130,6 +138,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Configure disposable DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
@@ -217,9 +227,10 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import pg from "pg";
-          const client = new pg.Client({
-            connectionString: "postgresql://sap_core:sap_core_dev@127.0.0.1:55435/postgres",
-          });
+          const adminUrl = new URL(process.env.DATABASE_URL);
+          adminUrl.pathname = "/postgres";
+          adminUrl.search = "";
+          const client = new pg.Client({ connectionString: adminUrl.toString() });
           await client.connect();
           try {
             await client.query('CREATE DATABASE "sap_core_d8_test"');
@@ -229,8 +240,10 @@ jobs:
           NODE
       - name: Deploy all ten migrations and execute D14-B
         env:
-          DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55434/sap_core_d8_test?schema=public
+          CI_DATABASE_PORT: "55434"
+          CI_DATABASE_NAME: sap_core_d8_test
         run: |
+          export DATABASE_URL="postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public"
           pnpm db:migrate:deploy
           pnpm db:status
           pnpm test:d8
@@ -242,7 +255,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_d1_test
         ports:
           - "55436:5432"
@@ -252,7 +265,10 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55436/sap_core_d1_test?schema=public
+      CI_DATABASE_USER: sap_core
+      CI_DATABASE_HOST: 127.0.0.1
+      CI_DATABASE_PORT: "55436"
+      CI_DATABASE_NAME: sap_core_d1_test
       D1_ALLOW_DISPOSABLE_DB: "1"
     steps:
       - uses: actions/checkout@v4
@@ -262,6 +278,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Configure disposable DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
@@ -276,7 +294,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_d6_test
         ports:
           - "55433:5432"
@@ -286,7 +304,10 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55433/sap_core_d6_test?schema=public
+      CI_DATABASE_USER: sap_core
+      CI_DATABASE_HOST: 127.0.0.1
+      CI_DATABASE_PORT: "55433"
+      CI_DATABASE_NAME: sap_core_d6_test
       D6_ALLOW_DISPOSABLE_DB: "1"
     steps:
       - uses: actions/checkout@v4
@@ -296,6 +317,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Configure disposable DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
@@ -310,7 +333,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_d7_test
         ports:
           - "55435:5432"
@@ -320,7 +343,10 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55435/sap_core_d7_test?schema=public
+      CI_DATABASE_USER: sap_core
+      CI_DATABASE_HOST: 127.0.0.1
+      CI_DATABASE_PORT: "55435"
+      CI_DATABASE_NAME: sap_core_d7_test
       D7_ALLOW_DISPOSABLE_DB: "1"
     steps:
       - uses: actions/checkout@v4
@@ -330,6 +356,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Configure disposable DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
@@ -344,7 +372,7 @@ jobs:
         image: postgres:17.6
         env:
           POSTGRES_USER: sap_core
-          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: sap_core_d8_test
         ports:
           - "55434:5432"
@@ -354,7 +382,10 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55434/sap_core_d8_test?schema=public
+      CI_DATABASE_USER: sap_core
+      CI_DATABASE_HOST: 127.0.0.1
+      CI_DATABASE_PORT: "55434"
+      CI_DATABASE_NAME: sap_core_d8_test
       D8_ALLOW_DISPOSABLE_DB: "1"
     steps:
       - uses: actions/checkout@v4
@@ -364,6 +395,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Configure disposable DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
