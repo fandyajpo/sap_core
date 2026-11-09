@@ -153,6 +153,38 @@ after(async () => {
           [tenantFixtureOrganizationIds],
         );
         await pool.query(
+          `UPDATE "core"."company_role_assignment"
+              SET "revoked_at" = NOW()
+            WHERE "revoked_at" IS NULL
+              AND "companyMembershipId" IN (
+                SELECT "id" FROM "core"."company_membership"
+                WHERE "organizationId" = ANY($1::uuid[])
+              )`,
+          [tenantFixtureOrganizationIds],
+        );
+        await pool.query(
+          `UPDATE "core"."plant_role_assignment"
+              SET "revoked_at" = NOW()
+            WHERE "revoked_at" IS NULL
+              AND "plantAssignmentId" IN (
+                SELECT "id" FROM "core"."plant_assignment"
+                WHERE "organizationId" = ANY($1::uuid[])
+              )`,
+          [tenantFixtureOrganizationIds],
+        );
+        await pool.query(
+          `UPDATE "core"."plant_assignment"
+              SET "status" = 'SUSPENDED'::"core"."ScopedAccessStatus"
+            WHERE "organizationId" = ANY($1::uuid[])`,
+          [tenantFixtureOrganizationIds],
+        );
+        await pool.query(
+          `UPDATE "core"."company_membership"
+              SET "status" = 'SUSPENDED'::"core"."ScopedAccessStatus"
+            WHERE "organizationId" = ANY($1::uuid[])`,
+          [tenantFixtureOrganizationIds],
+        );
+        await pool.query(
           `UPDATE "core"."organization_membership"
               SET "status" = 'SUSPENDED'::"core"."OrganizationMembershipStatus"
             WHERE "organizationId" = ANY($1::uuid[])`,
@@ -369,6 +401,10 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       assert.equal(activeSession?.session?.userId, userId);
 
       const organizationId = randomUUID();
+      const companyId = randomUUID();
+      const siblingCompanyId = randomUUID();
+      const plantId = randomUUID();
+      const siblingPlantId = randomUUID();
       tenantFixtureOrganizationIds.push(organizationId);
       const organizationMembershipId = randomUUID();
       const organizationRoleAssignmentId = randomUUID();
@@ -376,6 +412,16 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
         `INSERT INTO "core"."organization" ("id", "created_at", "updated_at")
          VALUES ($1, NOW(), NOW())`,
         [organizationId],
+      );
+      await pool.query(
+        `INSERT INTO "core"."company" ("id", "organizationId", "created_at", "updated_at")
+         VALUES ($1, $2, NOW(), NOW()), ($3, $2, NOW(), NOW())`,
+        [companyId, organizationId, siblingCompanyId],
+      );
+      await pool.query(
+        `INSERT INTO "core"."plant" ("id", "organizationId", "companyId", "created_at", "updated_at")
+         VALUES ($1, $2, $3, NOW(), NOW()), ($4, $2, $5, NOW(), NOW())`,
+        [plantId, organizationId, companyId, siblingPlantId, siblingCompanyId],
       );
       await pool.query(
         `INSERT INTO "core"."organization_membership"
@@ -441,22 +487,102 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       const secondCookie = sessionCookieFromResponse(secondSignupResponse);
       assert.match(secondCookie, /session_token=/, "second signup must set a session cookie");
 
+      const secondSession = await readJson(
+        await authRequest("/get-session", { cookie: secondCookie }),
+        "second get session",
+      );
+      const secondUserId = secondSession.user.id;
       const secondOrganizationMembershipId = randomUUID();
+      const secondCompanyMembershipId = randomUUID();
+      const secondPlantAssignmentId = randomUUID();
       await pool.query(
         `INSERT INTO "core"."organization_membership"
            ("id", "userId", "organizationId", "status", "created_at", "updated_at")
          VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())`,
-        [secondOrganizationMembershipId, (await readJson(
-          await authRequest("/get-session", { cookie: secondCookie }),
-          "second get session",
-        )).user.id, organizationId],
+        [secondOrganizationMembershipId, secondUserId, organizationId],
       );
+      await pool.query(
+        `INSERT INTO "core"."company_membership"
+           ("id", "userId", "organizationMembershipId", "organizationId", "companyId", "status", "created_at", "updated_at")
+         VALUES ($1, $2, $3, $4, $5, 'ACTIVE', NOW(), NOW())`,
+        [secondCompanyMembershipId, secondUserId, secondOrganizationMembershipId, organizationId, companyId],
+      );
+      await pool.query(
+        `INSERT INTO "core"."plant_assignment"
+           ("id", "userId", "companyMembershipId", "organizationId", "companyId", "plantId", "status", "created_at", "updated_at")
+         VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', NOW(), NOW())`,
+        [secondPlantAssignmentId, secondUserId, secondCompanyMembershipId, organizationId, companyId, plantId],
+      );
+      const { rows: companyMemberRoles } = await pool.query(
+        `SELECT "id"::text AS "id" FROM "core"."role_definition"
+         WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+           AND "scope" = 'COMPANY'::"core"."RoleScope" AND "code" = 'COMPANY_MEMBER'`,
+      );
+      const { rows: plantViewerRoles } = await pool.query(
+        `SELECT "id"::text AS "id" FROM "core"."role_definition"
+         WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+           AND "scope" = 'PLANT'::"core"."RoleScope" AND "code" = 'PLANT_VIEWER'`,
+      );
+      assert.equal(companyMemberRoles.length, 1);
+      assert.equal(plantViewerRoles.length, 1);
+      await pool.query(
+        `INSERT INTO "core"."company_role_assignment"
+           ("id", "companyMembershipId", "roleDefinitionId", "role_scope", "grant_actor_user_id", "is_break_glass")
+         VALUES ($1, $2, $3, 'COMPANY'::"core"."RoleScope", $4, FALSE)`,
+        [randomUUID(), secondCompanyMembershipId, companyMemberRoles[0].id, userId],
+      );
+      await pool.query(
+        `INSERT INTO "core"."plant_role_assignment"
+           ("id", "plantAssignmentId", "roleDefinitionId", "role_scope", "grant_actor_user_id", "is_break_glass")
+         VALUES ($1, $2, $3, 'PLANT'::"core"."RoleScope", $4, FALSE)`,
+        [randomUUID(), secondPlantAssignmentId, plantViewerRoles[0].id, userId],
+      );
+
       const deniedMembersResponse = await fetch(
-        `${authURL}/api/organizations/${organizationId}/members`,
+        authURL + "/api/organizations/" + organizationId + "/members",
         { headers: { cookie: secondCookie } },
       );
       assert.equal(deniedMembersResponse.status, 403, "active membership without the required permission must be denied");
 
+      const ownerCompanyResponse = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/companies/" + siblingCompanyId,
+        { headers: { cookie } },
+      );
+      assert.equal(ownerCompanyResponse.status, 200, "Organization Owner may administer a verified descendant Company");
+      assert.equal((await ownerCompanyResponse.json()).company.id, siblingCompanyId);
+
+      const memberCompanyResponse = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/companies/" + companyId,
+        { headers: { cookie: secondCookie } },
+      );
+      assert.equal(memberCompanyResponse.status, 200, "active Company Membership plus COMPANY_MEMBER permits exact Company read");
+      assert.equal((await memberCompanyResponse.json()).company.id, companyId);
+
+      const siblingCompanyDenied = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/companies/" + siblingCompanyId,
+        { headers: { cookie: secondCookie } },
+      );
+      assert.equal(siblingCompanyDenied.status, 403, "Company membership does not extend to a sibling Company");
+
+      const ownerPlantResponse = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/companies/" + siblingCompanyId + "/plants/" + siblingPlantId,
+        { headers: { cookie } },
+      );
+      assert.equal(ownerPlantResponse.status, 200, "Organization Owner may administer a verified descendant Plant");
+      assert.equal((await ownerPlantResponse.json()).plant.id, siblingPlantId);
+
+      const viewerPlantResponse = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/companies/" + companyId + "/plants/" + plantId,
+        { headers: { cookie: secondCookie } },
+      );
+      assert.equal(viewerPlantResponse.status, 200, "active Plant Assignment plus PLANT_VIEWER permits exact Plant read");
+      assert.equal((await viewerPlantResponse.json()).plant.id, plantId);
+
+      const siblingPlantDenied = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/companies/" + siblingCompanyId + "/plants/" + siblingPlantId,
+        { headers: { cookie: secondCookie } },
+      );
+      assert.equal(siblingPlantDenied.status, 403, "Plant assignment does not extend to a sibling Plant");
 
       const firstProfileResponse = await fetch(`${authURL}/account`, {
         headers: { cookie },
