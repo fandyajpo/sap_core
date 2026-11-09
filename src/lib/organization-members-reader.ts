@@ -18,7 +18,7 @@ export async function listOrganizationMembers(organizationId: string): Promise<r
       "organization.members.read",
     );
 
-    return tx.$queryRaw<OrganizationMemberSummary[]>\`
+    return tx.$queryRaw<OrganizationMemberSummary[]>`
       SELECT
         om."id"::text AS "membershipId",
         om."userId" AS "userId",
@@ -28,8 +28,8 @@ export async function listOrganizationMembers(organizationId: string): Promise<r
         om."created_at" AS "createdAt"
       FROM "core"."organization_membership" om
       JOIN "core"."user" u ON u."id" = om."userId"
-      WHERE om."organizationId" = \${context.organizationId}::uuid
+      WHERE om."organizationId" = ${context.organizationId}::uuid
       ORDER BY om."created_at" ASC, om."id" ASC
-    \`;
+    `;
   });
 }
