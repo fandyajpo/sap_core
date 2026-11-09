@@ -184,6 +184,24 @@ before(async () => {
      VALUES ($1, $2, 1, 'SYSTEM', 'ORGANIZATION'::"core"."RoleScope", NOW())`,
     [fixture.unusedRoleDefinitionId, `d7-fixture-unused-${fixture.unusedRoleDefinitionId}`],
   );
+
+  // Migration 10 requires every role assignment to reference a sealed snapshot.
+  // Keep this suite compatible with the pinned D7 baseline, where the column does not exist.
+  const { rows: lockColumnRows } = await client.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'core' AND table_name = 'role_definition'
+         AND column_name = 'permissions_locked_at'
+     ) AS "hasPermissionLock"`,
+  );
+  if (lockColumnRows[0].hasPermissionLock) {
+    await client.query(
+      `UPDATE "core"."role_definition"
+          SET "permissions_locked_at" = NOW()
+        WHERE "id" = ANY($1::uuid[])`,
+      [...Object.values(fixture.roleDefinitions), fixture.unusedRoleDefinitionId],
+    );
+  }
 });
 
 after(async () => {
