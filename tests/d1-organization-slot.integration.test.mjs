@@ -245,21 +245,26 @@ test("D1 organization membership slot predicate and concurrent activation", asyn
       await second.query("BEGIN");
       secondOpen = true;
       await second.query("SELECT set_config('application_name', $1, false)", [applicationName]);
-      secondInsert = second.query(
-        `UPDATE "core"."organization_membership"
-         SET "status" = 'ACTIVE', "updated_at" = NOW()
-         WHERE "id" = $1`,
-        [concurrentMembershipIds[1]],
+      secondInsert = assert.rejects(
+        second.query(
+          `UPDATE "core"."organization_membership"
+           SET "status" = 'ACTIVE', "updated_at" = NOW()
+           WHERE "id" = $1`,
+          [concurrentMembershipIds[1]],
+        ),
+        (error) => {
+          assert.equal(error.code, "23505");
+          assert.equal(error.constraint, "organization_membership_user_slot_key");
+          return true;
+        },
       );
+      // Attach the rejection assertion before releasing the first transaction's
+      // unique-index lock so Node does not report a transient unhandled rejection.
       await waitForLockWait(applicationName);
       await first.query("COMMIT");
       firstOpen = false;
 
-      await assert.rejects(secondInsert, (error) => {
-        assert.equal(error.code, "23505");
-        assert.equal(error.constraint, "organization_membership_user_slot_key");
-        return true;
-      });
+      await secondInsert;
       await second.query("ROLLBACK");
       secondOpen = false;
     } finally {
