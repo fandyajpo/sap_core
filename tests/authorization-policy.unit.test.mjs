@@ -147,6 +147,22 @@ test("Organization custom roles are accepted only with trusted payload and ownin
   }).allowed, false);
 });
 
+test("Built-in role codes cannot be attached to a different typed scope", () => {
+  assert.equal(evaluateAuthorization({
+    permission: "organization.update",
+    target: { scope: "ORGANIZATION", organizationId: org },
+    grants: [{ roleCode: "ORG_ADMIN", scope: "COMPANY", scopeId: org }],
+  }).allowed, false);
+});
+
+test("Unknown permission identifiers fail closed", () => {
+  assert.equal(evaluateAuthorization({
+    permission: "inventory.read",
+    target: { scope: "ORGANIZATION", organizationId: org },
+    grants: [{ roleCode: "ORG_OWNER", scope: "ORGANIZATION", scopeId: org }],
+  }).reason, "INVALID_REQUEST");
+});
+
 test("Malformed targets fail closed", () => {
   assert.equal(evaluateAuthorization({
     permission: "organization.read",
