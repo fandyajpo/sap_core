@@ -3,7 +3,7 @@ import type { ScopedAccessDatabase, ScopedAccessSession } from "./scoped-access-
 import type { RoleScope } from "./role-assignment-service.ts";
 import type { AuthorizationPermission } from "./authorization-policy-core.ts";
 
-export type CustomRoleScope = Exclude<RoleScope, "PLATFORM">;
+export type CustomRoleScope = "ORGANIZATION";
 export type RoleDefinitionAuditEventType = "CREATE" | "REVISE";
 
 export type RoleDefinitionErrorCode =
