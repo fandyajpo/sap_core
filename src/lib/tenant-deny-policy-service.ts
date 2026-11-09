@@ -308,26 +308,88 @@ export async function revokeTenantDenyPolicy(
 }
 
 
+const deniedAuditWindow = "5 minutes";
+const deniedAuditLimit = 10;
+
+async function recordDeniedTenantDenyAttempt(
+  organizationId: string,
+  eventType: "POLICY_WRITE_DENIED" | "POLICY_READ_DENIED",
+  reasonCode: string,
+) {
+  if (!uuidPattern.test(organizationId)) return false;
+
+  const session = await getCurrentSession();
+  // Anonymous traffic is deliberately not persisted as tenant audit evidence:
+  // it has no verified actor or active membership to anchor the event.
+  if (!session?.session?.id || !session.user?.id) return false;
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      await lockVerifiedSessionRow(
+        (statement, values = []) => tx.$queryRawUnsafe<Array<{ id: string }>>(statement, ...values),
+        { sessionId: session.session.id, userId: session.user.id },
+      );
+
+      await tx.$queryRaw`SELECT set_config('app.user_id', ${session.user.id}, true)`;
+      const actor = await resolveTenantTargetContext(tx, session, {
+        kind: "ORGANIZATION",
+        organizationId,
+      });
+
+      // Serialize per actor / Organization / event category so concurrent
+      // rejected requests cannot race past the append-only audit budget.
+      const lockKey = `${actor.organizationId}:${actor.userId}:${eventType}`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+
+      const recent = await tx.$queryRaw<Array<{ count: number }>>`
+        SELECT COUNT(*)::int AS "count"
+        FROM "core"."tenant_deny_audit_event"
+        WHERE "organization_id" = ${actor.organizationId}::uuid
+          AND "actor_user_id" = ${actor.userId}
+          AND "event_type" = ${eventType}::"core"."DenyAuditEventType"
+          AND "occurred_at" >= clock_timestamp() - interval '5 minutes'
+      `;
+      if ((recent[0]?.count ?? 0) >= deniedAuditLimit) return false;
+
+      await tx.$executeRaw`
+        INSERT INTO "core"."tenant_deny_audit_event"
+          ("id", "organization_id", "actor_user_id", "event_type", "outcome",
+           "reason", "reason_code", "occurred_at")
+        VALUES
+          (gen_random_uuid(), ${actor.organizationId}::uuid, ${actor.userId},
+           ${eventType}::"core"."DenyAuditEventType",
+           'DENIED'::"core"."DenyAuditOutcome",
+           ${eventType === "POLICY_READ_DENIED"
+             ? "DENY policy history read was not authorized."
+             : "DENY policy write was not authorized."},
+           ${reasonCode}, clock_timestamp())
+      `;
+      return true;
+    });
+  } catch {
+    // Denial logging must never turn an expected 401/403 into a 500. Failure
+    // to establish a verified actor/tenant context means no audit row is written.
+    return false;
+  }
+}
+
 export async function recordDeniedTenantDenyWriteAttempt(
   organizationId: string,
   action: "CREATE" | "REVOKE",
 ) {
-  if (!uuidPattern.test(organizationId)) return;
-  const session = await getCurrentSession();
-  await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`
-      INSERT INTO "core"."tenant_deny_audit_event"
-        ("id", "organization_id", "actor_user_id", "event_type", "outcome",
-         "reason", "reason_code", "occurred_at")
-      VALUES
-        (gen_random_uuid(), ${organizationId}::uuid, ${session?.user?.id ?? null},
-         'POLICY_WRITE_DENIED'::"core"."DenyAuditEventType",
-         'DENIED'::"core"."DenyAuditOutcome",
-         'DENY policy write was not authorized.',
-         ${action === "CREATE" ? "CREATE_NOT_AUTHORIZED" : "REVOKE_NOT_AUTHORIZED"},
-         clock_timestamp())
-    `;
-  });
+  return recordDeniedTenantDenyAttempt(
+    organizationId,
+    "POLICY_WRITE_DENIED",
+    action === "CREATE" ? "CREATE_NOT_AUTHORIZED" : "REVOKE_NOT_AUTHORIZED",
+  );
+}
+
+export async function recordDeniedTenantDenyReadAttempt(organizationId: string) {
+  return recordDeniedTenantDenyAttempt(
+    organizationId,
+    "POLICY_READ_DENIED",
+    "READER_NOT_AUTHORIZED",
+  );
 }
 
 export async function listTenantDenyPolicyHistory(organizationId: string) {
@@ -338,25 +400,7 @@ export async function listTenantDenyPolicyHistory(organizationId: string) {
 
   return prisma.$transaction(async (tx) => {
     let context: Awaited<ReturnType<typeof resolveTenantTargetContext>>;
-    try {
-      context = await resolveOwnerContext(tx, session, organizationId);
-    } catch (error) {
-      // Commit this denial evidence independently because the current read
-      // transaction is about to roll back with the authorization error.
-      await prisma.$executeRaw`
-        INSERT INTO "core"."tenant_deny_audit_event"
-          ("id", "organization_id", "actor_user_id", "event_type", "outcome",
-           "reason", "reason_code", "occurred_at")
-        VALUES
-          (gen_random_uuid(), ${organizationId}::uuid, ${session?.user?.id ?? null},
-           'POLICY_READ_DENIED'::"core"."DenyAuditEventType", 'DENIED'::"core"."DenyAuditOutcome",
-           'DENY policy history read was not authorized.', 'READER_NOT_AUTHORIZED', clock_timestamp())
-      `;
-      if (error instanceof TenantDenyPolicyError || error instanceof TenantTargetContextError) {
-        throw error;
-      }
-      throw error;
-    }
+    context = await resolveOwnerContext(tx, session, organizationId);
 
     const policies = await tx.$queryRaw<Array<Record<string, unknown>>>`
       SELECT p."id"::text AS "id", p."target_membership_id"::text AS "targetMembershipId",
