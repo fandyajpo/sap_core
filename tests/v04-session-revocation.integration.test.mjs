@@ -71,6 +71,7 @@ test("FOR SHARE lock blocks Better Auth-compatible session-row deletion until pr
     await revokeClient.query("ROLLBACK");
 
     await protectedClient.query("COMMIT");
+    await revokeClient.query("BEGIN");
     await revokeClient.query('DELETE FROM "core"."session" WHERE "id" = $1', [sessionId]);
     await revokeClient.query("COMMIT");
 
