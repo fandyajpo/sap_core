@@ -307,6 +307,54 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
   let assignedCompanyRole;
   let assignedPlantRole;
 
+  await t.test("migration seeds the approved permission catalog and sealed built-in role snapshots", async () => {
+    const { rows: permissionRows } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM "core"."permission_definition"`,
+    );
+    assert.equal(permissionRows[0].count, 15);
+    const { rows: roleRows } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM "core"."role_definition"
+        WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"`,
+    );
+    assert.equal(roleRows[0].count, 8);
+    const { rows: grantRows } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM "core"."role_permission_grant"`,
+    );
+    assert.equal(grantRows[0].count, 50);
+    const { rows: unsealed } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM "core"."role_definition"
+        WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND "permissions_locked_at" IS NULL`,
+    );
+    assert.equal(unsealed[0].count, 0);
+
+    const orgOwnerId = await getSystemRoleId("ORG_OWNER");
+    await assertDatabaseRejects(() => client.query(
+      `INSERT INTO "core"."role_permission_grant"
+         ("id", "role_definition_id", "permission_definition_id", "effect")
+       SELECT $1, rd."id", pd."id", 'ALLOW'::"core"."PermissionGrantEffect"
+         FROM "core"."role_definition" rd CROSS JOIN "core"."permission_definition" pd
+        WHERE rd."id" = $2 AND pd."code" = 'organization.read'`,
+      [randomUUID(), orgOwnerId],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `UPDATE "core"."role_permission_grant" SET "effect" = 'DENY'
+        WHERE "role_definition_id" = $1 LIMIT 1`,
+      [orgOwnerId],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `UPDATE "core"."role_definition" SET "permissions_locked_at" = NULL WHERE "id" = $1`,
+      [orgOwnerId],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `UPDATE "core"."permission_definition" SET "description" = 'tampered'`,
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `UPDATE "core"."role_definition" SET "code" = 'tampered' WHERE "id" = $1`,
+      [orgOwnerId],
+    ));
+  });
+
   await t.test("create rejects missing human actors and Organizations", async () => {
     await assertDefinitionError(
       createCustomRole({
