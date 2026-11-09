@@ -500,3 +500,19 @@ Transactional behavior passed on both targets: duplicate ACTIVE and SUSPENDED cu
 The exact evidence and limitations are recorded in [v04.6 X03/D11 execution record](v04.6-x03-d11-referential-integrity-execution-record-2026-11-09.md). No concurrency schedule was run. This result does not establish complete D1/D3 lifecycle behavior, authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
 
 **Latest case register:** D5 = BOUNDED PASS; X01/D9 = BOUNDED PASS; X02/D10 = BOUNDED PASS; X03/D11 = BOUNDED PASS; X04/D12 and X05/D13 = NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No schema, migration, policy, or gate state changed.
+
+
+## V04.6 X04 / D12 CompanyMembership verification — 2026-11-09
+
+X04 / D12 completed with **BOUNDED PASS** on both recovered migrations 1–8 disposable targets:
+
+- Fresh: `sap-core-v04-fresh-816b14f5`, database `v04_fresh`.
+- Staged: `sap-core-v04-staged-816b14f5`, database `v04_staged`.
+
+Read-only preflight confirmed all three `core.company_membership` FKs are validated and use `ON UPDATE RESTRICT ON DELETE RESTRICT`: the direct User FK, the composite OrganizationMembership tuple FK, and the composite Company organization-scope FK. Both composite referenced unique keys and their supporting indexes were present; fresh and staged catalog results matched.
+
+Transactional assertions passed on both targets: a valid CompanyMembership inserted; two OrganizationMembership tuple mismatches were rejected by the expected composite FK; a cross-Organization Company tuple was rejected by the expected Company composite FK; referenced OrganizationMembership and Company key updates/deletes were rejected; and explicit rollback left zero residual fixture rows across all five fixture entity types.
+
+Detailed target identities, constraint names, test assertions, and evidence limitations are recorded in [V04.6 X04/D12 execution record](v04.6-x04-d12-referential-integrity-execution-record-2026-11-09.md). The direct User FK was catalog-verified but not separately subjected to a missing-User insert or direct User parent update/delete test. No X04 concurrency schedule was run. This does not establish complete D6 lifecycle semantics, application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
+
+**Latest case register:** D5 = BOUNDED PASS; X01/D9 = BOUNDED PASS; X02/D10 = BOUNDED PASS; X03/D11 = BOUNDED PASS; X04/D12 = BOUNDED PASS; X05/D13 = NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No schema, migration, policy, or gate state changed.
