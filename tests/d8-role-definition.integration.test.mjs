@@ -101,6 +101,7 @@ const database = {
 };
 
 const roleDefinitions = createRoleDefinitionService(database, {
+  async initializeContext() {},
   async getDelegablePermissions() {
     return delegablePermissions;
   },
@@ -113,6 +114,13 @@ const roleDefinitions = createRoleDefinitionService(database, {
     return allowRevise;
   },
 });
+
+async function reviseRole(input) {
+  return roleDefinitions.reviseCustomRole({
+    organizationId: fixture.organizationAId,
+    ...input,
+  });
+}
 
 async function createCustomRole(input) {
   return roleDefinitions.createCustomRole({
@@ -640,7 +648,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     const beforeDenied = await auditCount();
     allowRevise = false;
     await assertDefinitionError(
-      roleDefinitions.reviseCustomRole({
+      reviseRole({
         actorUserId: fixture.actorId,
         roleDefinitionId: customRoleA.id,
         code: "d8.denied-revision",
@@ -650,7 +658,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     allowRevise = true;
     assert.equal(await auditCount(), beforeDenied);
 
-    const revision = await roleDefinitions.reviseCustomRole({
+    const revision = await reviseRole({
       actorUserId: fixture.actorId,
       roleDefinitionId: customRoleA.id,
       code: "d8.organization-reader-v2",
@@ -684,14 +692,14 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       { event_type: "REVISE", version: 2 },
     ]);
     await assertDefinitionError(
-      roleDefinitions.reviseCustomRole({
+      reviseRole({
         actorUserId: fixture.actorId,
         roleDefinitionId: customRoleA.id,
       }),
       "ROLE_DEFINITION_VERSION_CONFLICT",
     );
     await assertDefinitionError(
-      roleDefinitions.reviseCustomRole({
+      reviseRole({
         actorUserId: fixture.actorId,
         roleDefinitionId: customRoleB.id,
         scope: "PLATFORM",
@@ -711,12 +719,12 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     // Both requests are submitted together; the single-client savepoint adapter serializes
     // their transaction callbacks to preserve the suite's outer rollback isolation.
     const outcomes = await Promise.allSettled([
-      roleDefinitions.reviseCustomRole({
+      reviseRole({
         actorUserId: fixture.actorId,
         roleDefinitionId: initial.id,
         code: `${initial.code}-left`,
       }),
-      roleDefinitions.reviseCustomRole({
+      reviseRole({
         actorUserId: fixture.actorId,
         roleDefinitionId: initial.id,
         code: `${initial.code}-right`,
@@ -771,7 +779,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       assert.deepEqual(failedCreateRows, [], "failed create audit must roll back its RoleDefinition insert");
       assert.equal(await auditCount(), auditCountBefore);
 
-      await assert.rejects(roleDefinitions.reviseCustomRole({
+      await assert.rejects(reviseRole({
         actorUserId: fixture.actorId,
         roleDefinitionId: revisionBase.id,
         code: `${revisionBase.code}-failed-revision`,
@@ -810,7 +818,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
   await t.test("SYSTEM definitions cannot be revised by the Organization service", async () => {
     systemRoleId = await insertSystemRole();
     await assertDefinitionError(
-      roleDefinitions.reviseCustomRole({
+      reviseRole({
         actorUserId: fixture.actorId,
         roleDefinitionId: systemRoleId,
       }),
