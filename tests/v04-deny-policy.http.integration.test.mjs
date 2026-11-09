@@ -118,6 +118,7 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
   const owner = await createActor("owner", "ORG_OWNER");
   const target = await createActor("target", "ORG_MEMBER", owner.organizationId);
   const admin = await createActor("admin", "ORG_ADMIN", owner.organizationId);
+  const outsider = await createActor("outsider", "ORG_MEMBER");
 
   const input = {
     targetMembershipId: target.membershipId,
@@ -145,6 +146,25 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
   const deniedWrite = await denyRequest(admin, "POST", "", input, owner.organizationId);
   assert.equal(deniedWrite.status, 403);
 
+  // An authenticated user without membership in this Organization is denied,
+  // but cannot create audit evidence in a tenant they do not belong to.
+  const outsiderWrite = await denyRequest(outsider, "POST", "", input, owner.organizationId);
+  assert.equal(outsiderWrite.status, 403);
+
+  // Anonymous attempts have no verified actor and are deliberately not stored.
+  const anonymous = await fetch(`${authURL}/api/organizations/${owner.organizationId}/deny-policies`, {
+    method: "POST",
+    headers: { origin: authOrigin, "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  assert.equal(anonymous.status, 401);
+
+  // The per-actor / tenant / event budget is serialized in the DB transaction.
+  const burst = await Promise.all(Array.from({ length: 12 }, () =>
+    denyRequest(admin, "POST", "", input, owner.organizationId)
+  ));
+  assert.ok(burst.every(result => result.status === 403));
+
   const { rows: deniedEvents } = await pool.query(
     `SELECT "event_type"::text AS "eventType","outcome"::text AS "outcome"
        FROM "core"."tenant_deny_audit_event"
@@ -157,6 +177,23 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
     deniedEvents.map(event => [event.eventType,event.outcome]).sort(),
     [["POLICY_READ_DENIED","DENIED"],["POLICY_WRITE_DENIED","DENIED"]],
   );
+
+  const { rows: outsiderEvents } = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM "core"."tenant_deny_audit_event"
+      WHERE "organization_id" = $1 AND "actor_user_id" = $2
+        AND "event_type" = 'POLICY_WRITE_DENIED'`,
+    [owner.organizationId, outsider.userId],
+  );
+  assert.equal(outsiderEvents[0].count, 0);
+
+  const { rows: cappedEvents } = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM "core"."tenant_deny_audit_event"
+      WHERE "organization_id" = $1 AND "actor_user_id" = $2
+        AND "event_type" = 'POLICY_WRITE_DENIED'
+        AND "occurred_at" >= NOW() - INTERVAL '5 minutes'`,
+    [owner.organizationId, admin.userId],
+  );
+  assert.equal(cappedEvents[0].count, 10);
 
   const revoked = await denyRequest(owner, "PATCH", `/${policyId}`, { reason: "HTTP integration revoke" });
   assert.equal(revoked.status, 200, JSON.stringify(revoked.body));
