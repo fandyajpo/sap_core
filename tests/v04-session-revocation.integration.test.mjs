@@ -23,7 +23,6 @@ const pool = new Pool({ connectionString: databaseUrl, max: 3 });
 const userId = `session-lock-user-${randomUUID()}`;
 const email = `${userId}@example.invalid`;
 const sessionId = `session-lock-${randomUUID()}`;
-const token = randomUUID();
 const lockSql = `SELECT s."id"::text AS "id"
   FROM "core"."session" s
  WHERE s."id" = $1
