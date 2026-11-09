@@ -337,4 +337,29 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
   );
   const spoofedBody = await spoofedAssignment.text();
   assert.equal(spoofedAssignment.status, 400, spoofedBody.slice(0, 500));
+
+  const invalidOrganization = await fetch(`${authURL}/api/organizations/not-a-uuid/members`, {
+    headers: { cookie: actor.cookie },
+  });
+  assert.equal(invalidOrganization.status, 400);
+
+  const malformedJson = await fetch(
+    `${authURL}/api/organizations/${actor.organizationId}/roles/assignments`,
+    {
+      method: "POST",
+      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      body: "{",
+    },
+  );
+  assert.equal(malformedJson.status, 400);
+
+  const malformedRevision = await fetch(
+    `${authURL}/api/organizations/${actor.organizationId}/roles/${ownerRoleId}/revisions`,
+    {
+      method: "POST",
+      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      body: "{",
+    },
+  );
+  assert.equal(malformedRevision.status, 400);
 });
