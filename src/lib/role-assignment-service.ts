@@ -95,6 +95,7 @@ interface RoleDefinitionRow {
   scope: RoleScope;
   kind: string;
   ownerOrganizationId: string | null;
+  permissionsLockedAt: Date | null;
 }
 
 interface TypedParentRow {
@@ -183,6 +184,12 @@ async function requireRoleDefinition(
     throw new RoleAssignmentError(
       "ROLE_DEFINITION_NOT_FOUND",
       `Role Definition ${roleDefinitionId} does not exist.`,
+    );
+  }
+  if (roleDefinition.permissionsLockedAt === null) {
+    throw new RoleAssignmentError(
+      "ROLE_DEFINITION_NOT_FOUND",
+      "An unsealed Role Definition cannot be assigned.",
     );
   }
   return roleDefinition;
