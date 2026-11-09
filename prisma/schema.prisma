@@ -433,6 +433,7 @@ enum DenyAuditEventType {
   POLICY_REVOKED
   POLICY_READ
   POLICY_READ_DENIED
+  POLICY_WRITE_DENIED
 
   @@schema("core")
 }
