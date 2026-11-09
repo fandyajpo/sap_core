@@ -1,7 +1,8 @@
 # V04 session revocation and protected-transaction linearization proposal
 
-**Status:** **OWNER-APPROVED (2026-11-09); IMPLEMENTATION IN PR #62; VALIDATION PENDING**.  
-**Baseline:** `main` at `7f95456f87378a8e6f0f5cf571fbd1c2a638c079` (after PR #61).  
+**Status:** **OWNER-APPROVED; IMPLEMENTATION MERGED (PR #62); ACCEPTANCE TEST GAPS REMAIN**.  
+**Audited main:** `f8995b2f84a7e34f209e358d55a976a0e8a71be8` (merge commit for PR #62).  
+**CI:** [Run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667), all eight jobs passed.  
 **Better Auth version:** `1.7.17`; Prisma `7.10.1`.  
 **Scope:** Close the time-of-check/time-of-use gap between Better Auth session verification and the transaction that performs a protected tenant operation.  
 **Database boundary:** Source/schema review only. No database was connected to or modified.
@@ -92,13 +93,21 @@ Tests must assert both HTTP status and database state. Use bounded timeouts for 
 
 ## 7. Implementation verification and remaining risks
 
-- Confirm the exact Better Auth 1.7.17 `getSession` return contract and that `session.id` and `session.userId` are always available for this adapter.
-- Inspect Better Auth 1.7.17 sign-out/revocation implementation and every administrative session deletion path to confirm they mutate `core.session` in the same database.
-- Confirm generated Prisma table/column names and migration mapping; do not copy conceptual snake_case SQL blindly.
-- Review lock mode and transaction isolation behavior with the PostgreSQL version used in CI and production target.
-- Determine whether user disablement is represented in `core.user`. P10 account-disablement semantics are broader than session-row revocation and require a separate verified check if an account status field/control exists.
-- Assess the operational cost of holding a session-row lock for the duration of protected work. Protected transactions must remain bounded and must not include network calls or long-running external work.
-- Avoid acquiring the session lock after membership/assignment locks; standardize lock order to reduce deadlock risk.
+**Verified in PR #62 source review and CI:**
+
+- Better Auth `1.7.17` `getSession` exposes the verified session ID and user ID used by the adapter.
+- Better Auth sign-out deletes the session row by token through the same persistence adapter/table; the lock and deletion therefore contend on the same `core.session` row.
+- The implementation uses the repository's actual Prisma mapping for `core.session` and its physical columns.
+- The shared lock is acquired before tenant GUCs and membership/grant queries, and held by the protected transaction. The lock is also wired into role-assignment and custom-role transaction adapters.
+- CI run [#42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs. PostgreSQL integration coverage includes row-lock serialization, revocation-first denial, expiry/mismatch denial, and rollback release.
+
+**Still open:**
+
+- End-to-end Better Auth HTTP-cookie/sign-out request-first and revocation-first interleavings, asserting both HTTP outcomes and database state. The current request-first PostgreSQL test uses a bounded lock timeout and a later retry; it does not prove a real HTTP sign-out waits and completes automatically.
+- Injected database/lock/query failure proving the protected operation fails closed and no tenant/protected query proceeds.
+- Explicit pool-reuse test for session-lock and tenant context isolation.
+- Determine whether user disablement is represented in `core.user`; P10 account-disablement semantics are broader than session-row revocation and need a separate verified check if an account status/control exists.
+- Continue to keep protected transactions bounded, with no network calls or long-running external work, and preserve lock ordering before membership/assignment locks.
 
 ## 8. Non-goals and safety boundaries
 
@@ -109,11 +118,8 @@ Tests must assert both HTTP status and database state. Use bounded timeouts for 
 - Does not claim all routes are covered until the source inventory and tests prove it.
 - Does not promote V04 or clear hosted-provider residual risk.
 
-## 9. Approval required
+## 9. Approval and acceptance disposition
 
-Before implementation, obtain explicit owner approval for:
-1. The transaction-bound session-row revalidation/locking contract and its defined serialization semantics.
-2. The complete protected-route inventory to which it applies.
-3. The lock-duration/transaction-boundary constraints.
+Owner approval for the transaction-bound session-row revalidation/locking contract, its serialization semantics, the protected-route inventory, and lock-duration/transaction-boundary constraints was explicitly granted on 2026-11-09. The implementation was merged in PR #62 at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; CI run [#42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs.
 
-Until approved and tested, record the session-revocation race as an open V04 acceptance risk. V04 remains **BLOCKED**.
+The implementation milestone is complete, but the session-revocation acceptance item remains open pending real Better Auth HTTP request-first/revocation-first interleavings, injected fail-closed database errors, and explicit pool-reuse isolation. Do not describe the complete acceptance item as closed until those tests pass and their HTTP/database assertions are recorded. V04 remains **BLOCKED**.
