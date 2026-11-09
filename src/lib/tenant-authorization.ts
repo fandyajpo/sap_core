@@ -8,6 +8,7 @@ import {
 import { loadAuthorizationGrants } from "@/lib/authorization-grant-loader";
 import { resolveTenantTargetContext } from "@/lib/tenant-target-context";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
+import { lockVerifiedSessionRow } from "@/lib/verified-session-lock";
 import type { TenantScopeRequest } from "@/lib/tenant-scope-types";
 
 export class TenantAuthorizationError extends Error {
@@ -26,13 +27,19 @@ export class TenantAuthorizationError extends Error {
  */
 export async function requireTenantPermission(
   tx: Prisma.TransactionClient,
-  session: { user: { id: string } } | null,
+  session: { session: { id: string }; user: { id: string } } | null,
   request: TenantScopeRequest,
   permission: AuthorizationPermission,
 ) {
   if (!session?.user?.id) {
     throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
   }
+
+  // Lock and revalidate the exact Better Auth session before tenant GUCs or authorization reads.
+  await lockVerifiedSessionRow((statement, values = []) => tx.$queryRawUnsafe<Array<{ id: string }>>(statement, ...values), {
+    sessionId: session.session.id,
+    userId: session.user.id,
+  });
 
   // Actor identity is trusted only because it comes from the verified Better Auth session.
   // The third argument makes this GUC transaction-local; never replace it with session SET.
