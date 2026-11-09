@@ -23,7 +23,7 @@ async function errorResponse(error: unknown, organizationId: string, action?: "C
     return NextResponse.json({ error: error.message }, { status });
   }
   if (error instanceof TenantTargetContextError) {
-    if (action && error.code === "UNAUTHENTICATED") {
+    if (action && error.code !== "INVALID_SCOPE") {
       await recordDeniedTenantDenyWriteAttempt(organizationId, action);
     }
     const status = error.code === "UNAUTHENTICATED" ? 401 :
