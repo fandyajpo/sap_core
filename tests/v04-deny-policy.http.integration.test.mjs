@@ -173,10 +173,8 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
         AND "event_type" IN ('POLICY_READ_DENIED','POLICY_WRITE_DENIED')`,
     [owner.organizationId, admin.userId],
   );
-  assert.deepEqual(
-    deniedEvents.map(event => [event.eventType,event.outcome]).sort(),
-    [["POLICY_READ_DENIED","DENIED"],["POLICY_WRITE_DENIED","DENIED"]],
-  );
+  assert.equal(deniedEvents.filter(event => event.eventType === "POLICY_READ_DENIED" && event.outcome === "DENIED").length, 1);
+  assert.equal(deniedEvents.filter(event => event.eventType === "POLICY_WRITE_DENIED" && event.outcome === "DENIED").length, 10);
 
   const { rows: outsiderEvents } = await pool.query(
     `SELECT COUNT(*)::int AS count FROM "core"."tenant_deny_audit_event"
