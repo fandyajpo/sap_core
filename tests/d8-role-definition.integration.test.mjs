@@ -328,6 +328,10 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       `SELECT COUNT(*)::int AS count FROM "core"."permission_definition"`,
     );
     assert.equal(permissionRows[0].count, 15);
+    const { rows: delegableRows } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM "core"."permission_definition" WHERE "is_delegable" = TRUE`,
+    );
+    assert.equal(delegableRows[0].count, 0, "no permission is delegable until the owner approves its classification");
     const { rows: roleRows } = await client.query(
       `SELECT COUNT(*)::int AS count FROM "core"."role_definition"
         WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"`,
