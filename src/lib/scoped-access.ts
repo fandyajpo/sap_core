@@ -24,13 +24,13 @@ function createSession(client: unknown): ScopedAccessSession {
   };
 }
 
-const database = {
+export const scopedAccessDatabase: ScopedAccessDatabase = {
   ...createSession(prisma),
   transaction: <T>(work: (session: ScopedAccessSession) => Promise<T>) =>
     prisma.$transaction((transaction) => work(createSession(transaction))),
-} as ScopedAccessDatabase;
+};
 
-export const scopedAccess = createScopedAccessService(database);
+export const scopedAccess = createScopedAccessService(scopedAccessDatabase);
 
 export const {
   grantCompanyMembership,
