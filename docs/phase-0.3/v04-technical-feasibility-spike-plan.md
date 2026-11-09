@@ -287,3 +287,16 @@ Transactional tests passed on both targets: valid CompanyMembership insertion; r
 See [V04.6 X04/D12 execution record](v04.6-x04-d12-referential-integrity-execution-record-2026-11-09.md) for exact target identity, assertions, and limitations. The direct User FK was catalog-verified but not separately behavior-tested with a missing User or direct User parent mutation. No X04 concurrency schedule was run. This case does not establish complete D6 lifecycle behavior, authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
 
 **Latest bounded case register:** D5, X01/D9, X02/D10, X03/D11, and X04/D12 = BOUNDED PASS; X05/D13 = NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. This is evidence reconciliation only; no schema, migration, policy, or gate state changed.
+
+
+## V04.6 X05 / D13 PlantAssignment bounded execution — 2026-11-09
+
+X05 / D13 completed with **BOUNDED PASS** on both recovered migrations 1–8 replay targets (fresh and staged). See [V04.6 X05/D13 execution record](v04.6-x05-d13-referential-integrity-execution-record-2026-11-09.md).
+
+Read-only catalog preflight confirmed the three PlantAssignment FKs are validated and use ON UPDATE RESTRICT ON DELETE RESTRICT: direct userId → User.id, the four-column CompanyMembership tuple, and the three-column Plant scope tuple. Both composite target unique keys and supporting indexes were present on both targets.
+
+Transactional assertions passed on both targets: valid assignment insertion; rejection of User/CompanyMembership mismatch, Company scope mismatch, and Plant scope mismatch by the exact expected composite constraints; referenced CompanyMembership and Plant key update/delete restrictions; direct User FK catalog confirmation; explicit rollback; and zero residual fixtures across all seven fixture entity types.
+
+The direct User FK was catalog-verified but not separately behavior-tested with a nonexistent User or direct User parent update/delete. An organizationId-only tuple mismatch and concurrency schedule were not tested. D6 status lifecycle/partial-unique behavior remains separate. This is bounded database-level evidence only; it does not establish application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
+
+**Latest bounded case register:** D5, X01/D9, X02/D10, X03/D11, X04/D12, and X05/D13 = BOUNDED PASS. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No schema, migration, policy, or gate state changed.
