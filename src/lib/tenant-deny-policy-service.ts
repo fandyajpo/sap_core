@@ -88,6 +88,16 @@ async function resolveOwnerContext(
   return context;
 }
 
+
+function permissionFitsDenyScope(permissionCode: string, scope: "ORGANIZATION" | "COMPANY" | "PLANT"): boolean {
+  if (permissionCode.startsWith("organization.") || permissionCode === "roles.create" || permissionCode === "roles.revise") {
+    return scope === "ORGANIZATION";
+  }
+  if (permissionCode.startsWith("company.")) return scope === "COMPANY";
+  if (permissionCode.startsWith("plant.")) return scope === "COMPANY" || scope === "PLANT";
+  return permissionCode === "roles.read" || permissionCode === "roles.assign";
+}
+
 function requireReason(value: unknown, label: string): string {
   if (typeof value !== "string" || value.trim().length === 0 || value.trim().length > 4000) {
     throw new TenantDenyPolicyError("INVALID_INPUT", `${label} must contain 1–4000 characters.`);
@@ -117,6 +127,9 @@ export async function createTenantDenyPolicy(
   }
   if (!["ORGANIZATION", "COMPANY", "PLANT"].includes(input.scope)) {
     throw new TenantDenyPolicyError("INVALID_INPUT", "The DENY scope is invalid.");
+  }
+  if (!permissionFitsDenyScope(input.permissionCode, input.scope)) {
+    throw new TenantDenyPolicyError("INVALID_INPUT", "The permission is incompatible with the requested exact DENY scope.");
   }
   if (input.scope === "ORGANIZATION" && (input.companyId || input.plantId)) {
     throw new TenantDenyPolicyError("INVALID_INPUT", "Organization DENY must not include Company or Plant identifiers.");
