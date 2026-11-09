@@ -86,14 +86,19 @@ The following code paths were inspected on `main`:
 - Permission evaluation holds shared locks on the effective persisted role assignments and role/permission rows for the target scope until the protected operation commits.
 - Custom role create/revise authorization holds shared locks on the acting user's active Organization membership and the persisted delegation grants through commit.
 - The unbound `scopedAccessDatabase` export was removed from `src/lib/scoped-access.ts` in this change. The current production adapters use `createSessionBoundScopedAccessDatabase`; the complete call-site inventory and static enforcement remain required before declaring the audit complete.
+- A source inventory was completed for the tracked TypeScript/TSX files under `src/`: all API route handlers, server pages, client components, and library modules were inspected. Tenant API routes delegate to the guarded readers/services; the account/home pages require a Better Auth session; sign-in/register pages only resolve auth state; client components call Better Auth client APIs. No Next.js `"use server"` action was found. The production Prisma entry points found were Better Auth's adapter, the session-bound scoped-access transaction factory, and the explicit transaction-bound member/resource/role readers. `createScopedAccessService` remains test-only in the inspected call-site inventory. No background worker or scheduled job source was present under `src/`; any external deployment cron/worker must still be inventoried separately.
 
 This document is not a claim that every application call-site or every adversarial HTTP path has been exhaustively audited. The unbound `scopedAccessDatabase` export was removed from `src/lib/scoped-access.ts` in this change; production code must use `createSessionBoundScopedAccessDatabase` and still apply operation-specific authorization. Complete the remaining checks before production traffic:
 1. Inventory every Prisma client access, raw SQL call, service constructor, server action, route handler, server component, and background entry point.
 2. Prove each tenant-facing path is protected by the verified-session and permission boundary; keep all unbound adapters out of production call-sites.
-3. HTTP-level coverage now includes unauthenticated requests, spoofed actor/recipient IDs, cross-Organization identifiers, malformed input, revoked-session rejection, and suspended membership rejection for member and role-assignment readers. Still add HTTP-level negative tests for sibling Company/Plant identifiers, explicit DENY, and unauthorized role delegation; the lower-level session-row tests cover expired and mismatched-user sessions.
-4. Add concurrency tests for session revocation and membership/assignment changes racing protected operations.
-5. Run the adversarial suites against a fresh disposable PostgreSQL database. Keep RLS tests, but distinguish what they prove locally from what Prisma Postgres enforces.
+3. HTTP-level coverage on PR #69 adds exact-scope Company/Plant allow checks, sibling Company/Plant denial, and rejection of non-delegable `roles.assign` during custom-role creation. The existing HTTP suite covers unauthenticated requests, spoofed actor/recipient IDs, cross-Organization identifiers, malformed input, revoked-session rejection, and suspended-membership rejection. The HTTP suite passes 10/10 tests, including the deterministic concurrent role-assignment revocation lock test. CI run [#42629490606](https://github.com/fandyajpo/sap_core/actions/runs/42629490606) passed all 8 jobs on PR #69 head `7955f5f9a8d5979d4de5780a82d5a62dbf08e288`.
+4. Concurrency coverage proves request-first session revocation waits for the protected request, revocation-first rejects the later request, Organization membership suspension waits behind a protected request that already locked the membership, and the effective role-assignment/membership/role-definition/permission-grant lock set serializes a protected read against concurrent role-assignment revocation. The last case is exercised in the disposable PostgreSQL integration suite by acquiring the production-equivalent `FOR SHARE` lock set, performing the protected read in the same transaction, and verifying the revocation UPDATE waits until commit.
+5. PR #69's CI runs the adversarial suites against its disposable PostgreSQL integration database. Keep RLS tests, but distinguish what they prove locally from what Prisma Postgres enforces. No hosted database was used for this PR.
 6. Review production logs, error handling, and client payloads to ensure secrets, SQL, and internal authorization details are not disclosed.
+
+### Explicit DENY policy status
+
+The policy evaluator implements exact-target DENY precedence, and the persisted-grant loader can interpret a `DENY` effect. However, there is deliberately no supported tenant-facing write path for creating a persisted DENY: built-in SYSTEM role snapshots are sealed, Organization custom-role snapshots accept ALLOW only, and the role-definition API creates ALLOW grants only. The permission-persistence migration describes DENY as reserved for governed policy use. Do not bypass those guards to manufacture an HTTP fixture. A governed DENY policy model, its authorized administrators, scope semantics, audit requirements, and lifecycle must be designed and approved before adding persistence or an HTTP test.
 
 ## Vercel environment
 
@@ -107,10 +112,10 @@ When a Vercel project is created:
 ## Deployment gate
 
 Do not mark production security readiness complete until:
-- [ ] Application-layer call-site inventory is complete.
-- [ ] No tenant request path uses an unbound database/service adapter.
-- [ ] HTTP-level adversarial authorization tests pass.
-- [ ] Concurrency/session-revocation tests pass.
+- [x] Tracked application-source call-site inventory is complete for `src/` TypeScript/TSX; no server actions or in-repository background workers were found. External deployment cron/worker configuration remains outside this repository audit.
+- [x] No tenant request path in the inspected `src/` tree uses an unbound database/service adapter.
+- [x] HTTP-level adversarial authorization tests pass on PR #69 CI (8/8 jobs); merge and main-branch validation are still pending.
+- [x] Concurrency coverage passes for session revocation, membership suspension, and effective role-assignment revocation ordering.
 - [ ] Secret handling and production environment separation are verified.
 - [ ] The residual risk of a full-access hosted database credential is explicitly accepted.
 - [ ] A backup/restore plan appropriate to the Prisma Postgres plan is verified.
