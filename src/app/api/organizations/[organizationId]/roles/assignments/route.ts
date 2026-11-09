@@ -1,3 +1,4 @@
+import { isUuid } from "@/lib/http-validation";
 import { NextResponse } from "next/server";
 import {
   RoleAssignmentError,
@@ -24,6 +25,9 @@ function isScope(value: unknown): value is AssignableScope {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof SyntaxError) {
+    return NextResponse.json({ error: "A valid JSON request body is required." }, { status: 400 });
+  }
   if (error instanceof TenantTargetContextError) {
     const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "INVALID_SCOPE" ? 400 : 403;
     return NextResponse.json({ error: "Role assignment access denied." }, { status });
@@ -47,12 +51,15 @@ export async function GET(
   context: { params: Promise<{ organizationId: string }> },
 ) {
   const { organizationId } = await context.params;
+  if (!isUuid(organizationId)) {
+    return NextResponse.json({ error: "A valid Organization ID is required." }, { status: 400 });
+  }
   const query = new URL(request.url).searchParams;
   const scope = query.get("scope");
   const parentId = query.get("parentId");
   const userId = query.get("userId");
 
-  if (!isScope(scope) || !parentId || !userId) {
+  if (!isScope(scope) || !isUuid(parentId) || !isUuid(userId)) {
     return NextResponse.json(
       { error: "scope, parentId, and userId query parameters are required." },
       { status: 400 },
@@ -74,10 +81,13 @@ export async function POST(
   context: { params: Promise<{ organizationId: string }> },
 ) {
   const { organizationId } = await context.params;
+  if (!isUuid(organizationId)) {
+    return NextResponse.json({ error: "A valid Organization ID is required." }, { status: 400 });
+  }
   try {
     const body: unknown = await request.json();
     if (!isRecord(body) || !isScope(body.scope) ||
-        typeof body.parentId !== "string" || typeof body.roleDefinitionId !== "string" ||
+        !isUuid(body.parentId) || !isUuid(body.roleDefinitionId) ||
         Object.hasOwn(body, "actorUserId") || Object.hasOwn(body, "userId") ||
         Object.hasOwn(body, "breakGlass")) {
       return NextResponse.json(
