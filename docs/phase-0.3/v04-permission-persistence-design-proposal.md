@@ -1,9 +1,10 @@
 # V04 Permission Persistence and Built-in Role Seed Design
 
-**Status:** Proposed technical design — NOT OWNER-APPROVED  
+**Status:** `OWNER_APPROVED` for the five design decisions in §7; technical validation and implementation remain pending  
 **Policy baseline:** [V04 Authorization Policy v0.1](v04-authorization-policy-v0.1.md)  
 **Design basis:** `main` after PR #26  
-**Implementation status:** No schema, migration, seed, or database changes are included in this proposal.
+**Approval date:** 2026-11-09 (explicit project-owner approval in conversation).  
+**Implementation status:** Approval authorizes a forward migration, permission catalog and built-in role seed, trusted server-side grant loader, and focused application integration/tests in the repository. It does **not** authorize any hosted database inspection, migration, seed execution, production access, or destructive database operation. Those require separate explicit approval.
 
 ## 1. Purpose
 
@@ -141,14 +142,18 @@ Do not implement these changes until the owner explicitly approves the migration
 - Direct server-boundary invocation, anonymous actor, cross-tenant selectors and stale membership/role changes.
 - Audit attribution for create, revise, grant, revoke and denied decisions.
 
-## 7. Decisions required before implementation
+## 7. Owner-approved design decisions
 
-The owner-approved v0.1 policy already fixes scope inheritance, ORG_ADMIN authority, custom-role ALLOW subset and the built-in permission matrix. The following implementation details still require approval:
+On 2026-11-09, the project owner explicitly approved all five recommendations in this proposal:
 
-1. Approve the two-table permission catalog/grant model and its exact uniqueness/FK/immutability constraints.
-2. Approve seeding the eight built-in tenant roles and 15 permission definitions through a forward migration.
-3. Confirm the recommended restriction that custom roles contain ALLOW entries only in v0.1; DENY entries are reserved for system/policy use.
-4. Confirm the deny evaluation rule: applicable DENY at the requested target scope overrides every applicable ALLOW for that target, including explicit child-administration grants from parent roles.
-5. Approve the server-side grant loader and its required active membership joins as the production source of grants.
+1. **Persistence model:** use `core.permission_definition` as the canonical permission catalog and `core.role_permission_grant` as the version-specific grant/effect relation. Preserve the proposed unique `(role_definition_id, permission_definition_id)` constraint, RESTRICT foreign keys, lookup indexes, and immutable/sealed permission snapshots.
+2. **Built-in seeds:** seed exactly the 15 v0.1 permission definitions and eight typed SYSTEM tenant roles with grants matching the approved policy matrix, through a new forward migration. Do not create Platform Admin as a tenant role. Migration preflight must stop and require classification if existing RoleDefinition data would conflict; never overwrite or silently reassign existing principals.
+3. **Custom-role effects:** custom roles may contain `ALLOW` entries only in v0.1. `DENY` entries are reserved for separately governed system/policy use; no custom-role DENY authoring UI/API is authorized.
+4. **Deny precedence:** an applicable `DENY` for the requested permission and target scope overrides every applicable `ALLOW`, including an explicit child-administration ALLOW originating from an Organization or Company role. Applicability must still obey the approved strict-scope rules and verified target ancestry; DENY does not create a new inheritance path.
+5. **Trusted grant loader:** implement a server-only loader that derives the actor from the current Better Auth session, resolves active typed membership/assignment chains, and loads role definitions and permission grants from trusted persisted rows. Organization grants may be considered for descendant child-administration only where policy v0.1 explicitly allows it; Company and Plant grants require their corresponding active typed membership/assignment paths.
 
-Until these are approved and implemented with tests, the pure evaluator must not be presented as production authorization. V04 remains **BLOCKED**.
+### Approval boundary
+
+This approval authorizes repository implementation of the approved persistence model, forward migration and seed, server-side grant loader, evaluator integration, and focused tests. It does not authorize inspection or mutation of any hosted database, production database connection, hosted migration/seed execution, destructive database action, or deployment. Any such operation requires a separate explicit owner approval. Local database execution is also not implied by this document approval; use CI/disposable test infrastructure only unless separately authorized.
+
+These are owner-approved design decisions, not technical validation. The implementation must preserve the existing membership lifecycle and Better Auth tables, avoid unrelated P05 relationship changes, and retain fail-closed behavior. V04 remains **BLOCKED** until implementation, application-path isolation, RLS/pool-isolation evidence and required hosted/production evidence are independently satisfied.
