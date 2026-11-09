@@ -4,6 +4,7 @@ import {
   listTenantDenyPolicyHistory,
   TenantDenyPolicyError,
   recordDeniedTenantDenyWriteAttempt,
+  recordDeniedTenantDenyReadAttempt,
   type CreateTenantDenyPolicyInput,
 } from "@/lib/tenant-deny-policy-service";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
@@ -42,6 +43,11 @@ export async function GET(
     const history = await listTenantDenyPolicyHistory(organizationId);
     return NextResponse.json({ organizationId, ...history });
   } catch (error) {
+    if (error instanceof TenantDenyPolicyError && error.code === "FORBIDDEN") {
+      await recordDeniedTenantDenyReadAttempt(organizationId);
+    } else if (error instanceof TenantTargetContextError && error.code === "TENANT_ACCESS_DENIED") {
+      await recordDeniedTenantDenyReadAttempt(organizationId);
+    }
     return await errorResponse(error, organizationId);
   }
 }
