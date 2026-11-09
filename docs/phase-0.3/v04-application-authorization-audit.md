@@ -1,65 +1,68 @@
 # V04 Application Authorization Audit
 
-**Status:** Authorization acceptance remains BLOCKED  
-**Audited ref:** `main` after PR #32 (`e52b3c1d620be17a03eb199734869f02831ec39b`)  
-**Scope:** Better Auth session boundary, tenant target resolution, persisted permission grants, pure evaluator, role and membership services, first protected API operation, CI evidence, RLS and pooled-connection status.
+**Status:** Repository application authorization and disposable-CI tenant-isolation evidence PASS; production acceptance remains BLOCKED.  
+**Audited ref:** `main` at `3fae765a396d0aa62e62c700f526f4020c88d227`.  
+**CI evidence:** Run `42571552875` — all 8 jobs succeeded before merge.  
+**Scope:** Better Auth session boundary, tenant context, persisted grants, protected API operations, custom roles, RLS, and pooled-connection isolation.
 
 ## Executive finding
 
-The repository now has an end-to-end Organization member-read path:
+The first Organization member-read path has been extended into a transaction-bound tenant authorization boundary.
 
-1. Better Auth session is resolved server-side.
-2. The requested Organization target is validated against the actor's active Organization membership.
-3. Persisted role grants are loaded from active typed assignments and sealed/enabled RoleDefinitions.
-4. The v0.1 evaluator checks `organization.members.read`.
-5. The member query runs only after authorization succeeds.
-
-PR #30 adds the 15-code permission catalog, eight seeded tenant SYSTEM roles, immutable role-permission snapshots, grant loading and a server-side permission guard. PR #31 adds `GET /api/organizations/[organizationId]/members`. PR #32 exercises that endpoint with real Better Auth cookies: an ORG_OWNER receives HTTP 200; an authenticated actor with active Organization membership but no role assignment receives HTTP 403.
-
-This is a narrow application-path proof, not complete V04 acceptance. Company and Plant protected operations, comprehensive authorization integration, RLS, pooled-connection isolation, and broader tenant-isolation evidence remain outstanding. V04 remains **BLOCKED**.
+1. Better Auth session is resolved server-side before the tenant transaction.
+2. The actor's active Organization membership and Company/Plant ancestry are validated on the same transaction client.
+3. Transaction-local `app.user_id`, `app.organization_id`, `app.company_id`, and `app.plant_id` are installed only after validation.
+4. Persisted role grants are loaded from active typed assignments and sealed/enabled RoleDefinitions.
+5. The v0.1 evaluator checks the exact target permission, with applicable target-scope DENY precedence.
+6. The protected query executes through the same transaction client.
+7. PostgreSQL RLS independently enforces the approved tenant table set under a non-owner runtime role.
 
 ## Evidence inventory
 
 | Area | Current implementation | Result |
 |---|---|---|
-| Authentication | Better Auth with Prisma adapter; user hard deletion disabled. | Session source is server-side. |
-| Tenant target context | Session-bound active Organization membership plus verified Company/Plant ancestry. | Context is resolved server-side; context alone is not permission. |
-| Permission persistence | `core.permission_definition`, `core.role_permission_grant`, 15 approved codes, eight typed SYSTEM roles, sealed snapshots, immutable grant rows. | Implemented in migration `20261109120000_v04_permission_persistence`. |
-| Custom roles | Organization-only; ALLOW-only; requested permission set checked against injected creator-delegable permission source; create/revise snapshots and audit are transactional. | Persistence and service contract implemented. Production delegable-permission provider still needs explicit wiring before enabling custom-role UI/API. |
-| Trusted grant loader | Server-only loader derives current Better Auth actor, uses active Organization/Company/Plant membership/assignment joins, and loads only sealed, enabled roles. | Implemented; actual Organization path exercised by V03 E2E. |
-| Policy evaluator | Pure v0.1 matrix, persisted SYSTEM snapshot support, strict scope, explicit child-administration grants, target-scope DENY precedence, fail-closed unknown roles/permissions. | Unit coverage and loader integration path exist. |
-| Protected API | `GET /api/organizations/[organizationId]/members` requires `organization.members.read` before query. | Positive and negative real-session endpoint tests pass. |
-| CI | Static, V03, D1, D6, D7, D8 and V04 pinned replay. | PR #30, #31 and #32 each passed all 7 checks. |
-| RLS and pooled connection | No RLS policies, transaction-local tenant GUC, or same-connection reuse evidence found. | BLOCKED; see [RLS and pooled-connection inventory](v04-rls-and-pool-isolation-inventory.md). |
-| Hosted/production database | No hosted DB was inspected or modified. | No hosted/production evidence established. |
+| Authentication | Better Auth with Prisma adapter; server-derived session actor | PASS |
+| Tenant target context | Active Organization membership and verified Company/Plant ancestry; incremental transaction-local GUCs | PASS |
+| Permission persistence | 15 permission codes, eight typed SYSTEM roles, sealed snapshots, immutable grant rows | PASS |
+| Tenant RLS | Migration `20261109130000_v04_tenant_rls`; 13 tables | PASS in disposable PostgreSQL |
+| Runtime/migration roles | Runtime `DATABASE_URL`; migration `MIGRATION_DATABASE_URL`; separate CI identities | PASS in CI; hosted verification pending |
+| Custom roles | Organization-only, ALLOW-only; create/revise callbacks use the same transaction; trusted delegable permission provider is wired | PASS for service/API path; policy classification remains fail-closed |
+| Delegation policy | `core.permission_delegation_policy`, one row per permission, all false by default, runtime SELECT-only | PASS — no unapproved permission is delegable |
+| Protected API | Organization members GET; Company GET; Plant GET; Organization roles GET/POST and revision POST | PASS for implemented API slice |
+| Negative authorization | Active membership without required permission; sibling Company/Plant; actorUserId spoofing | PASS |
+| Pool isolation | Same backend PID, transaction-local GUC cleanup after commit/rollback/exception, reused connection, concurrent A/B requests | PASS in disposable CI |
+| Direct SQL | Missing/malformed context, tenant A/B visibility, runtime-role ownership/privilege checks, identity-table exclusion | PASS in disposable CI |
+| Hosted/production database | No hosted DB connection, inspection, migration, role provisioning, or deployment | NOT ESTABLISHED |
 
 ## Security conclusions
 
-1. Never accept actor identity or role grants from browser input; derive the actor from the current Better Auth session.
-2. Treat tenant IDs as untrusted selectors; validate target ancestry and active membership server-side.
-3. Authentication and membership do not imply permission. The endpoint's negative integration case proves this.
+1. Browser-supplied actor IDs and role claims are not trusted; the verified Better Auth session is the actor source.
+2. Tenant IDs are selectors only; ancestry and active typed membership/assignment are validated server-side.
+3. Authentication and membership do not imply permission.
 4. Organization child-administration grants do not create Company/Plant operational inheritance.
-5. Custom roles are Organization-only and ALLOW-only; permission payloads must be a subset of the creator's trusted delegable permissions.
-6. Applicable target-scope DENY overrides applicable ALLOW; custom roles cannot author DENY.
-7. Role assignment requires a sealed permission snapshot. Disabled and unsealed definitions are excluded from authorization.
-8. The Organization member API is a narrow first protected operation. It does not establish protection for all future Company/Plant or ERP operations.
-9. RLS cannot be layered on top of the current global-Prisma authorization sequence without first binding target resolution, grant loading and the protected query to one transaction connection.
-10. No hosted database inspection, migration, seed execution or deployment is authorized by the repository implementation approvals.
+5. Custom roles remain Organization-only and ALLOW-only. Requested permissions must be within the creator's effective, owner-approved delegable set.
+6. All delegation policy rows default to false. The runtime role cannot modify the policy table.
+7. RLS is defense-in-depth and does not replace the application permission evaluator.
+8. Better Auth identity tables remain outside initial tenant RLS so sign-in/session/account flows can run without tenant GUCs.
+9. The implemented API slice does not establish protection for future mutation or ERP routes; each new route must use the same transaction boundary and exact-scope checks.
+10. Disposable CI evidence is not production evidence. Hosted database operations remain separately gated.
 
 ## Remaining acceptance work
 
 | Acceptance area | Status |
 |---|---|
-| Application authorization | PARTIAL — one protected Organization read operation exists; custom-role delegation provider and broader operation coverage remain. |
-| Tenant context enforcement | PARTIAL — target resolver and Organization member API are covered; Company/Plant operation paths remain. |
-| Protected operations | PARTIAL — Organization member read only. |
-| RLS policy design and enforcement | BLOCKED — actual query/transaction inventory completed; separate design and approval required. |
-| Pooled connection/session context isolation | BLOCKED — no transaction-local tenant context or connection-reuse tests yet. |
-| End-to-end tenant isolation | PARTIAL — Organization positive/negative path tested; Company/Plant and direct SQL/RLS paths remain. |
-| Hosted/production database evidence | NOT ESTABLISHED — no hosted database operations were performed. |
+| Application authorization for implemented API slice | PASS |
+| Transaction-bound tenant context | PASS |
+| RLS enforcement and runtime-role direct SQL | PASS in disposable CI |
+| Pooled connection/session context isolation | PASS in disposable CI |
+| Company/Plant exact-scope read coverage | PASS |
+| Custom-role provider | IMPLEMENTED; permission delegation policy awaiting owner classification |
+| Future membership/assignment mutation and ERP API coverage | OUTSIDE THIS IMPLEMENTED SLICE; must be protected before exposure |
+| Hosted/production database evidence | BLOCKED pending separate approval and provider verification |
 
-## Next deliverable
+## Next owner decisions
 
-Review the RLS and pooled-connection inventory, then prepare a transaction-bound tenant execution contract and database-role design for owner approval. Do not implement RLS, database roles, GUCs, or hosted database operations before that approval.
+1. Approve the exact permission codes that may be delegated to Organization custom roles. Until then, the delegation policy remains all-false and custom-role create/revision fails closed.
+2. Separately approve hosted database role/grant provisioning and a hosted smoke test. No hosted connection or changes have been made.
 
-**V04 remains BLOCKED.**
+**V04 repository and disposable-CI evidence: PASS. V04 production acceptance: BLOCKED.**
