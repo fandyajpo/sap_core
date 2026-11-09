@@ -190,6 +190,28 @@ jobs:
             await client.end();
           }
           NODE
+      - name: Apply migration 10 to the staged D7 upgrade
+        run: |
+          set -euo pipefail
+          cp -R "$RUNNER_TEMP/v04-current-migrations/20261109120000_v04_permission_persistence" prisma/migrations/
+          pnpm db:migrate:deploy
+          pnpm db:status
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          try {
+            const { rows } = await client.query(
+              'SELECT "migration_name", "rolled_back_at" FROM public."_prisma_migrations" ORDER BY "started_at"',
+            );
+            assert.equal(rows.length, 10);
+            assert.ok(rows.every((row) => row.rolled_back_at === null));
+            assert.equal(rows[9].migration_name, "20261109120000_v04_permission_persistence");
+          } finally {
+            await client.end();
+          }
+          NODE
       - name: Create isolated D8 fresh database
         run: |
           node --input-type=module <<'NODE'
@@ -204,7 +226,7 @@ jobs:
             await client.end();
           }
           NODE
-      - name: Deploy all nine migrations and execute D14-B
+      - name: Deploy all ten migrations and execute D14-B
         env:
           DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55434/sap_core_d8_test?schema=public
         run: |
