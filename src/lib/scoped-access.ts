@@ -38,6 +38,7 @@ function createSession(client: unknown): ScopedAccessSession {
 export function createSessionBoundScopedAccessDatabase(identity: VerifiedSessionIdentity): ScopedAccessDatabase {
   return {
     query: async <Row extends object>(_statement: string, _values: unknown[] = []): Promise<Row[]> => {
+      void _values;
       throw new Error("Session-bound scoped access queries must run inside transaction().");
     },
     transaction: <T>(work: (session: ScopedAccessSession) => Promise<T>) =>
