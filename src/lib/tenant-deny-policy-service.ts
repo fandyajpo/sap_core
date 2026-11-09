@@ -307,7 +307,8 @@ export async function revokeTenantDenyPolicy(
 }
 
 
-const deniedAuditLimit = 10;
+const deniedAuditActorLimit = 10;
+const deniedAuditOrganizationLimit = 50;
 
 async function recordDeniedTenantDenyAttempt(
   organizationId: string,
@@ -316,12 +317,12 @@ async function recordDeniedTenantDenyAttempt(
 ) {
   if (!uuidPattern.test(organizationId)) return false;
 
-  const session = await getCurrentSession();
-  // Anonymous traffic is deliberately not persisted as tenant audit evidence:
-  // it has no verified actor or active membership to anchor the event.
-  if (!session?.session?.id || !session.user?.id) return false;
-
   try {
+    const session = await getCurrentSession();
+    // Anonymous traffic is deliberately not persisted as tenant audit evidence:
+    // it has no verified actor or active membership to anchor the event.
+    if (!session?.session?.id || !session.user?.id) return false;
+
     return await prisma.$transaction(async (tx) => {
       await lockVerifiedSessionRow(
         (statement, values = []) => tx.$queryRawUnsafe<Array<{ id: string }>>(statement, ...values),
@@ -334,20 +335,22 @@ async function recordDeniedTenantDenyAttempt(
         organizationId,
       });
 
-      // Serialize per actor / Organization / event category so concurrent
-      // rejected requests cannot race past the append-only audit budget.
-      const lockKey = `${actor.organizationId}:${actor.userId}:${eventType}`;
+      // Serialize per Organization / event category so concurrent actors
+      // cannot race past the tenant-wide append-only audit budget.
+      const lockKey = `${actor.organizationId}:${eventType}`;
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
 
-      const recent = await tx.$queryRaw<Array<{ count: number }>>`
-        SELECT COUNT(*)::int AS "count"
+      const recent = await tx.$queryRaw<Array<{ actorCount: number; organizationCount: number }>>`
+        SELECT
+          COUNT(*) FILTER (WHERE "actor_user_id" = ${actor.userId})::int AS "actorCount",
+          COUNT(*)::int AS "organizationCount"
         FROM "core"."tenant_deny_audit_event"
         WHERE "organization_id" = ${actor.organizationId}::uuid
-          AND "actor_user_id" = ${actor.userId}
           AND "event_type" = ${eventType}::"core"."DenyAuditEventType"
           AND "occurred_at" >= clock_timestamp() - interval '5 minutes'
       `;
-      if ((recent[0]?.count ?? 0) >= deniedAuditLimit) return false;
+      if ((recent[0]?.actorCount ?? 0) >= deniedAuditActorLimit) return false;
+      if ((recent[0]?.organizationCount ?? 0) >= deniedAuditOrganizationLimit) return false;
 
       await tx.$executeRaw`
         INSERT INTO "core"."tenant_deny_audit_event"
