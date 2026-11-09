@@ -88,8 +88,8 @@ async function createActor(label, roleCode) {
   return actor;
 }
 
-async function denyRequest(actor, method, path, body) {
-  const response = await fetch(`${authURL}/api/organizations/${actor.organizationId}/deny-policies${path}`, {
+async function denyRequest(actor, method, path, body, organizationId = actor.organizationId) {
+  const response = await fetch(`${authURL}/api/organizations/${organizationId}/deny-policies${path}`, {
     method,
     headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -139,9 +139,9 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
   assert.ok(history.body.events.some(event => event.eventType === "POLICY_CREATED"));
   assert.ok(history.body.events.some(event => event.eventType === "POLICY_READ"));
 
-  const deniedRead = await denyRequest(admin, "GET", "");
+  const deniedRead = await denyRequest(admin, "GET", "", undefined, owner.organizationId);
   assert.equal(deniedRead.status, 403);
-  const deniedWrite = await denyRequest(admin, "POST", "", input);
+  const deniedWrite = await denyRequest(admin, "POST", "", input, owner.organizationId);
   assert.equal(deniedWrite.status, 403);
 
   const { rows: deniedEvents } = await pool.query(
