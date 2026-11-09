@@ -78,8 +78,6 @@ interface RoleDefinitionRow {
   scope: RoleScope;
   kind: string;
   ownerOrganizationId: string | null;
-  disabledAt: Date | null;
-  permissionsLockedAt: Date | null;
 }
 
 interface TypedParentRow {
@@ -143,8 +141,7 @@ async function requireRoleDefinition(
 ): Promise<RoleDefinitionRow> {
   const rows = await session.query<RoleDefinitionRow>(
     `SELECT "id", "scope"::text AS "scope", "kind"::text AS "kind",
-            "ownerOrganizationId"::text AS "ownerOrganizationId",
-            "disabled_at" AS "disabledAt", "permissions_locked_at" AS "permissionsLockedAt"
+            "ownerOrganizationId"::text AS "ownerOrganizationId"
      FROM "core"."role_definition"
      WHERE "id" = $1
      FOR SHARE`,
@@ -155,12 +152,6 @@ async function requireRoleDefinition(
     throw new RoleAssignmentError(
       "ROLE_DEFINITION_NOT_FOUND",
       `Role Definition ${roleDefinitionId} does not exist.`,
-    );
-  }
-  if (roleDefinition.disabledAt !== null || roleDefinition.permissionsLockedAt === null) {
-    throw new RoleAssignmentError(
-      "ROLE_DEFINITION_OWNERSHIP_INVALID",
-      "Only enabled Role Definitions with sealed permission snapshots can be assigned.",
     );
   }
   return roleDefinition;
