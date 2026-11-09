@@ -5,7 +5,7 @@ import {
   type AuthorizationRoleGrant,
   type AuthorizationScope,
   type ExplicitPermissionDeny,
-} from "./authorization-policy-core.ts";
+} from "./authorization-policy-core";
 import type {
   RoleAssignmentGrantAuthorization,
   RoleAssignmentListAuthorization,
@@ -305,7 +305,6 @@ async function authorize(
     if (
       !definition
       || definition.scope !== grantInput.scope
-      || definition.scope === "PLATFORM"
       || definition.disabledAt !== null
       || definition.permissionsLockedAt === null
       || (definition.kind === "SYSTEM" && definition.ownerOrganizationId !== null)
