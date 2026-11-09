@@ -240,7 +240,7 @@ export async function listOrganizationRoles(organizationId: string): Promise<Org
   const session = await getCurrentSession();
   return prisma.$transaction(async (tx) => {
     await requireTenantPermission(tx, session, { kind: "ORGANIZATION", organizationId }, "roles.read");
-    return tx.$queryRaw<OrganizationRoleSummary[]>\`
+    return tx.$queryRaw<OrganizationRoleSummary[]>`
       SELECT
         rd."id"::text AS "id",
         rd."code",
@@ -264,6 +264,6 @@ export async function listOrganizationRoles(organizationId: string): Promise<Org
         )
       GROUP BY rd."id"
       ORDER BY rd."kind"::text, rd."code", rd."version" DESC
-    \`;
+    `;
   });
 }
