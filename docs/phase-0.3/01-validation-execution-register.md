@@ -185,3 +185,12 @@ Per Section 5 matrix order in the technical-feasibility plan, D5 zero-to-many Or
 D5 completed on both isolated migrations 1–8 replay targets (fresh and staged). The Organization-with-zero-Companies, one-Organization-with-two-Companies, nonexistent-parent FK rejection, absence of an organizationId-only unique index, and zero-residual-fixture rollback assertions all passed. Both targets exposed the expected ordinary `organizationId` index and composite unique `(organizationId, id)` index. See the [D5 execution record](v04.6-d5-baseline-execution-record-2026-11-09.md) for run identity, migration scope, schema findings, and boundaries.
 
 **Result: BOUNDED PASS for D5 only.** X01 / D9 runtime referential-action checks remain NOT RUN and require separate authorization. V04 remains BLOCKED; no gate promotion is implied.
+
+
+## V04.6 X03 / D11 bounded execution — 2026-11-09
+
+X03 / D11 passed on both recovered migrations 1–8 disposable replay targets (fresh and staged). Catalog preflight verified the two direct OrganizationMembership FKs to User and Organization, their required non-null scalar columns and TEXT/UUID types, validated status, and RESTRICT/RESTRICT actions. Transactional assertions verified valid membership inserts, duplicate ACTIVE/SUSPENDED slot rejection by the expected partial unique index, missing-parent rejection by each named FK, RESTRICT on referenced User/Organization key updates and deletes, coexistence of one ACTIVE with REVOKED and ENDED history, successful rollback, and zero residual fixture rows on both targets.
+
+Detailed evidence and limitations: [X03 / D11 execution record](v04.6-x03-d11-referential-integrity-execution-record-2026-11-09.md). No X03 concurrency schedule was run; this is not complete D1/D3 lifecycle, authorization, RLS, application tenant-isolation, or V04 acceptance evidence.
+
+**Latest V04.6 case register:** D5, X01/D9, X02/D10, and X03/D11 = BOUNDED PASS; X04/D12 and X05/D13 = NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**.
