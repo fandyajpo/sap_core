@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ScopedAccessDatabase, ScopedAccessSession } from "./scoped-access-service.ts";
 import type { RoleScope } from "./role-assignment-service.ts";
-import { isCustomRolePermissionSubset, type AuthorizationPermission } from "./authorization-policy-core";
+import type { AuthorizationPermission } from "./authorization-policy-core.ts";
 
 export type CustomRoleScope = "ORGANIZATION";
 export type RoleDefinitionAuditEventType = "CREATE" | "REVISE";
@@ -97,6 +97,14 @@ const roleDefinitionColumns = `
   "ownerOrganizationId"::text AS "ownerOrganizationId",
   "created_at" AS "createdAt", "updated_at" AS "updatedAt",
   "permissions_locked_at" AS "permissionsLockedAt"`;
+
+function isPermissionSubset(
+  requested: readonly AuthorizationPermission[],
+  delegable: readonly AuthorizationPermission[],
+): boolean {
+  const allowed = new Set(delegable);
+  return requested.every((permission) => allowed.has(permission));
+}
 
 function requireUserId(value: string, label: string): void {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -279,7 +287,7 @@ export function createRoleDefinitionService(
           actorUserId: input.actorUserId,
           organizationId: input.organizationId,
         });
-        if (!isCustomRolePermissionSubset(permissions, delegablePermissions)) {
+        if (!isPermissionSubset(permissions, delegablePermissions)) {
           throw new RoleDefinitionError("AUTHORIZATION_DENIED", "The requested permission set exceeds the creator's delegable permissions.");
         }
         const authorized = await authorization.authorizeCreate({
@@ -377,7 +385,7 @@ export function createRoleDefinitionService(
           actorUserId: input.actorUserId,
           organizationId: source.ownerOrganizationId,
         });
-        if (!isCustomRolePermissionSubset(permissions, delegablePermissions)) {
+        if (!isPermissionSubset(permissions, delegablePermissions)) {
           throw new RoleDefinitionError("AUTHORIZATION_DENIED", "The revised permission set exceeds the creator's delegable permissions.");
         }
         const nextVersion = source.version + 1;
