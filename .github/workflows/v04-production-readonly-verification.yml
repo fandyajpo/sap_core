@@ -94,6 +94,7 @@ jobs:
 
           let stage = "connect";
           let transactionOpen = false;
+          let socketListenerAttached = false;
 
           // Capture the original pg-protocol error before pg.Client can wrap or
           // suppress it. Only allowlisted scalar diagnostics are retained.
@@ -151,7 +152,7 @@ jobs:
             }
 
             const connectPromise = client.connect();
-            const socketListenerAttached = Boolean(client.connection?.on);
+            socketListenerAttached = Boolean(client.connection?.on);
             client.connection?.on("error", captureConnectionError);
             await connectPromise;
             stage = "begin-read-only";
