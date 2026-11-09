@@ -77,6 +77,18 @@ test("FOR SHARE lock blocks Better Auth-compatible session-row deletion until pr
 
     const remaining = await pool.query('SELECT 1 FROM "core"."session" WHERE "id" = $1', [sessionId]);
     assert.equal(remaining.rowCount, 0);
+
+    const rollbackId = `session-rollback-${randomUUID()}`;
+    await insertSession(rollbackId);
+    await protectedClient.query("BEGIN");
+    const rollbackLock = await protectedClient.query(lockSql, [rollbackId, userId]);
+    assert.equal(rollbackLock.rowCount, 1);
+    await protectedClient.query("ROLLBACK");
+    await revokeClient.query("BEGIN");
+    await revokeClient.query('DELETE FROM "core"."session" WHERE "id" = $1', [rollbackId]);
+    await revokeClient.query("COMMIT");
+    const rolledBack = await pool.query('SELECT 1 FROM "core"."session" WHERE "id" = $1', [rollbackId]);
+    assert.equal(rolledBack.rowCount, 0);
   } finally {
     await protectedClient.query("ROLLBACK").catch(() => {});
     await revokeClient.query("ROLLBACK").catch(() => {});
