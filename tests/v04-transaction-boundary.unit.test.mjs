@@ -83,3 +83,11 @@ test("authorization grant snapshots lock effective assignments and permission ro
   assert.match(assignmentPolicy, /FOR SHARE OF ra, pa, cm, om, rd, g/);
   assert.match(roleDefinitionPolicy, /FOR SHARE OF ra, om, rd, g/);
 });
+
+
+test("effective role-assignment listing locks the returned assignment and membership ancestry rows", async () => {
+  const service = await source("src/lib/role-assignment-service.ts");
+  assert.match(service, /FOR SHARE OF ra, om, rd/);
+  assert.match(service, /FOR SHARE OF ra, cm, om, rd/);
+  assert.match(service, /FOR SHARE OF ra, pa, cm, om, rd/);
+});
