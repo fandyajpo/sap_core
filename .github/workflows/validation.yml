@@ -38,6 +38,7 @@ jobs:
       - run: pnpm test:organization-members-reader
       - run: pnpm test:v04-transaction-boundary
       - run: pnpm test:v04-role-assignment
+      - run: pnpm test:v04-role-assignment-production
 
   v03-integration:
     runs-on: ubuntu-latest
