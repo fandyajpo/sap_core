@@ -186,6 +186,7 @@ test("concurrent creates serialize on the exact target membership before duplica
       [ids.membership],
     );
 
+    const secondPid = (await second.query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
     await second.query("BEGIN");
     secondOpen = true;
     const lockPromise = second.query(
@@ -195,24 +196,17 @@ test("concurrent creates serialize on the exact target membership before duplica
 
     let waiting = false;
     for (let attempt = 0; attempt < 200; attempt += 1) {
-      const { rows } = await pool.query(
-        `SELECT wait_event_type FROM pg_stat_activity
-          WHERE pid = pg_backend_pid()`,
+      const { rows: activity } = await pool.query(
+        'SELECT wait_event_type FROM pg_stat_activity WHERE pid = $1',
+        [secondPid],
       );
-      if (rows[0]?.wait_event_type === "Lock") {
+      if (activity[0]?.wait_event_type === "Lock") {
         waiting = true;
         break;
       }
       await new Promise(resolve => setTimeout(resolve, 10));
     }
-    // The lock request is intentionally pending; release the first transaction
-    // only after confirming the second backend is blocked on the membership row.
-    const secondPid = (await second.query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
-    const { rows: activity } = await pool.query(
-      'SELECT wait_event_type FROM pg_stat_activity WHERE pid = $1',
-      [secondPid],
-    );
-    waiting ||= activity[0]?.wait_event_type === "Lock";
+    // Release only after PostgreSQL confirms that the second create is blocked.
     assert.equal(waiting, true, "second create must wait for the target membership lock");
 
     await insertPolicy(first, { id: policyId });
