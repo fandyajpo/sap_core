@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ScopedAccessDatabase, ScopedAccessSession } from "./scoped-access-service.ts";
 import type { RoleScope } from "./role-assignment-service.ts";
-import { isCustomRolePermissionSubset, type AuthorizationPermission } from "./authorization-policy-core.ts";
+import { isCustomRolePermissionSubset, type AuthorizationPermission } from "./authorization-policy-core";
 
 export type CustomRoleScope = "ORGANIZATION";
 export type RoleDefinitionAuditEventType = "CREATE" | "REVISE";
