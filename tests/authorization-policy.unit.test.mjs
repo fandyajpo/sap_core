@@ -28,7 +28,7 @@ test("Organization Admin receives explicit child administration, not operational
     permission: "inventory.read",
     target: { scope: "PLANT", organizationId: org, companyId: companyA, plantId: plantA },
     grants,
-  }).reason, "NO_MATCHING_GRANT");
+  }).reason, "INVALID_REQUEST");
 });
 
 test("Organization grants cannot cross into a different Organization", () => {
