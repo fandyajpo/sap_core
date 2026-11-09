@@ -23,6 +23,15 @@ function harness({ actorMember = true, targetMember = true, deny = false } = {})
       if (statement.includes('FROM "core"."organization_membership"') && statement.includes('"userId" = $1')) {
         return actorMember ? [{ id: "55555555-5555-4555-8555-555555555555" }] : [];
       }
+      if (statement.includes('FROM "core"."role_definition"')) {
+        return [{
+          scope: "ORGANIZATION",
+          kind: "SYSTEM",
+          ownerOrganizationId: null,
+          disabledAt: null,
+          permissionsLockedAt: new Date("2026-11-09T00:00:00.000Z"),
+        }];
+      }
       if (statement.includes('FROM "core"."organization_role_assignment"')) {
         const rows = [{
           assignmentId: "66666666-6666-4666-8666-666666666666",
