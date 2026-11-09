@@ -116,7 +116,7 @@ async function createActor(label, organizationRoleCode = "ORG_OWNER") {
   const { rows: organizationRoles } = await pool.query(
     `SELECT "id"::text AS "id" FROM "core"."role_definition"
       WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
-        AND "scope" = 'ORGANIZATION'::"core"."RoleScope'
+        AND "scope" = 'ORGANIZATION'::"core"."RoleScope"
         AND "code" = $1`,
     [organizationRoleCode],
   );
