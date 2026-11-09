@@ -194,3 +194,14 @@ X03 / D11 passed on both recovered migrations 1–8 disposable replay targets (f
 Detailed evidence and limitations: [X03 / D11 execution record](v04.6-x03-d11-referential-integrity-execution-record-2026-11-09.md). No X03 concurrency schedule was run; this is not complete D1/D3 lifecycle, authorization, RLS, application tenant-isolation, or V04 acceptance evidence.
 
 **Latest V04.6 case register:** D5, X01/D9, X02/D10, and X03/D11 = BOUNDED PASS; X04/D12 and X05/D13 = NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**.
+
+
+## V04.6 X04 / D12 bounded execution — 2026-11-09
+
+X04 / D12 completed with **BOUNDED PASS** on both recovered migrations 1–8 disposable replay targets (fresh and staged). Read-only preflight confirmed all three CompanyMembership FKs are present, validated, and RESTRICT/RESTRICT: direct `userId → User.id`, composite `(organizationMembershipId, userId, organizationId) → OrganizationMembership(id, userId, organizationId)`, and composite `(organizationId, companyId) → Company(organizationId, id)`. The required composite unique target keys and supporting indexes were present on both targets.
+
+Transactional behavior assertions passed on both targets: a valid CompanyMembership inserted; membership/user mismatch and organization/membership mismatch were rejected by the expected OrganizationMembership composite FK; a Company from a different Organization was rejected by the expected Company composite FK; referenced OrganizationMembership and Company key updates/deletes were rejected; rollback completed; and all fixture residual counts were zero.
+
+See [X04 / D12 execution record](v04.6-x04-d12-referential-integrity-execution-record-2026-11-09.md) for exact target identities, catalog results, assertions, and limitations. The direct User FK was verified through catalog metadata only; a missing-User insert and direct User parent update/delete were not separately exercised. No X04 concurrency schedule was run. This result does not establish complete D6 lifecycle behavior, application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
+
+**Latest bounded case register:** D5, X01/D9, X02/D10, X03/D11, and X04/D12 = BOUNDED PASS; X05/D13 = NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. This is an evidence update only; no schema, migration, policy, or gate state changed.
