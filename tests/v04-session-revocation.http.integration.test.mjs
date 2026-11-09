@@ -409,3 +409,50 @@ test("membership suspension waits for a protected tenant request that locked mem
     if (suspensionPromise) await suspensionPromise.catch(() => {});
   }
 });
+
+test("unauthenticated HTTP requests are rejected before role-assignment request validation", async () => {
+  const members = await fetch(
+    `${authURL}/api/organizations/${randomUUID()}/members`,
+  );
+  assert.equal(members.status, 401);
+
+  const assignmentsGet = await fetch(
+    `${authURL}/api/organizations/${randomUUID()}/roles/assignments?scope=ORGANIZATION&parentId=${randomUUID()}&userId=anonymous`,
+  );
+  assert.equal(assignmentsGet.status, 401);
+
+  const assignmentsPost = await fetch(
+    `${authURL}/api/organizations/${randomUUID()}/roles/assignments`,
+    {
+      method: "POST",
+      headers: { origin: authOrigin, "content-type": "application/json" },
+      body: "{",
+    },
+  );
+  assert.equal(assignmentsPost.status, 401);
+});
+
+test("suspended Organization membership is denied by protected HTTP readers", async () => {
+  const actor = await createActor("inactive-membership");
+  await pool.query(
+    `UPDATE "core"."organization_membership"
+        SET "status" = 'SUSPENDED'::"core"."OrganizationMembershipStatus",
+            "updated_at" = NOW()
+      WHERE "id" = $1`,
+    [actor.membershipId],
+  );
+
+  const [members, assignments] = await Promise.all([
+    fetch(
+      `${authURL}/api/organizations/${actor.organizationId}/members`,
+      { headers: { cookie: actor.cookie } },
+    ),
+    fetch(
+      `${authURL}/api/organizations/${actor.organizationId}/roles/assignments?scope=ORGANIZATION&parentId=${actor.membershipId}&userId=${actor.userId}`,
+      { headers: { cookie: actor.cookie } },
+    ),
+  ]);
+
+  assert.equal(members.status, 403, (await members.text()).slice(0, 500));
+  assert.equal(assignments.status, 403, (await assignments.text()).slice(0, 500));
+});
