@@ -68,7 +68,7 @@ async function waitForActivity(pattern, label, timeoutMs = 10_000) {
   throw new Error(`Timed out waiting for PostgreSQL lock activity: ${label}`);
 }
 
-async function createActor(label) {
+async function createActor(label, organizationRoleCode = "ORG_OWNER") {
   const email = `${prefix}${label}@example.test`;
   const password = `${randomUUID()}Aa1!`;
   const signup = await authRequest("/sign-up/email", {
@@ -113,17 +113,72 @@ async function createActor(label) {
     assert.equal(rows.length, 1, "the seeded ORG_OWNER role must exist");
     ownerRoleId = rows[0].id;
   }
+  const { rows: organizationRoles } = await pool.query(
+    `SELECT "id"::text AS "id" FROM "core"."role_definition"
+      WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+        AND "scope" = 'ORGANIZATION'::"core"."RoleScope'
+        AND "code" = $1`,
+    [organizationRoleCode],
+  );
+  assert.equal(organizationRoles.length, 1, `the seeded ${organizationRoleCode} role must exist`);
   await pool.query(
     `INSERT INTO "core"."organization_role_assignment"
        ("id", "organizationMembershipId", "roleDefinitionId", "role_scope",
         "grant_actor_user_id", "is_break_glass", "created_at")
      VALUES ($1, $2, $3, 'ORGANIZATION'::"core"."RoleScope", $4, FALSE, NOW())`,
-    [randomUUID(), membershipId, ownerRoleId, userId],
+    [randomUUID(), membershipId, organizationRoles[0].id, userId],
   );
 
   const actor = { userId, email, cookie, sessionId, organizationId, membershipId };
   actors.push(actor);
   return actor;
+}
+
+async function createCompanyPlantScopedActor(label) {
+  const actor = await createActor(label, "ORG_MEMBER");
+  const companyA = randomUUID();
+  const companyB = randomUUID();
+  const plantA = randomUUID();
+  const plantB = randomUUID();
+  const companyMembershipId = randomUUID();
+  const plantAssignmentId = randomUUID();
+
+  await pool.query(
+    `INSERT INTO "core"."company" ("id", "organizationId", "created_at", "updated_at")
+     VALUES ($1, $3, NOW(), NOW()), ($2, $3, NOW(), NOW())`,
+    [companyA, companyB, actor.organizationId],
+  );
+  await pool.query(
+    `INSERT INTO "core"."plant" ("id", "organizationId", "companyId", "created_at", "updated_at")
+     VALUES ($1, $3, $4, NOW(), NOW()), ($2, $3, $4, NOW(), NOW())`,
+    [plantA, plantB, actor.organizationId, companyA],
+  );
+  await pool.query(
+    `INSERT INTO "core"."company_membership"
+       ("id", "userId", "organizationMembershipId", "organizationId", "companyId", "status", "created_at", "updated_at")
+     VALUES ($1, $2, $3, $4, $5, 'ACTIVE'::"core"."ScopedAccessStatus", NOW(), NOW())`,
+    [companyMembershipId, actor.userId, actor.membershipId, actor.organizationId, companyA],
+  );
+  await pool.query(
+    `INSERT INTO "core"."plant_assignment"
+       ("id", "userId", "companyMembershipId", "organizationId", "companyId", "plantId", "status", "created_at", "updated_at")
+     VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE'::"core"."ScopedAccessStatus", NOW(), NOW())`,
+    [plantAssignmentId, actor.userId, companyMembershipId, actor.organizationId, companyA, plantA],
+  );
+  await pool.query(
+    `INSERT INTO "core"."company_role_assignment"
+       ("id", "companyMembershipId", "roleDefinitionId", "role_scope", "grant_actor_user_id", "is_break_glass", "created_at")
+     VALUES ($1, $2, '20000000-0000-4000-8000-000000000002', 'COMPANY'::"core"."RoleScope", $3, FALSE, NOW())`,
+    [randomUUID(), companyMembershipId, actor.userId],
+  );
+  await pool.query(
+    `INSERT INTO "core"."plant_role_assignment"
+       ("id", "plantAssignmentId", "roleDefinitionId", "role_scope", "grant_actor_user_id", "is_break_glass", "created_at")
+     VALUES ($1, $2, '30000000-0000-4000-8000-000000000001', 'PLANT'::"core"."RoleScope", $3, FALSE, NOW())`,
+    [randomUUID(), plantAssignmentId, actor.userId],
+  );
+
+  return { ...actor, companyA, companyB, plantA, plantB };
 }
 
 before(async () => {
@@ -455,4 +510,46 @@ test("suspended Organization membership is denied by protected HTTP readers", as
 
   assert.equal(members.status, 403, (await members.text()).slice(0, 500));
   assert.equal(assignments.status, 403, (await assignments.text()).slice(0, 500));
+});
+
+test("Company and Plant HTTP readers isolate sibling scopes using persisted scoped grants", async () => {
+  const actor = await createCompanyPlantScopedActor("sibling-scope-boundary");
+  const [companyAllowed, companySibling, plantAllowed, plantSibling] = await Promise.all([
+    fetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyB}`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}/plants/${actor.plantA}`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}/plants/${actor.plantB}`, {
+      headers: { cookie: actor.cookie },
+    }),
+  ]);
+
+  assert.equal(companyAllowed.status, 200, (await companyAllowed.text()).slice(0, 500));
+  assert.equal(companySibling.status, 403, (await companySibling.text()).slice(0, 500));
+  assert.equal(plantAllowed.status, 200, (await plantAllowed.text()).slice(0, 500));
+  assert.equal(plantSibling.status, 403, (await plantSibling.text()).slice(0, 500));
+});
+
+test("Organization custom-role HTTP creation rejects permissions outside the approved delegation allowlist", async () => {
+  const actor = await createActor("nondelegable-role-permission");
+  const response = await fetch(
+    `${authURL}/api/organizations/${actor.organizationId}/roles`,
+    {
+      method: "POST",
+      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      body: JSON.stringify({
+        code: "HTTP_NONDELEGABLE_ROLES_ASSIGN",
+        scope: "ORGANIZATION",
+        permissions: ["roles.assign"],
+      }),
+    },
+  );
+  const body = await response.text();
+  assert.equal(response.status, 403, body.slice(0, 500));
+  assert.match(body, /AUTHORIZATION_DENIED/);
 });
