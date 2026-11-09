@@ -3,11 +3,12 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { requireTenantPermission } from "@/lib/tenant-authorization";
 import { createOrganizationMembersReader } from "@/lib/organization-members-reader-core";
+import type { OrganizationMemberSummary } from "@/lib/organization-members-reader-core";
 
 export const listOrganizationMembers = createOrganizationMembersReader({
   authorize: requireTenantPermission,
   async findMembers(organizationId) {
-    return prisma.$queryRaw`
+    return prisma.$queryRaw<OrganizationMemberSummary[]>`
       SELECT
         om."id"::text AS "membershipId",
         om."userId" AS "userId",
