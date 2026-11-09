@@ -371,6 +371,16 @@ export async function listTenantDenyPolicyHistory(organizationId: string) {
       WHERE p."organization_id" = ${context.organizationId}::uuid
       ORDER BY p."issued_at" DESC, p."id" DESC
     `;
+    await tx.$executeRaw`
+      INSERT INTO "core"."tenant_deny_audit_event"
+        ("id", "organization_id", "actor_user_id", "event_type", "outcome",
+         "reason_code", "occurred_at")
+      VALUES
+        (gen_random_uuid(), ${context.organizationId}::uuid, ${context.userId},
+         'POLICY_READ'::"core"."DenyAuditEventType", 'SUCCESS'::"core"."DenyAuditOutcome",
+         'POLICY_HISTORY_READ', clock_timestamp())
+    `;
+
     const events = await tx.$queryRaw<Array<Record<string, unknown>>>`
       SELECT "id"::text AS "id", "policy_id"::text AS "policyId",
         "actor_user_id" AS "actorUserId", "event_type"::text AS "eventType",
@@ -381,15 +391,6 @@ export async function listTenantDenyPolicyHistory(organizationId: string) {
       ORDER BY "occurred_at" DESC, "id" DESC
     `;
 
-    await tx.$executeRaw`
-      INSERT INTO "core"."tenant_deny_audit_event"
-        ("id", "organization_id", "actor_user_id", "event_type", "outcome",
-         "reason_code", "occurred_at")
-      VALUES
-        (gen_random_uuid(), ${context.organizationId}::uuid, ${context.userId},
-         'POLICY_READ'::"core"."DenyAuditEventType", 'SUCCESS'::"core"."DenyAuditOutcome",
-         'POLICY_HISTORY_READ', clock_timestamp())
-    `;
 
     return { policies, events };
   });

@@ -67,6 +67,7 @@ jobs:
       V03_ALLOW_DISPOSABLE_DB: "1"
       V04_SESSION_LOCK_ALLOW_DISPOSABLE_DB: "1"
       V04_SESSION_HTTP_ALLOW_DISPOSABLE_DB: "1"
+      V04_DENY_HTTP_ALLOW_DISPOSABLE_DB: "1"
       BETTER_AUTH_URL: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v4
@@ -123,6 +124,7 @@ jobs:
       - run: pnpm test:v03
       - run: pnpm test:v04-session-revocation:integration
       - run: pnpm test:v04-session-revocation:http
+      - run: pnpm test:v04-deny-policy:http
 
   v04-pinned-replay:
     runs-on: ubuntu-latest
@@ -541,6 +543,42 @@ jobs:
       - run: pnpm db:migrate:deploy
       - run: pnpm db:status
       - run: pnpm test:d8
+
+  v04-deny-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: sap_core
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: sap_core_v04_deny_test
+        ports:
+          - "55438:5432"
+        options: >-
+          --health-cmd "pg_isready -U sap_core -d sap_core_v04_deny_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sap_core@127.0.0.1:55438/sap_core_v04_deny_test?schema=public
+      MIGRATION_DATABASE_URL: postgresql://sap_core@127.0.0.1:55438/sap_core_v04_deny_test?schema=public
+      V04_DENY_ALLOW_DISPOSABLE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:validate
+      - run: pnpm db:generate
+      - run: pnpm db:migrate:deploy
+      - run: pnpm db:status
+      - run: pnpm test:v04-deny-policy:integration
 
   v04-rls-integration:
     runs-on: ubuntu-latest
