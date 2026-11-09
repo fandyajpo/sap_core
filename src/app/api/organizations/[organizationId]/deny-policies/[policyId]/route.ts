@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   revokeTenantDenyPolicy,
   TenantDenyPolicyError,
+  recordDeniedTenantDenyWriteAttempt,
 } from "@/lib/tenant-deny-policy-service";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
 
@@ -28,6 +29,9 @@ export async function PATCH(
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof TenantDenyPolicyError) {
+      if (error.code === "FORBIDDEN" || error.code === "UNAUTHENTICATED") {
+        await recordDeniedTenantDenyWriteAttempt(organizationId, "REVOKE");
+      }
       const status =
         error.code === "UNAUTHENTICATED" ? 401 :
         error.code === "FORBIDDEN" ? 403 :
@@ -36,6 +40,9 @@ export async function PATCH(
       return NextResponse.json({ error: error.message }, { status });
     }
     if (error instanceof TenantTargetContextError) {
+      if (error.code === "UNAUTHENTICATED") {
+        await recordDeniedTenantDenyWriteAttempt(organizationId, "REVOKE");
+      }
       const status = error.code === "UNAUTHENTICATED" ? 401 :
         error.code === "INVALID_SCOPE" ? 400 : 403;
       return NextResponse.json({ error: "DENY policy access denied." }, { status });
