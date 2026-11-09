@@ -34,6 +34,7 @@ if (
 const authURL = authBaseURL.replace(/\/+$/, "");
 const authOrigin = new URL(authBaseURL).origin;
 const testPrefix = `v03-${randomUUID()}-`;
+const tenantFixtureOrganizationIds = [];
 const pool = new Pool({ connectionString: databaseUrl, max: 2 });
 const requiredSchemas = [
   "core",
@@ -137,6 +138,28 @@ after(async () => {
   try {
     if (schemaReady) {
       const ownedEmailPattern = `${testPrefix}%`;
+      if (tenantFixtureOrganizationIds.length > 0) {
+        // Role-assignment history is append-only. Revoke and suspend the test
+        // fixtures instead of deleting tenant principals; this suite runs only
+        // against its guarded disposable PostgreSQL database.
+        await pool.query(
+          `UPDATE "core"."organization_role_assignment"
+              SET "revoked_at" = NOW()
+            WHERE "revoked_at" IS NULL
+              AND "organizationMembershipId" IN (
+                SELECT "id" FROM "core"."organization_membership"
+                WHERE "organizationId" = ANY($1::uuid[])
+              )`,
+          [tenantFixtureOrganizationIds],
+        );
+        await pool.query(
+          `UPDATE "core"."organization_membership"
+              SET "status" = 'SUSPENDED'::"core"."OrganizationMembershipStatus"
+            WHERE "organizationId" = ANY($1::uuid[])`,
+          [tenantFixtureOrganizationIds],
+        );
+      }
+
       const cleanupQueries = [
         `DELETE FROM "core"."session"
          WHERE "userId" IN (
@@ -147,7 +170,11 @@ after(async () => {
            SELECT "id" FROM "core"."user" WHERE "email" LIKE $1
          )`,
         'DELETE FROM "core"."verification" WHERE "identifier" LIKE $1',
-        'DELETE FROM "core"."user" WHERE "email" LIKE $1',
+        `DELETE FROM "core"."user" u
+          WHERE u."email" LIKE $1
+            AND NOT EXISTS (
+              SELECT 1 FROM "core"."organization_membership" om WHERE om."userId" = u."id"
+            )`,
       ];
 
       for (const query of cleanupQueries) {
@@ -341,6 +368,48 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       assert.equal(activeSession?.user?.id, userId);
       assert.equal(activeSession?.session?.userId, userId);
 
+      const organizationId = randomUUID();
+      tenantFixtureOrganizationIds.push(organizationId);
+      const organizationMembershipId = randomUUID();
+      const organizationRoleAssignmentId = randomUUID();
+      await pool.query(
+        `INSERT INTO "core"."organization" ("id", "created_at", "updated_at")
+         VALUES ($1, NOW(), NOW())`,
+        [organizationId],
+      );
+      await pool.query(
+        `INSERT INTO "core"."organization_membership"
+           ("id", "userId", "organizationId", "status", "created_at", "updated_at")
+         VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())`,
+        [organizationMembershipId, userId, organizationId],
+      );
+      const { rows: ownerRoleRows } = await pool.query(
+        `SELECT "id"::text AS "id" FROM "core"."role_definition"
+          WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+            AND "scope" = 'ORGANIZATION'::"core"."RoleScope"
+            AND "code" = 'ORG_OWNER'`,
+      );
+      assert.equal(ownerRoleRows.length, 1, "the approved ORG_OWNER seed must exist");
+      await pool.query(
+        `INSERT INTO "core"."organization_role_assignment"
+           ("id", "organizationMembershipId", "roleDefinitionId", "role_scope",
+            "grant_actor_user_id", "is_break_glass", "created_at")
+         VALUES ($1, $2, $3, 'ORGANIZATION'::"core"."RoleScope", $4, FALSE, NOW())`,
+        [organizationRoleAssignmentId, organizationMembershipId, ownerRoleRows[0].id, userId],
+      );
+
+      const authorizedMembersResponse = await fetch(
+        `${authURL}/api/organizations/${organizationId}/members`,
+        { headers: { cookie } },
+      );
+      assert.equal(authorizedMembersResponse.status, 200);
+      const authorizedMembers = await authorizedMembersResponse.json();
+      assert.equal(authorizedMembers.organizationId, organizationId);
+      assert.equal(authorizedMembers.members.length, 1);
+      assert.equal(authorizedMembers.members[0].userId, userId);
+      assert.equal(authorizedMembers.members[0].email, email);
+
+
       const updatedName = "V03 Updated Name";
       const updateResponse = await authRequest("/update-user", {
         method: "POST",
@@ -371,6 +440,23 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       await readJson(secondSignupResponse, "second email signup");
       const secondCookie = sessionCookieFromResponse(secondSignupResponse);
       assert.match(secondCookie, /session_token=/, "second signup must set a session cookie");
+
+      const secondOrganizationMembershipId = randomUUID();
+      await pool.query(
+        `INSERT INTO "core"."organization_membership"
+           ("id", "userId", "organizationId", "status", "created_at", "updated_at")
+         VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())`,
+        [secondOrganizationMembershipId, (await readJson(
+          await authRequest("/get-session", { cookie: secondCookie }),
+          "second get session",
+        )).user.id, organizationId],
+      );
+      const deniedMembersResponse = await fetch(
+        `${authURL}/api/organizations/${organizationId}/members`,
+        { headers: { cookie: secondCookie } },
+      );
+      assert.equal(deniedMembersResponse.status, 403, "active membership without the required permission must be denied");
+
 
       const firstProfileResponse = await fetch(`${authURL}/account`, {
         headers: { cookie },
