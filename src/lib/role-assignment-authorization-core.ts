@@ -213,7 +213,7 @@ async function loadActorGrants(
   for (const row of rows) {
     if (
       !permissionSet.has(row.permissionCode)
-      || (row.roleKind === "SYSTEM" && !builtInRoles.has(row.roleCode))
+      || (row.roleKind === "SYSTEM" && (!builtInRoles.has(row.roleCode) || row.ownerOrganizationId !== null))
       || (row.roleKind !== "SYSTEM" && row.roleKind !== "ORGANIZATION_CUSTOM")
       || (row.effect !== "ALLOW" && row.effect !== "DENY")
       || !["ORGANIZATION", "COMPANY", "PLANT"].includes(row.roleScope)
