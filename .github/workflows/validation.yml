@@ -132,7 +132,7 @@ jobs:
       - name: Recover pinned migrations 1–8
         run: |
           set -euo pipefail
-          baseline="928260b25309163e26cb616a50e2107e9a42e54d"
+          baseline="d27af783d3e9499a451331f720ec111e6b5e7049"
           git fetch --no-tags origin "$baseline"
           git cat-file -e "${baseline}^{commit}"
           mkdir -p "$RUNNER_TEMP/v04-pinned"
