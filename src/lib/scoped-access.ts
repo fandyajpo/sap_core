@@ -27,10 +27,13 @@ function createSession(client: unknown): ScopedAccessSession {
 }
 
 /**
- * Server-only persistence adapter for transaction-bound domain services.
- * Do not export membership/assignment lifecycle helpers from this module:
- * those operations require a verified actor and permission guard at the
- * application service boundary before they can be exposed to tenant requests.
+ * Server-only persistence adapter for tenant domain services.
+ *
+ * There is deliberately no unbound Prisma-backed ScopedAccessDatabase export.
+ * Every production adapter created here must carry the exact Better Auth
+ * session identity and revalidate/lock that session in the same transaction
+ * used by the protected operation. Domain services must still enforce their
+ * operation-specific actor, scope, and permission policy.
  */
 export function createSessionBoundScopedAccessDatabase(identity: VerifiedSessionIdentity): ScopedAccessDatabase {
   return {
@@ -45,9 +48,3 @@ export function createSessionBoundScopedAccessDatabase(identity: VerifiedSession
       }),
   };
 }
-
-export const scopedAccessDatabase: ScopedAccessDatabase = {
-  ...createSession(prisma),
-  transaction: <T>(work: (session: ScopedAccessSession) => Promise<T>) =>
-    prisma.$transaction((transaction) => work(createSession(transaction))),
-};
