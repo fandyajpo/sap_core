@@ -4,8 +4,8 @@
 
 **Repository and disposable-CI acceptance:** PASS  
 **Hosted/production acceptance:** BLOCKED pending separate approval and provider verification.  
-**Audited ref:** `main` at `3fae765a396d0aa62e62c700f526f4020c88d227`.  
-**CI evidence:** GitHub Actions run `42571552875` — all 8 jobs succeeded on the exact PR head before squash merge.  
+**Audited ref:** `main` at `f8995b2f84a7e34f209e358d55a976a0e8a71be8` (after PR #62).  
+**CI evidence:** [GitHub Actions run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) — all 8 jobs succeeded on the PR #62 head; merge tree matches the tested PR head tree.  
 **Database boundary:** Disposable PostgreSQL CI was used. No hosted database was connected to, inspected, migrated, seeded, or modified.
 
 ## Executive summary
@@ -33,13 +33,14 @@ The repository and disposable CI boundary are verified. The owner-approved permi
 | V04-A02 | Tenant target validation | `src/lib/tenant-target-context-core.ts`; `src/lib/tenant-target-context.ts` | PASS — active Organization membership and Company/Plant ancestry are validated server-side. |
 | V04-A03 | Persisted grants | `src/lib/authorization-grant-loader.ts`; `src/lib/tenant-authorization.ts` | PASS — active typed assignments and sealed/enabled role snapshots are loaded in the protected transaction. |
 | V04-A04 | Policy evaluation | `src/lib/authorization-policy-core.ts` | PASS — exact-scope grants, explicit child-administration, target-scope DENY precedence, and fail-closed identifiers. |
-| V04-A05 | Protected operations | Organization members GET; Company GET; Plant GET; Organization roles GET/POST and revision POST | PASS for the implemented API slice. This does not imply unimplemented mutation or ERP routes are protected. |
+| V04-A05 | Protected operations | Organization members GET; Company GET; Plant GET; Organization custom-role list/create/revision; Organization role-assignment GET/POST | PASS for the implemented API slice. This does not imply unimplemented mutation, audit, webhook, background-job or ERP routes are protected. |
 | V04-A06 | Transaction boundary | `src/lib/tenant-authorization.ts`; `src/lib/tenant-target-context.ts`; tenant readers | PASS — actor, target context, grants, evaluation, and protected query share one interactive transaction. |
 | V04-A07 | RLS | `20261109130000_v04_tenant_rls`; `tests/v04-rls.integration.test.mjs` | PASS in disposable PostgreSQL — 13 approved tables have RLS enabled and direct SQL is tested under the runtime role. |
 | V04-A08 | Runtime database role | `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `prisma.config.ts`, CI runtime-role fixture | PASS in CI only — runtime role is non-superuser, non-owner, and lacks `BYPASSRLS`. Hosted role privileges remain unverified. |
 | V04-A09 | Company/Plant application coverage | `GET /api/organizations/[organizationId]/companies/[companyId]`; nested Plant GET | PASS — positive exact-scope and sibling-scope negative HTTP tests. |
 | V04-A10 | Custom-role delegation | `src/lib/tenant-role-definition-service.ts`; `core.permission_delegation_policy` | PASS — owner-approved read-only allowlist is applied; all other permission codes remain non-delegable. |
-| V04-A11 | Pool isolation evidence | `tests/v04-tenant-guc.integration.test.mjs`; `tests/v04-rls.integration.test.mjs` | PASS in disposable CI — backend PID stability, commit/rollback/exception cleanup, concurrent A/B transactions, missing/malformed GUCs, and direct SQL. |
+| V04-A11 | Tenant GUC pool isolation | `tests/v04-tenant-guc.integration.test.mjs`; `tests/v04-rls.integration.test.mjs` | PASS in disposable CI for tenant GUC cleanup/reuse — backend PID stability, commit/rollback/exception cleanup, concurrent A/B transactions, missing/malformed GUCs, and direct SQL. This is not explicit session-lock pool-reuse coverage. |
+| V04-A12 | Session revocation linearization | PR #62; transaction-bound session-row lock; `FOR SHARE` before tenant GUCs and authorization | IMPLEMENTATION + CI PASS. Session row is revalidated by verified ID/user ID and DB expiry; lock is held through protected transaction. Real Better Auth HTTP sign-out interleavings, injected DB failure and explicit session-lock pool-reuse tests remain open. |
 
 ## Preserved policy constraints
 
@@ -66,6 +67,14 @@ The repository and disposable CI boundary are verified. The owner-approved permi
 ## Remaining acceptance gates
 
 1. **Hosted database:** separately approve provider-specific runtime-role provisioning, grants, deployment secret configuration, hosted migration, and a production smoke test. The disposable CI role does not prove hosted provider capabilities.
-3. **Scope discipline:** the current API proof covers Organization member read, Company read, Plant read, and Organization role list/create/revision. Future membership/assignment mutation and ERP routes require their own exact-scope authorization and tests.
+2. **Session revocation HTTP acceptance:** add real Better Auth cookie/sign-out request-first and revocation-first interleavings with HTTP status and persisted-state assertions; inject lock/query/database failure and assert no protected work; explicitly test session-lock behavior under pool reuse. The PostgreSQL request-first lock-timeout/retry test is not a substitute for this HTTP coverage.
+3. **Scope discipline:** the current API proof covers Organization member read, Company read, Plant read, Organization custom-role list/create/revision, and Organization role-assignment GET/POST. Future membership/assignment mutation and ERP routes require their own exact-scope authorization and tests.
 
 **Conclusion:** Repository implementation and disposable-CI acceptance are PASS. V04 production acceptance remains BLOCKED by the two owner-controlled gates above.
+
+
+## Session revocation implementation evidence — PR #62
+
+The owner-approved implementation is merged at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; [CI run #42594868627](https://github.com/fandyajpo/sap_core/actions/runs/42594868627) is not the relevant run. The verified run is [#42594868685](https://github.com/fandyajpo/sap_core/actions/runs/42594868685). [Correction: the run attached to PR #62 is #42594868685.] It passed all eight jobs. The merge commit tree matches the PR head tree. The session lock revalidates the exact Better Auth session ID/user ID and DB expiry, then holds `FOR SHARE` before tenant GUCs and protected authorization/work. This covers Organization member reads, Company/Plant reads, custom-role operations and role-assignment GET/POST.
+
+Acceptance remains incomplete: real HTTP sign-out race interleavings, injected fail-closed database errors, and explicit session-lock pool-reuse isolation are pending. V04 remains BLOCKED; hosted runtime-role provisioning, grants, deployment secrets, hosted migration and production smoke test remain NOT VERIFIED. No hosted database was accessed or modified for this reconciliation.
