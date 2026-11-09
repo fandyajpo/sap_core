@@ -51,7 +51,7 @@ async function loadOrganizationGrantContext(
        rd."ownerOrganizationId"::text AS "ownerOrganizationId",
        pd."code" AS "permissionCode",
        g."effect"::text AS "effect",
-       pd."is_delegable" AS "isDelegable"
+       COALESCE(dp."is_delegable", FALSE) AS "isDelegable"
      FROM "core"."organization_role_assignment" ra
      JOIN "core"."organization_membership" om
        ON om."id" = ra."organizationMembershipId"
@@ -73,6 +73,8 @@ async function loadOrganizationGrantContext(
       )
      JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
      JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
+     LEFT JOIN "core"."permission_delegation_policy" dp
+       ON dp."permission_definition_id" = pd."id"
      WHERE ra."revoked_at" IS NULL
        AND ra."is_break_glass" = FALSE`,
     [actorUserId, organizationId],
