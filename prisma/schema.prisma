@@ -290,6 +290,7 @@ model PermissionDefinition {
   id          String                @id @default(uuid()) @db.Uuid
   code        String                @unique
   description String                @db.Text
+  isDelegable Boolean               @default(false) @map("is_delegable")
   createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   grants      RolePermissionGrant[]
 
