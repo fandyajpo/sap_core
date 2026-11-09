@@ -69,3 +69,17 @@ test("tenant target ancestry rows are shared-locked until the protected transact
   assert.match(target, /FROM "core"\."company" c[\s\S]*?FOR SHARE OF c/);
   assert.match(target, /FROM "core"\."plant" p[\s\S]*?FOR SHARE OF p, c/);
 });
+
+
+test("authorization grant snapshots lock effective assignments and permission rows", async () => {
+  const grantLoader = await source("src/lib/authorization-grant-loader.ts");
+  const assignmentPolicy = await source("src/lib/role-assignment-authorization-core.ts");
+  const roleDefinitionPolicy = await source("src/lib/tenant-role-definition-service.ts");
+
+  assert.match(grantLoader, /FOR SHARE OF ra, om, rd, g/);
+  assert.match(grantLoader, /FOR SHARE OF ra, cm, om, rd, g/);
+  assert.match(grantLoader, /FOR SHARE OF ra, pa, cm, om, rd, g/);
+  assert.match(assignmentPolicy, /lockActorGrantRows\(session, actorUserId, target\)/);
+  assert.match(assignmentPolicy, /FOR SHARE OF ra, pa, cm, om, rd, g/);
+  assert.match(roleDefinitionPolicy, /FOR SHARE OF ra, om, rd, g/);
+});
