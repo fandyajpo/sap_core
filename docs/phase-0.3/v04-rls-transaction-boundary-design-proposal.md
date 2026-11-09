@@ -69,7 +69,7 @@ RLS is an additional data boundary, not a replacement for the application permis
 - Explicit child-administration applies only after parent ancestry is verified.
 - Company and Plant operational permissions require their own active typed membership/assignment paths.
 - Applicable target-scope DENY overrides ALLOW.
-- Custom roles are Organization-only and ALLOW-only; requested permissions must be within the creator's trusted delegable subset.
+- Custom roles are Organization-only and ALLOW-only; requested permissions must be within the creator's trusted delegable subset. The owner-approved subset is exactly `organization.read`, `company.read`, `plant.read`, and `roles.read`.
 - Unsealed or disabled role definitions, unknown permissions, and missing context fail closed.
 - Role grant snapshots and audit history retain their immutability/append-only protections.
 
@@ -101,7 +101,6 @@ The following design decisions are approved and implemented:
 
 Remaining owner-controlled decisions are separate from this approved design:
 
-- Approve the exact permission codes that may be delegated to Organization custom roles. Until then, `permission_delegation_policy` remains all-false.
 - Separately approve hosted provider role provisioning, grants, secret configuration, hosted migration, and production smoke testing. No hosted database was accessed or changed by this implementation.
 
 ## 8. Current conclusion
