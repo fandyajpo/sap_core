@@ -139,9 +139,10 @@ jobs:
             }
           };
 
-          // Attach before connect(): the underlying connection can emit the
-          // useful system error before connect() rejects with a generic Error.
-          client.connection?.on("error", captureConnectionError);
+          // pg.Client creates its underlying Connection synchronously inside
+          // connect(). Attach the socket listener immediately after invoking
+          // connect(), before awaiting the promise, so the socket already exists.
+          // Keep a client-level listener as a fallback for errors re-emitted by pg.
           client.on("error", captureConnectionError);
 
           try {
@@ -149,7 +150,10 @@ jobs:
               throw Object.assign(new Error("missing secret"), { code: "MISSING_DATABASE_URL" });
             }
 
-            await client.connect();
+            const connectPromise = client.connect();
+            const socketListenerAttached = Boolean(client.connection?.on);
+            client.connection?.on("error", captureConnectionError);
+            await connectPromise;
             stage = "begin-read-only";
             await client.query("BEGIN READ ONLY");
             transactionOpen = true;
@@ -332,6 +336,7 @@ jobs:
               code: isSafeCode(error?.code) ? error.code : "VERIFICATION_FAILED",
               error_chain: errorChain.length > 0 ? errorChain : undefined,
               connection_event_errors: connectionEventErrors.length > 0 ? connectionEventErrors : undefined,
+              socket_listener_attached: stage === "connect" ? socketListenerAttached : undefined,
               syscall: ["connect", "getaddrinfo"].includes(error?.syscall) ? error.syscall : undefined,
               detail: "Connection strings, hostnames, server messages, stacks, and credentials are intentionally suppressed.",
             }));
