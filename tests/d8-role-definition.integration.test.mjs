@@ -53,6 +53,11 @@ let savepointCounter = 0;
 let transactionQueue = Promise.resolve();
 let allowCreate = true;
 let allowRevise = true;
+let delegablePermissions = [
+  "organization.read", "organization.update", "organization.members.read", "organization.members.manage",
+  "company.read", "company.manage", "company.members.manage", "plant.read", "plant.manage",
+  "plant.assignments.manage", "roles.read", "roles.create", "roles.revise", "roles.assign", "audit.read",
+];
 const authorizationCalls = [];
 
 function createSession(databaseClient) {
@@ -96,6 +101,9 @@ const database = {
 };
 
 const roleDefinitions = createRoleDefinitionService(database, {
+  async getDelegablePermissions() {
+    return delegablePermissions;
+  },
   async authorizeCreate(input) {
     authorizationCalls.push({ operation: "CREATE", ...input });
     return allowCreate;
@@ -105,6 +113,23 @@ const roleDefinitions = createRoleDefinitionService(database, {
     return allowRevise;
   },
 });
+
+async function createCustomRole(input) {
+  return roleDefinitions.createCustomRole({
+    permissions: ["organization.read"],
+    ...input,
+  });
+}
+
+async function getSystemRoleId(code) {
+  const { rows } = await client.query(
+    `SELECT "id"::text AS "id" FROM "core"."role_definition"
+      WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind" AND "code" = $1`,
+    [code],
+  );
+  assert.equal(rows.length, 1, `expected exactly one seeded SYSTEM role ${code}`);
+  return rows[0].id;
+}
 
 const roleAssignments = createRoleAssignmentService(database, {
   async authorizeGrant() {
@@ -182,15 +207,7 @@ async function withAuditInsertRejected(work) {
 }
 
 async function insertSystemRole() {
-  const id = randomUUID();
-  await client.query(
-    `INSERT INTO "core"."role_definition"
-       ("id", "code", "version", "kind", "scope", "updated_at")
-     VALUES ($1, $2, 1, 'SYSTEM'::"core"."RoleDefinitionKind",
-             'ORGANIZATION'::"core"."RoleScope", NOW())`,
-    [id, `d8-system-${id}`],
-  );
-  return id;
+  return getSystemRoleId("ORG_OWNER");
 }
 
 before(async () => {
@@ -292,17 +309,97 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
   let customRoleA;
   let customRoleB;
   let customCompanyRoleA;
-  let customCompanyRoleB;
   let customPlantRoleA;
-  let customPlantRoleB;
   let systemRoleId;
   let assignedRole;
   let assignedCompanyRole;
   let assignedPlantRole;
 
+  await t.test("migration seeds the approved permission catalog and sealed built-in role snapshots", async () => {
+    const { rows: permissionRows } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM "core"."permission_definition"`,
+    );
+    assert.equal(permissionRows[0].count, 15);
+    const { rows: roleRows } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM "core"."role_definition"
+        WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"`,
+    );
+    assert.equal(roleRows[0].count, 8);
+    const { rows: grantRows } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM "core"."role_permission_grant"`,
+    );
+    assert.equal(grantRows[0].count, 50);
+    const { rows: unsealed } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM "core"."role_definition"
+        WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND "permissions_locked_at" IS NULL`,
+    );
+    assert.equal(unsealed[0].count, 0);
+
+    const orgOwnerId = await getSystemRoleId("ORG_OWNER");
+    await assertDatabaseRejects(() => client.query(
+      `INSERT INTO "core"."role_permission_grant"
+         ("id", "role_definition_id", "permission_definition_id", "effect")
+       SELECT $1, rd."id", pd."id", 'ALLOW'::"core"."PermissionGrantEffect"
+         FROM "core"."role_definition" rd CROSS JOIN "core"."permission_definition" pd
+        WHERE rd."id" = $2 AND pd."code" = 'organization.read'`,
+      [randomUUID(), orgOwnerId],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `UPDATE "core"."role_permission_grant" SET "effect" = 'DENY'
+        WHERE "id" = (
+          SELECT "id" FROM "core"."role_permission_grant"
+          WHERE "role_definition_id" = $1 LIMIT 1
+        )`,
+      [orgOwnerId],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `UPDATE "core"."role_definition" SET "permissions_locked_at" = NULL WHERE "id" = $1`,
+      [orgOwnerId],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `UPDATE "core"."permission_definition" SET "description" = 'tampered'`,
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `UPDATE "core"."role_definition" SET "code" = 'tampered' WHERE "id" = $1`,
+      [orgOwnerId],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `DELETE FROM "core"."role_permission_grant"
+        WHERE "id" = (
+          SELECT "id" FROM "core"."role_permission_grant"
+          WHERE "role_definition_id" = $1 LIMIT 1
+        )`,
+      [orgOwnerId],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `INSERT INTO "core"."role_definition"
+         ("id", "role_family_id", "code", "version", "kind", "scope", "ownerOrganizationId", "updated_at")
+       VALUES ($1, $2, 'd8-company-custom-bypass', 1, 'ORGANIZATION_CUSTOM',
+               'COMPANY'::"core"."RoleScope", $3, NOW())`,
+      [randomUUID(), randomUUID(), fixture.organizationAId],
+    ));
+
+    const unsealedCustomRoleId = randomUUID();
+    await client.query(
+      `INSERT INTO "core"."role_definition"
+         ("id", "role_family_id", "code", "version", "kind", "scope", "ownerOrganizationId", "updated_at")
+       VALUES ($1, $2, 'd8-deny-custom-bypass', 1, 'ORGANIZATION_CUSTOM',
+               'ORGANIZATION'::"core"."RoleScope", $3, NOW())`,
+      [unsealedCustomRoleId, randomUUID(), fixture.organizationAId],
+    );
+    await assertDatabaseRejects(() => client.query(
+      `INSERT INTO "core"."role_permission_grant"
+         ("id", "role_definition_id", "permission_definition_id", "effect")
+       SELECT $1, $2, pd."id", 'DENY'::"core"."PermissionGrantEffect"
+         FROM "core"."permission_definition" pd WHERE pd."code" = 'organization.read'`,
+      [randomUUID(), unsealedCustomRoleId],
+    ));
+  });
+
   await t.test("create rejects missing human actors and Organizations", async () => {
     await assertDefinitionError(
-      roleDefinitions.createCustomRole({
+      createCustomRole({
         actorUserId: `missing:${randomUUID()}`,
         organizationId: fixture.organizationAId,
         code: "d8.missing-actor",
@@ -311,7 +408,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       "ACTOR_NOT_FOUND",
     );
     await assertDefinitionError(
-      roleDefinitions.createCustomRole({
+      createCustomRole({
         actorUserId: fixture.actorId,
         organizationId: randomUUID(),
         code: "d8.missing-organization",
@@ -324,12 +421,12 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
   await t.test("create authorization is mandatory, Organization-scoped, and atomic", async () => {
     assert.throws(
       () => createRoleDefinitionService(database, {}),
-      /Organization custom-role create and revise authorization policies are required\./,
+      /Organization custom-role delegation, create, and revise authorization policies are required\./,
     );
     const before = await auditCount();
     allowCreate = false;
     await assertDefinitionError(
-      roleDefinitions.createCustomRole({
+      createCustomRole({
         actorUserId: fixture.actorId,
         organizationId: fixture.organizationAId,
         code: "d8.denied-create",
@@ -340,8 +437,25 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     allowCreate = true;
     assert.equal(await auditCount(), before, "a denied create must not persist an audit event");
 
+    delegablePermissions = ["organization.read"];
     await assertDefinitionError(
-      roleDefinitions.createCustomRole({
+      createCustomRole({
+        actorUserId: fixture.actorId,
+        organizationId: fixture.organizationAId,
+        code: "d8.out-of-delegation",
+        scope: "ORGANIZATION",
+        permissions: ["organization.update"],
+      }),
+      "AUTHORIZATION_DENIED",
+    );
+    delegablePermissions = [
+      "organization.read", "organization.update", "organization.members.read", "organization.members.manage",
+      "company.read", "company.manage", "company.members.manage", "plant.read", "plant.manage",
+      "plant.assignments.manage", "roles.read", "roles.create", "roles.revise", "roles.assign", "audit.read",
+    ];
+
+    await assertDefinitionError(
+      createCustomRole({
         actorUserId: fixture.actorId,
         organizationId: fixture.organizationAId,
         code: "   ",
@@ -350,7 +464,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       "INVALID_INPUT",
     );
     await assertDefinitionError(
-      roleDefinitions.createCustomRole({
+      createCustomRole({
         actorUserId: fixture.actorId,
         organizationId: fixture.organizationAId,
         code: "d8.platform-role",
@@ -359,7 +473,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       "ROLE_SCOPE_NOT_ALLOWED",
     );
 
-    customRoleA = await roleDefinitions.createCustomRole({
+    customRoleA = await createCustomRole({
       actorUserId: fixture.actorId,
       organizationId: fixture.organizationAId,
       code: "d8.organization-reader",
@@ -370,6 +484,14 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     assert.equal(customRoleA.ownerOrganizationId, fixture.organizationAId);
     assert.equal(customRoleA.scope, "ORGANIZATION");
     assert.ok(customRoleA.roleFamilyId);
+    assert.ok(customRoleA.permissionsLockedAt instanceof Date);
+    const { rows: snapshotRows } = await client.query(
+      `SELECT pd."code" FROM "core"."role_permission_grant" g
+        JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
+       WHERE g."role_definition_id" = $1 AND g."effect" = 'ALLOW'`,
+      [customRoleA.id],
+    );
+    assert.deepEqual(snapshotRows, [{ code: "organization.read" }]);
     const createCall = authorizationCalls.find((call) => call.operation === "CREATE");
     assert.equal(createCall.organizationId, fixture.organizationAId);
     assert.equal(createCall.actorUserId, fixture.actorId);
@@ -386,36 +508,32 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       scope: "ORGANIZATION",
     }]);
 
-    customRoleB = await roleDefinitions.createCustomRole({
+    customRoleB = await createCustomRole({
       actorUserId: fixture.actorId,
       organizationId: fixture.organizationBId,
       code: "d8.other-tenant-role",
       scope: "ORGANIZATION",
     });
-    customCompanyRoleA = await roleDefinitions.createCustomRole({
-      actorUserId: fixture.actorId,
-      organizationId: fixture.organizationAId,
-      code: "d8.company-reader",
-      scope: "COMPANY",
-    });
-    customCompanyRoleB = await roleDefinitions.createCustomRole({
-      actorUserId: fixture.actorId,
-      organizationId: fixture.organizationBId,
-      code: "d8.other-company-role",
-      scope: "COMPANY",
-    });
-    customPlantRoleA = await roleDefinitions.createCustomRole({
-      actorUserId: fixture.actorId,
-      organizationId: fixture.organizationAId,
-      code: "d8.plant-reader",
-      scope: "PLANT",
-    });
-    customPlantRoleB = await roleDefinitions.createCustomRole({
-      actorUserId: fixture.actorId,
-      organizationId: fixture.organizationBId,
-      code: "d8.other-plant-role",
-      scope: "PLANT",
-    });
+    await assertDefinitionError(
+      createCustomRole({
+        actorUserId: fixture.actorId,
+        organizationId: fixture.organizationAId,
+        code: "d8.company-reader",
+        scope: "COMPANY",
+      }),
+      "ROLE_SCOPE_NOT_ALLOWED",
+    );
+    await assertDefinitionError(
+      createCustomRole({
+        actorUserId: fixture.actorId,
+        organizationId: fixture.organizationAId,
+        code: "d8.plant-reader",
+        scope: "PLANT",
+      }),
+      "ROLE_SCOPE_NOT_ALLOWED",
+    );
+    customCompanyRoleA = await getSystemRoleId("COMPANY_ADMIN");
+    customPlantRoleA = await getSystemRoleId("PLANT_MANAGER");
   });
 
   await t.test("D7 grants and effective resolution enforce the custom-role owner", async () => {
@@ -428,25 +546,6 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       }),
       "ROLE_DEFINITION_OWNER_MISMATCH",
     );
-    await assertAssignmentError(
-      roleAssignments.grantRoleAssignment({
-        scope: "COMPANY",
-        parentId: fixture.companyMembershipAId,
-        roleDefinitionId: customCompanyRoleB.id,
-        actorUserId: fixture.actorId,
-      }),
-      "ROLE_DEFINITION_OWNER_MISMATCH",
-    );
-    await assertAssignmentError(
-      roleAssignments.grantRoleAssignment({
-        scope: "PLANT",
-        parentId: fixture.plantAssignmentAId,
-        roleDefinitionId: customPlantRoleB.id,
-        actorUserId: fixture.actorId,
-      }),
-      "ROLE_DEFINITION_OWNER_MISMATCH",
-    );
-
     assignedRole = await roleAssignments.grantRoleAssignment({
       scope: "ORGANIZATION",
       parentId: fixture.membershipAId,
@@ -456,13 +555,13 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     assignedCompanyRole = await roleAssignments.grantRoleAssignment({
       scope: "COMPANY",
       parentId: fixture.companyMembershipAId,
-      roleDefinitionId: customCompanyRoleA.id,
+      roleDefinitionId: customCompanyRoleA,
       actorUserId: fixture.actorId,
     });
     assignedPlantRole = await roleAssignments.grantRoleAssignment({
       scope: "PLANT",
       parentId: fixture.plantAssignmentAId,
-      roleDefinitionId: customPlantRoleA.id,
+      roleDefinitionId: customPlantRoleA,
       actorUserId: fixture.actorId,
     });
     assert.deepEqual(
@@ -495,18 +594,6 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
          ("id", "organizationMembershipId", "roleDefinitionId", "role_scope")
        VALUES ($1, $2, $3, 'ORGANIZATION'::"core"."RoleScope")`,
       [randomUUID(), fixture.membershipAId, customRoleB.id],
-    );
-    await client.query(
-      `INSERT INTO "core"."company_role_assignment"
-         ("id", "companyMembershipId", "roleDefinitionId", "role_scope")
-       VALUES ($1, $2, $3, 'COMPANY'::"core"."RoleScope")`,
-      [randomUUID(), fixture.companyMembershipAId, customCompanyRoleB.id],
-    );
-    await client.query(
-      `INSERT INTO "core"."plant_role_assignment"
-         ("id", "plantAssignmentId", "roleDefinitionId", "role_scope")
-       VALUES ($1, $2, $3, 'PLANT'::"core"."RoleScope")`,
-      [randomUUID(), fixture.plantAssignmentAId, customPlantRoleB.id],
     );
     assert.deepEqual(
       (await roleAssignments.listEffectiveRoleAssignments({
@@ -574,6 +661,14 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     assert.equal(revision.version, 2);
     assert.equal(revision.code, "d8.organization-reader-v2");
     assert.equal(revision.scope, customRoleA.scope);
+    assert.ok(revision.permissionsLockedAt instanceof Date);
+    const { rows: revisionSnapshot } = await client.query(
+      `SELECT pd."code" FROM "core"."role_permission_grant" g
+        JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
+       WHERE g."role_definition_id" = $1 AND g."effect" = 'ALLOW'`,
+      [revision.id],
+    );
+    assert.deepEqual(revisionSnapshot, [{ code: "organization.read" }]);
     const reviseCall = authorizationCalls.find((call) => call.operation === "REVISE");
     assert.equal(reviseCall.organizationId, fixture.organizationAId);
     assert.equal(reviseCall.currentVersion, 1);
@@ -606,7 +701,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
   });
 
   await t.test("concurrent revision requests advance a family exactly once", async () => {
-    const initial = await roleDefinitions.createCustomRole({
+    const initial = await createCustomRole({
       actorUserId: fixture.actorId,
       organizationId: fixture.organizationAId,
       code: `d8-concurrent-${randomUUID()}`,
@@ -652,7 +747,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
   });
 
   await t.test("audit insert failures roll back create and revision rows and clean up test trigger", async () => {
-    const revisionBase = await roleDefinitions.createCustomRole({
+    const revisionBase = await createCustomRole({
       actorUserId: fixture.actorId,
       organizationId: fixture.organizationAId,
       code: `d8-audit-atomic-revision-${randomUUID()}`,
@@ -662,7 +757,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     const auditCountBefore = await auditCount();
 
     const testObjects = await withAuditInsertRejected(async (objects) => {
-      await assert.rejects(roleDefinitions.createCustomRole({
+      await assert.rejects(createCustomRole({
         actorUserId: fixture.actorId,
         organizationId: fixture.organizationAId,
         code: failedCreateCode,

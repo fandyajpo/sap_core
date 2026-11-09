@@ -170,3 +170,35 @@ test("Malformed targets fail closed", () => {
     grants: [{ roleCode: "ORG_ADMIN", scope: "ORGANIZATION", scopeId: org }],
   }).reason, "INVALID_TARGET");
 });
+
+
+test("persisted SYSTEM permission snapshots are authoritative when supplied by the trusted loader", () => {
+  const grant = {
+    roleCode: "ORG_OWNER",
+    roleKind: "SYSTEM",
+    scope: "ORGANIZATION",
+    scopeId: org,
+    customPermissions: ["organization.read"],
+  };
+  assert.equal(evaluateAuthorization({
+    permission: "organization.read",
+    target: { scope: "ORGANIZATION", organizationId: org },
+    grants: [grant],
+  }).allowed, true);
+  assert.equal(evaluateAuthorization({
+    permission: "organization.update",
+    target: { scope: "ORGANIZATION", organizationId: org },
+    grants: [grant],
+  }).allowed, false);
+});
+
+
+test("a target-scope DENY overrides an Organization child-administration ALLOW", () => {
+  const result = evaluateAuthorization({
+    permission: "company.manage",
+    target: { scope: "COMPANY", organizationId: org, companyId: companyA },
+    grants: [{ roleCode: "ORG_ADMIN", scope: "ORGANIZATION", scopeId: org }],
+    denies: [{ scope: "COMPANY", scopeId: companyA, permissions: ["company.manage"] }],
+  });
+  assert.deepEqual(result, { allowed: false, reason: "EXPLICIT_DENY" });
+});
