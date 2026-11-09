@@ -91,11 +91,11 @@ async function loadOrganizationGrantContext(
   for (const row of rows) {
     if (
       !knownPermissions.has(row.permissionCode)
-      || (row.roleKind === "SYSTEM" && !builtInRoles.has(row.roleCode))
+      || (row.roleKind === "SYSTEM" && (!builtInRoles.has(row.roleCode) || row.ownerOrganizationId !== null))
       || (row.roleKind !== "SYSTEM" && row.roleKind !== "ORGANIZATION_CUSTOM")
       || (row.effect !== "ALLOW" && row.effect !== "DENY")
       || row.scope !== "ORGANIZATION"
-      || (row.roleKind === "ORGANIZATION_CUSTOM" && row.ownerOrganizationId !== organizationId)
+      || (row.roleKind === "ORGANIZATION_CUSTOM" && (builtInRoles.has(row.roleCode) || row.ownerOrganizationId !== organizationId))
     ) {
       throw new RoleDefinitionError("AUTHORIZATION_DENIED", "Persisted Organization role grants contain an invalid policy identifier or owner.");
     }
