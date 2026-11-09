@@ -177,4 +177,11 @@ Run `0ce2c3bc1f384957894e3c3c32b08595` applied exactly migrations 1–8; migrati
 
 ## Next NOT RUN validation in technical-feasibility plan order
 
-Per Section 5 matrix order in the technical-feasibility plan, the next NOT RUN case is D5 and X01 / D9: verify zero-to-many Organization→Company cardinality and remaining X01 behavior beyond selected evidence on the verified baseline. Then proceed through X02–X05, including X02 parent-mutation/child-insert concurrency. The earlier D5 run is recorded but its exact migration baseline is unverified; a same-transaction Core fallback is applicable only if a concrete Prisma/provider mapping limitation is demonstrated. All remain NOT RUN or unestablished; no runtime validation was performed for this documentation update.
+Per Section 5 matrix order in the technical-feasibility plan, D5 zero-to-many Organization→Company cardinality has now passed on both verified migrations 1–8 replay targets; see [D5 baseline execution record](v04.6-d5-baseline-execution-record-2026-11-09.md). The next NOT RUN case is X01 / D9, which remains separate and requires its own runtime checks for NULL rejection, missing-parent rejection, referenced-parent deletion and key-update restrictions, and unchanged rows after rejected operations. Then proceed through X02–X05, including X02 parent-mutation/child-insert concurrency. The historical D5 run remains baseline-unverified and is not used as evidence for this bounded PASS. A same-transaction Core fallback is applicable only if a concrete Prisma/provider mapping limitation is demonstrated.
+
+
+## V04.6 D5 baseline cardinality verification — 2026-11-09
+
+D5 completed on both isolated migrations 1–8 replay targets (fresh and staged). The Organization-with-zero-Companies, one-Organization-with-two-Companies, nonexistent-parent FK rejection, absence of an organizationId-only unique index, and zero-residual-fixture rollback assertions all passed. Both targets exposed the expected ordinary `organizationId` index and composite unique `(organizationId, id)` index. See the [D5 execution record](v04.6-d5-baseline-execution-record-2026-11-09.md) for run identity, migration scope, schema findings, and boundaries.
+
+**Result: BOUNDED PASS for D5 only.** X01 / D9 runtime referential-action checks remain NOT RUN and require separate authorization. V04 remains BLOCKED; no gate promotion is implied.
