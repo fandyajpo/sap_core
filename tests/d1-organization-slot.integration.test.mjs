@@ -110,7 +110,7 @@ before(async () => {
      VALUES ($1, $2, $3, 'PENDING', NOW()), ($4, $2, $5, 'PENDING', NOW())`,
     [
       concurrentMembershipIds[0], concurrentUserId, organizationIds[2],
-      concurrentMembershipIds[1], concurrentUserId, organizationIds[3],
+      concurrentMembershipIds[1], organizationIds[3],
     ],
   );
   fixtureReady = true;
