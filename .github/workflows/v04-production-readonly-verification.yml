@@ -273,11 +273,27 @@ jobs:
               try { await client.query("ROLLBACK"); } catch {}
             }
             // Never print error.message, stack, connection config, or the client object.
+            const safeNetworkCodes = new Set([
+              "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH",
+              "ENETUNREACH", "EAI_AGAIN", "ENOTFOUND", "ERR_INVALID_URL",
+              "ERR_TLS_CERT_ALTNAME_INVALID", "CERT_HAS_EXPIRED",
+              "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "SELF_SIGNED_CERT_IN_CHAIN",
+              "28P01", "3D000", "42501",
+            ]);
+            const candidateCode = typeof error?.code === "string" ? error.code : null;
+            const candidateCauseCode = typeof error?.cause?.code === "string" ? error.cause.code : null;
             console.error(JSON.stringify({
               status: "FAIL",
               stage,
-              code: typeof error?.code === "string" ? error.code : "VERIFICATION_FAILED",
-              detail: "Sensitive connection details and server error text were intentionally suppressed.",
+              error_name: typeof error?.name === "string" ? error.name : "Error",
+              code: candidateCode && safeNetworkCodes.has(candidateCode)
+                ? candidateCode
+                : "VERIFICATION_FAILED",
+              cause_code: candidateCauseCode && safeNetworkCodes.has(candidateCauseCode)
+                ? candidateCauseCode
+                : undefined,
+              syscall: ["connect", "getaddrinfo"].includes(error?.syscall) ? error.syscall : undefined,
+              detail: "Connection strings, hostnames, server messages, stacks, and credentials are intentionally suppressed.",
             }));
             process.exitCode = 1;
           } finally {
