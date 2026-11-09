@@ -95,6 +95,55 @@ jobs:
           let stage = "connect";
           let transactionOpen = false;
 
+          // Capture the original pg-protocol error before pg.Client can wrap or
+          // suppress it. Only allowlisted scalar diagnostics are retained.
+          const safeNetworkCodes = new Set([
+            "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH",
+            "ENETUNREACH", "EAI_AGAIN", "ENOTFOUND", "ERR_INVALID_URL",
+            "ERR_TLS_CERT_ALTNAME_INVALID", "CERT_HAS_EXPIRED",
+            "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "SELF_SIGNED_CERT_IN_CHAIN",
+            "28P01", "3D000", "42501",
+          ]);
+          const isSafeCode = value =>
+            typeof value === "string" &&
+            (safeNetworkCodes.has(value) || /^[0-9A-Z]{5}$/.test(value) ||
+              /^[A-Z][A-Z0-9_]{1,63}$/.test(value));
+          const summarizeSafeError = root => {
+            const summaries = [];
+            const pending = [{ value: root, depth: 0 }];
+            const seen = new Set();
+            while (pending.length > 0 && summaries.length < 8) {
+              const { value, depth } = pending.shift();
+              if (!value || (typeof value !== "object" && typeof value !== "function") || seen.has(value)) continue;
+              seen.add(value);
+              const item = {};
+              if (isSafeCode(value.code)) item.code = value.code;
+              if (typeof value.errno === "number" && Number.isFinite(value.errno)) item.errno = value.errno;
+              else if (typeof value.errno === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(value.errno)) item.errno = value.errno;
+              if (typeof value.name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(value.name)) item.name = value.name;
+              if (["connect", "getaddrinfo"].includes(value.syscall)) item.syscall = value.syscall;
+              if (Object.keys(item).length > 0) summaries.push(item);
+              if (depth < 3) {
+                if (value.cause) pending.push({ value: value.cause, depth: depth + 1 });
+                if (Array.isArray(value.errors)) {
+                  for (const nested of value.errors.slice(0, 6)) pending.push({ value: nested, depth: depth + 1 });
+                }
+              }
+            }
+            return summaries;
+          };
+          const connectionEventErrors = [];
+          const captureConnectionError = error => {
+            if (connectionEventErrors.length < 4) {
+              connectionEventErrors.push(...summarizeSafeError(error).slice(0, 4 - connectionEventErrors.length));
+            }
+          };
+
+          // Attach before connect(): the underlying connection can emit the
+          // useful system error before connect() rejects with a generic Error.
+          client.connection?.on("error", captureConnectionError);
+          client.on("error", captureConnectionError);
+
           try {
             if (!process.env.DATABASE_URL) {
               throw Object.assign(new Error("missing secret"), { code: "MISSING_DATABASE_URL" });
@@ -273,50 +322,16 @@ jobs:
               try { await client.query("ROLLBACK"); } catch {}
             }
             // Never print error.message, stack, connection config, or the client object.
-            // pg/node may wrap the useful code in cause or AggregateError.errors.
-            const safeNetworkCodes = new Set([
-              "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH",
-              "ENETUNREACH", "EAI_AGAIN", "ENOTFOUND", "ERR_INVALID_URL",
-              "ERR_TLS_CERT_ALTNAME_INVALID", "CERT_HAS_EXPIRED",
-              "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "SELF_SIGNED_CERT_IN_CHAIN",
-              "28P01", "3D000", "42501",
-            ]);
-            const isSafeCode = value =>
-              typeof value === "string" &&
-              (safeNetworkCodes.has(value) || /^[0-9A-Z]{5}$/.test(value) ||
-                /^[A-Z][A-Z0-9_]{1,63}$/.test(value));
-            const errorChain = [];
-            const pending = [{ value: error, depth: 0 }];
-            const seen = new Set();
-            while (pending.length > 0 && errorChain.length < 8) {
-              const { value, depth } = pending.shift();
-              if (!value || (typeof value !== "object" && typeof value !== "function") || seen.has(value)) continue;
-              seen.add(value);
-              const item = {};
-              if (isSafeCode(value.code)) item.code = value.code;
-              if (typeof value.name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(value.name)) {
-                item.name = value.name;
-              }
-              if (["connect", "getaddrinfo"].includes(value.syscall)) item.syscall = value.syscall;
-              if (Object.keys(item).length > 0) errorChain.push(item);
-              if (depth < 3) {
-                if (value.cause) pending.push({ value: value.cause, depth: depth + 1 });
-                if (Array.isArray(value.errors)) {
-                  for (const nested of value.errors.slice(0, 6)) {
-                    pending.push({ value: nested, depth: depth + 1 });
-                  }
-                }
-              }
-            }
-            const candidateCode = isSafeCode(error?.code) ? error.code : null;
-            const candidateCauseCode = isSafeCode(error?.cause?.code) ? error.cause.code : null;
+            const errorChain = summarizeSafeError(error);
             console.error(JSON.stringify({
               status: "FAIL",
               stage,
-              error_name: typeof error?.name === "string" ? error.name : "Error",
-              code: candidateCode || "VERIFICATION_FAILED",
-              cause_code: candidateCauseCode || undefined,
+              error_name: typeof error?.name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(error.name)
+                ? error.name
+                : "Error",
+              code: isSafeCode(error?.code) ? error.code : "VERIFICATION_FAILED",
               error_chain: errorChain.length > 0 ? errorChain : undefined,
+              connection_event_errors: connectionEventErrors.length > 0 ? connectionEventErrors : undefined,
               syscall: ["connect", "getaddrinfo"].includes(error?.syscall) ? error.syscall : undefined,
               detail: "Connection strings, hostnames, server messages, stacks, and credentials are intentionally suppressed.",
             }));
