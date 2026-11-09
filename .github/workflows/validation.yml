@@ -95,6 +95,40 @@ jobs:
           exit 1
       - run: pnpm test:v03
 
+  d1-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: sap_core
+          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_DB: sap_core_d1_test
+        ports:
+          - "55436:5432"
+        options: >-
+          --health-cmd "pg_isready -U sap_core -d sap_core_d1_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55436/sap_core_d1_test?schema=public
+      D1_ALLOW_DISPOSABLE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:validate
+      - run: pnpm db:generate
+      - run: pnpm db:migrate:deploy
+      - run: pnpm db:status
+      - run: pnpm test:d1
+
   d6-integration:
     runs-on: ubuntu-latest
     services:
