@@ -463,3 +463,10 @@ No database operation, migration, replay, test or environment inspection was per
 The preparation did **not** run Node/pnpm installation, Prisma validation or generation, Docker, PostgreSQL, SQL, migration replay, catalog queries, application tests, or D5/X01 behavior cases. No database state was read or changed. The workspace is intentionally retained; no cleanup is authorized or recorded.
 
 **Next gate:** separately authorize and execute the two isolated replay paths in Sections 2 and 9. The fresh and staged targets must each prove exactly eight successful migration records, zero rolled-back records, and up-to-date status, with isolation and catalog evidence. D5 and X01/D9 remain NOT RUN until those replay prerequisites pass and their case execution is separately authorized. V04 remains BLOCKED.
+
+
+## 9.2 X01 / D9 execution result — 2026-11-09
+
+X01 / D9 was separately authorized and executed against both disposable targets from recovery run `816b14f53d594d1d9eb89b625608737d`, using the pinned eight-migration baseline. Both targets passed the NOT NULL, exact single-column FK, RESTRICT/RESTRICT, no-single-column-unique-index, positive insert, NULL rejection (`23502`), nonexistent-parent rejection (`23503` and expected FK), referenced-parent delete rejection, referenced-parent key-update rejection, and unchanged parent/child assertions. Both explicit transactions ended in `ROLLBACK`. See [V04.6 X01/D9 execution record](v04.6-x01-d9-referential-integrity-execution-record-2026-11-09.md) for the target identities and bounded evidence.
+
+Evidence boundary: this SQL run did not separately query `pg_constraint.convalidated` or execute a post-rollback fixture-count query; neither is claimed as an X01 result. The prior D5 replay record contains the baseline migration-history and schema-parity evidence. This result does not establish application authorization, RLS, application tenant isolation, or complete V04 acceptance. V04 remains `BLOCKED`.
