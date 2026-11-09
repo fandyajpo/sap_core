@@ -1,0 +1,328 @@
+import "dotenv/config";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { after, test } from "node:test";
+import pg from "pg";
+
+const { Client } = pg;
+const migrationUrl = process.env.MIGRATION_DATABASE_URL;
+const runtimeUrl = process.env.DATABASE_URL;
+if (!migrationUrl || !runtimeUrl) {
+  throw new Error("MIGRATION_DATABASE_URL (owner) and DATABASE_URL (runtime) are required.");
+}
+
+function assertDisposableUrl(value, expectedUser) {
+  const parsed = new URL(value);
+  const database = decodeURIComponent(parsed.pathname.slice(1));
+  if (
+    !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
+    parsed.port !== "55437" ||
+    database !== "sap_core_v04_rls_test" ||
+    decodeURIComponent(parsed.username) !== expectedUser
+  ) {
+    throw new Error(`V04 RLS tests require localhost:55437/sap_core_v04_rls_test as ${expectedUser}.`);
+  }
+}
+if (process.env.V04_RLS_ALLOW_DISPOSABLE_DB !== "1") {
+  throw new Error("V04 RLS tests require explicit disposable database approval.");
+}
+assertDisposableUrl(migrationUrl, "sap_core");
+assertDisposableUrl(runtimeUrl, "sap_core_runtime");
+
+const owner = new Client({ connectionString: migrationUrl });
+const runtime = new Client({ connectionString: runtimeUrl });
+let connected = false;
+
+const ids = {
+  actorA: "v04-rls-actor-a",
+  memberA: "v04-rls-member-a",
+  actorB: "v04-rls-actor-b",
+  orgA: randomUUID(),
+  orgB: randomUUID(),
+  companyA1: randomUUID(),
+  companyA2: randomUUID(),
+  companyB1: randomUUID(),
+  plantA1: randomUUID(),
+  plantA2: randomUUID(),
+  plantB1: randomUUID(),
+  orgMembershipA: randomUUID(),
+  orgMembershipMemberA: randomUUID(),
+  orgMembershipB: randomUUID(),
+  companyMembershipA1: randomUUID(),
+  companyMembershipA2: randomUUID(),
+  companyMembershipB1: randomUUID(),
+  plantAssignmentA1: randomUUID(),
+  plantAssignmentA2: randomUUID(),
+  plantAssignmentB1: randomUUID(),
+};
+
+async function count(client, table, where = "") {
+  const { rows } = await client.query(`SELECT COUNT(*)::int AS n FROM ${table} ${where}`);
+  return rows[0].n;
+}
+
+async function setContext(client, { user = ids.actorA, organization = ids.orgA, company = "", plant = "" } = {}) {
+  await client.query(
+    "SELECT set_config('app.user_id', $1, true), set_config('app.organization_id', $2, true), set_config('app.company_id', $3, true), set_config('app.plant_id', $4, true)",
+    [user, organization, company, plant],
+  );
+}
+
+async function seedOwnerFixtures() {
+  await owner.query(
+    `INSERT INTO "core"."user" ("id","name","email","emailVerified","createdAt","updatedAt")
+     VALUES ($1,'Actor A',$2,false,NOW(),NOW()),($3,'Member A',$4,false,NOW(),NOW()),($5,'Actor B',$6,false,NOW(),NOW())`,
+    [ids.actorA, `v04-rls-${randomUUID()}-a@example.test`, ids.memberA, `v04-rls-${randomUUID()}-m@example.test`, ids.actorB, `v04-rls-${randomUUID()}-b@example.test`],
+  );
+  await owner.query(
+    `INSERT INTO "core"."organization" ("id","updated_at") VALUES ($1,NOW()),($2,NOW())`,
+    [ids.orgA, ids.orgB],
+  );
+  await owner.query(
+    `INSERT INTO "core"."company" ("id","organizationId","updated_at")
+     VALUES ($1,$2,NOW()),($3,$2,NOW()),($4,$5,NOW())`,
+    [ids.companyA1, ids.orgA, ids.companyA2, ids.companyB1, ids.orgB],
+  );
+  await owner.query(
+    `INSERT INTO "core"."plant" ("id","organizationId","companyId","updated_at")
+     VALUES ($1,$2,$3,NOW()),($4,$2,$5,NOW()),($6,$7,$8,NOW())`,
+    [ids.plantA1, ids.orgA, ids.companyA1, ids.plantA2, ids.companyA2, ids.plantB1, ids.orgB, ids.companyB1],
+  );
+  await owner.query(
+    `INSERT INTO "core"."organization_membership" ("id","userId","organizationId","status","updated_at")
+     VALUES ($1,$2,$3,'ACTIVE',NOW()),($4,$5,$3,'ACTIVE',NOW()),($6,$7,$8,'ACTIVE',NOW())`,
+    [ids.orgMembershipA, ids.actorA, ids.orgA, ids.orgMembershipMemberA, ids.memberA, ids.orgMembershipB, ids.actorB, ids.orgB],
+  );
+  await owner.query(
+    `INSERT INTO "core"."company_membership"
+       ("id","userId","organizationMembershipId","organizationId","companyId","status","updated_at")
+     VALUES ($1,$2,$3,$4,$5,'ACTIVE',NOW()),($6,$2,$3,$4,$7,'ACTIVE',NOW()),($8,$9,$10,$11,$12,'ACTIVE',NOW())`,
+    [ids.companyMembershipA1, ids.actorA, ids.orgMembershipA, ids.orgA, ids.companyA1,
+     ids.companyMembershipA2, ids.companyA2, ids.companyMembershipB1, ids.actorB, ids.orgMembershipB, ids.orgB, ids.companyB1],
+  );
+  await owner.query(
+    `INSERT INTO "core"."plant_assignment"
+       ("id","userId","companyMembershipId","organizationId","companyId","plantId","status","updated_at")
+     VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE',NOW()),($7,$2,$8,$4,$9,$10,'ACTIVE',NOW()),($11,$12,$13,$14,$15,$16,'ACTIVE',NOW())`,
+    [ids.plantAssignmentA1, ids.actorA, ids.companyMembershipA1, ids.orgA, ids.companyA1, ids.plantA1,
+     ids.plantAssignmentA2, ids.companyMembershipA2, ids.companyA2, ids.plantA2,
+     ids.plantAssignmentB1, ids.actorB, ids.companyMembershipB1, ids.orgB, ids.companyB1, ids.plantB1],
+  );
+
+  const roleCodes = ["ORG_OWNER", "COMPANY_ADMIN", "PLANT_MANAGER"];
+  const { rows: roleRows } = await owner.query(
+    `SELECT "id"::text AS id, "code" FROM "core"."role_definition"
+     WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind" AND "code" = ANY($1::text[])`,
+    [roleCodes],
+  );
+  const role = Object.fromEntries(roleRows.map((row) => [row.code, row.id]));
+  assert.deepEqual(Object.keys(role).sort(), roleCodes.sort());
+
+  await owner.query(
+    `INSERT INTO "core"."organization_role_assignment" ("id","organizationMembershipId","roleDefinitionId","role_scope","is_break_glass")
+     VALUES ($1,$2,$3,'ORGANIZATION',false),($4,$5,$3,'ORGANIZATION',false)`,
+    [randomUUID(), ids.orgMembershipA, role.ORG_OWNER, randomUUID(), ids.orgMembershipB],
+  );
+  await owner.query(
+    `INSERT INTO "core"."company_role_assignment" ("id","companyMembershipId","roleDefinitionId","role_scope","is_break_glass")
+     VALUES ($1,$2,$3,'COMPANY',false),($4,$5,$3,'COMPANY',false),($6,$7,$3,'COMPANY',false)`,
+    [randomUUID(), ids.companyMembershipA1, role.COMPANY_ADMIN, randomUUID(), ids.companyMembershipA2, randomUUID(), ids.companyMembershipB1],
+  );
+  await owner.query(
+    `INSERT INTO "core"."plant_role_assignment" ("id","plantAssignmentId","roleDefinitionId","role_scope","is_break_glass")
+     VALUES ($1,$2,$3,'PLANT',false),($4,$5,$3,'PLANT',false),($6,$7,$3,'PLANT',false)`,
+    [randomUUID(), ids.plantAssignmentA1, role.PLANT_MANAGER, randomUUID(), ids.plantAssignmentA2, randomUUID(), ids.plantAssignmentB1],
+  );
+
+  const { rows: permissionRows } = await owner.query(
+    `SELECT "id"::text AS id FROM "core"."permission_definition" WHERE "code" = 'organization.read'`,
+  );
+  assert.equal(permissionRows.length, 1);
+  for (const [ownerOrg, code, actorId] of [[ids.orgB, "CUSTOM_B", ids.actorB]]) {
+    const familyId = randomUUID();
+    const roleId = randomUUID();
+    await owner.query(
+      `INSERT INTO "core"."role_definition"
+       ("id","role_family_id","code","version","kind","scope","ownerOrganizationId","created_at","updated_at")
+       VALUES ($1,$2,$3,1,'ORGANIZATION_CUSTOM','ORGANIZATION',$4,NOW(),NOW())`,
+      [roleId, familyId, code, ownerOrg],
+    );
+    await owner.query(
+      `INSERT INTO "core"."role_permission_grant" ("id","role_definition_id","permission_definition_id","effect")
+       VALUES ($1,$2,$3,'ALLOW')`,
+      [randomUUID(), roleId, permissionRows[0].id],
+    );
+    await owner.query(
+      `UPDATE "core"."role_definition" SET "permissions_locked_at"=NOW() WHERE "id"=$1`,
+      [roleId],
+    );
+    await owner.query(
+      `INSERT INTO "core"."role_definition_audit"
+       ("id","role_family_id","role_definition_id","owner_organization_id","actor_user_id","event_type","version","code","scope")
+       VALUES ($1,$2,$3,$4,$5,'CREATE',1,$6,'ORGANIZATION')`,
+      [randomUUID(), familyId, roleId, ownerOrg, actorId, code],
+    );
+  }
+
+  for (const [scope, parent, actor] of [
+    ["ORGANIZATION", ids.orgA, ids.actorA],
+    ["COMPANY", ids.companyA1, ids.actorA],
+    ["PLANT", ids.plantA1, ids.actorA],
+    ["ORGANIZATION", ids.orgB, ids.actorB],
+    ["COMPANY", ids.companyB1, ids.actorB],
+    ["PLANT", ids.plantB1, ids.actorB],
+  ]) {
+    await owner.query(
+      `INSERT INTO "core"."break_glass_access_audit"
+       ("id","actor_user_id","role_assignment_id","scope","scope_parent_id","reason")
+       VALUES ($1,$2,$3,$4::"core"."RoleScope",$5,'historical fixture')`,
+      [randomUUID(), actor, randomUUID(), scope, parent],
+    );
+  }
+}
+
+test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and identity-table exclusion", async () => {
+  await owner.connect();
+  connected = true;
+  await owner.query(
+    `CREATE ROLE sap_core_runtime LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE`,
+  );
+  await owner.query('GRANT USAGE ON SCHEMA "core" TO sap_core_runtime');
+  await owner.query(`GRANT SELECT, INSERT, UPDATE ON
+    "core"."organization", "core"."company", "core"."plant",
+    "core"."organization_membership", "core"."company_membership", "core"."plant_assignment",
+    "core"."organization_role_assignment", "core"."company_role_assignment", "core"."plant_role_assignment",
+    "core"."role_definition", "core"."role_permission_grant"
+    TO sap_core_runtime`);
+  await owner.query(`GRANT SELECT, INSERT ON "core"."role_definition_audit", "core"."break_glass_access_audit" TO sap_core_runtime`);
+  await owner.query(`GRANT SELECT ON "core"."permission_definition" TO sap_core_runtime`);
+  await owner.query(`GRANT SELECT, INSERT, UPDATE ON "core"."user" TO sap_core_runtime`);
+  await owner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON "core"."session", "core"."account", "core"."verification" TO sap_core_runtime`);
+
+  await seedOwnerFixtures();
+
+  const { rows: roleState } = await owner.query(
+    `SELECT r.rolsuper, r.rolbypassrls,
+            COUNT(c.oid) FILTER (WHERE c.relrowsecurity AND c.relowner = r.oid)::int AS owned_rls_tables
+       FROM pg_roles r
+       LEFT JOIN pg_class c ON c.relnamespace = 'core'::regnamespace
+      WHERE r.rolname = 'sap_core_runtime'
+      GROUP BY r.rolsuper, r.rolbypassrls`,
+  );
+  assert.equal(roleState.length, 1);
+  assert.equal(roleState[0].rolsuper, false);
+  assert.equal(roleState[0].rolbypassrls, false);
+  assert.equal(roleState[0].owned_rls_tables, 0);
+
+  const { rows: rlsTables } = await owner.query(
+    `SELECT COUNT(*)::int AS n FROM pg_class
+      WHERE relnamespace = 'core'::regnamespace AND relrowsecurity
+        AND relname = ANY($1::text[])`,
+    [[
+      "organization","company","plant","organization_membership","company_membership","plant_assignment",
+      "organization_role_assignment","company_role_assignment","plant_role_assignment","role_definition",
+      "role_permission_grant","role_definition_audit","break_glass_access_audit",
+    ]],
+  );
+  assert.equal(rlsTables[0].n, 13);
+
+  await runtime.connect();
+  try {
+    await runtime.query("BEGIN");
+    assert.equal(await count(runtime, '"core"."organization"'), 0);
+    assert.equal(await count(runtime, '"core"."company"'), 0);
+    assert.equal(await count(runtime, '"core"."plant"'), 0);
+    assert.equal(await count(runtime, '"core"."organization_membership"'), 0);
+    assert.equal(await count(runtime, '"core"."user"'), 3, "Better Auth identity rows remain available without tenant context");
+    assert.equal(await count(runtime, '"core"."permission_definition"'), 15, "permission catalog remains globally readable");
+
+    await setContext(runtime, { organization: "" });
+    assert.equal(await count(runtime, '"core"."organization_membership"'), 0);
+    await runtime.query("SELECT set_config('app.user_id', $1, true)", [ids.actorA]);
+    assert.equal(await count(runtime, '"core"."organization_membership"'), 1, "bootstrap reveals only the actor's own ACTIVE membership");
+
+    await runtime.query("SELECT set_config('app.organization_id', $1, true)", [ids.orgA]);
+    assert.equal(await count(runtime, '"core"."organization"'), 1);
+    assert.equal(await count(runtime, '"core"."company"'), 2);
+    assert.equal(await count(runtime, '"core"."plant"'), 2);
+    assert.equal(await count(runtime, '"core"."organization_membership"'), 2);
+    assert.equal(await count(runtime, '"core"."company_membership"'), 2);
+    assert.equal(await count(runtime, '"core"."plant_assignment"'), 2);
+    assert.equal(await count(runtime, '"core"."organization_role_assignment"'), 1);
+    assert.equal(await count(runtime, '"core"."company_role_assignment"'), 2);
+    assert.equal(await count(runtime, '"core"."plant_role_assignment"'), 2);
+    assert.equal(await count(runtime, '"core"."role_definition"' , 'WHERE "code" = \'CUSTOM_B\''), 0);
+    assert.equal(await count(runtime, '"core"."role_permission_grant"', `WHERE "role_definition_id" IN (SELECT "id" FROM "core"."role_definition" WHERE "code" = 'CUSTOM_B')`), 0);
+    assert.equal(await count(runtime, '"core"."role_definition_audit"', `WHERE "code" = 'CUSTOM_B'`), 0);
+    assert.equal(await count(runtime, '"core"."break_glass_access_audit"'), 3);
+
+    // Custom role writes are tenant-scoped and must be performed inside the
+    // same Organization context. Permission grants can only be inserted before sealing.
+    const familyId = randomUUID();
+    const customRoleId = randomUUID();
+    await runtime.query(
+      `INSERT INTO "core"."role_definition"
+       ("id","role_family_id","code","version","kind","scope","ownerOrganizationId","created_at","updated_at")
+       VALUES ($1,$2,'CUSTOM_A',1,'ORGANIZATION_CUSTOM','ORGANIZATION',$3,NOW(),NOW())`,
+      [customRoleId, familyId, ids.orgA],
+    );
+    const { rows: permission } = await runtime.query(
+      `SELECT "id" FROM "core"."permission_definition" WHERE "code"='organization.read'`,
+    );
+    await runtime.query(
+      `INSERT INTO "core"."role_permission_grant" ("id","role_definition_id","permission_definition_id","effect")
+       VALUES ($1,$2,$3,'ALLOW')`,
+      [randomUUID(), customRoleId, permission[0].id],
+    );
+    await runtime.query(
+      `UPDATE "core"."role_definition" SET "permissions_locked_at"=NOW() WHERE "id"=$1`,
+      [customRoleId],
+    );
+    await runtime.query(
+      `INSERT INTO "core"."role_definition_audit"
+       ("id","role_family_id","role_definition_id","owner_organization_id","actor_user_id","event_type","version","code","scope")
+       VALUES ($1,$2,$3,$4,$5,'CREATE',1,'CUSTOM_A','ORGANIZATION')`,
+      [randomUUID(), familyId, customRoleId, ids.orgA, ids.actorA],
+    );
+    assert.equal(await count(runtime, '"core"."role_definition"', 'WHERE "code" = \'CUSTOM_A\''), 1);
+    assert.equal(await count(runtime, '"core"."role_permission_grant"', `WHERE "role_definition_id" = '${customRoleId}'::uuid`), 1);
+    assert.equal(await count(runtime, '"core"."role_definition_audit"', `WHERE "code" = 'CUSTOM_A'`), 1);
+
+    await runtime.query("SELECT set_config('app.company_id', $1, true)", [ids.companyA1]);
+    assert.equal(await count(runtime, '"core"."company"'), 1);
+    assert.equal(await count(runtime, '"core"."plant"'), 1);
+    assert.equal(await count(runtime, '"core"."company_membership"'), 1);
+    assert.equal(await count(runtime, '"core"."plant_assignment"'), 1);
+    assert.equal(await count(runtime, '"core"."company_role_assignment"'), 1);
+    assert.equal(await count(runtime, '"core"."plant_role_assignment"'), 1);
+    assert.equal(await count(runtime, '"core"."break_glass_access_audit"'), 2, "Company scope sees Company and descendant Plant audit, not Organization audit");
+
+    await runtime.query("SELECT set_config('app.plant_id', $1, true)", [ids.plantA1]);
+    assert.equal(await count(runtime, '"core"."plant"'), 1);
+    assert.equal(await count(runtime, '"core"."plant_assignment"'), 1);
+    assert.equal(await count(runtime, '"core"."plant_role_assignment"'), 1);
+    assert.equal(await count(runtime, '"core"."break_glass_access_audit"'), 1, "Plant scope sees only Plant audit");
+
+    await runtime.query("SELECT set_config('app.organization_id', $1, true)", ["not-a-uuid"]);
+    assert.equal(await count(runtime, '"core"."organization"'), 0, "malformed context fails closed");
+    assert.equal(await count(runtime, '"core"."company"'), 0);
+    await runtime.query("ROLLBACK");
+
+    await runtime.query("BEGIN");
+    await setContext(runtime);
+    await assert.rejects(
+      runtime.query(
+        `INSERT INTO "core"."company" ("id","organizationId","updated_at") VALUES ($1,$2,NOW())`,
+        [randomUUID(), ids.orgB],
+      ),
+      (error) => error.code === "42501",
+    );
+    await runtime.query("ROLLBACK");
+  } finally {
+    await runtime.end();
+  }
+});
+
+after(async () => {
+  if (connected) await owner.end();
+});
