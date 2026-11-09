@@ -259,6 +259,7 @@ CREATE POLICY "break_glass_access_audit_tenant_read"
     (
       "scope" = 'ORGANIZATION'::"core"."RoleScope"
       AND "scopeParentId"::text = NULLIF(current_setting('app.organization_id', true), '')
+      AND NULLIF(current_setting('app.company_id', true), '') IS NULL
     )
     OR (
       "scope" = 'COMPANY'::"core"."RoleScope"
@@ -270,6 +271,7 @@ CREATE POLICY "break_glass_access_audit_tenant_read"
             NULLIF(current_setting('app.company_id', true), '') IS NULL
             OR c."id"::text = NULLIF(current_setting('app.company_id', true), '')
           )
+          AND NULLIF(current_setting('app.plant_id', true), '') IS NULL
       )
     )
     OR (
@@ -297,6 +299,7 @@ CREATE POLICY "break_glass_access_audit_tenant_insert"
     (
       "scope" = 'ORGANIZATION'::"core"."RoleScope"
       AND "scopeParentId"::text = NULLIF(current_setting('app.organization_id', true), '')
+      AND NULLIF(current_setting('app.company_id', true), '') IS NULL
     )
     OR (
       "scope" = 'COMPANY'::"core"."RoleScope"
@@ -308,6 +311,7 @@ CREATE POLICY "break_glass_access_audit_tenant_insert"
             NULLIF(current_setting('app.company_id', true), '') IS NULL
             OR c."id"::text = NULLIF(current_setting('app.company_id', true), '')
           )
+          AND NULLIF(current_setting('app.plant_id', true), '') IS NULL
       )
     )
     OR (
