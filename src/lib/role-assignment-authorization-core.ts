@@ -284,6 +284,36 @@ async function authorize(
     "SELECT set_config('app.organization_id', $1, true), set_config('app.company_id', '', true), set_config('app.plant_id', '', true)",
     [organizationId],
   );
+  if (permission === "roles.assign") {
+    const grantInput = input as RoleAssignmentGrantAuthorization;
+    const definitions = await session.query<{
+      scope: string;
+      kind: string;
+      ownerOrganizationId: string | null;
+      disabledAt: Date | null;
+      permissionsLockedAt: Date | null;
+    }>(
+      `SELECT "scope"::text AS "scope", "kind"::text AS "kind",
+              "ownerOrganizationId"::text AS "ownerOrganizationId",
+              "disabled_at" AS "disabledAt", "permissions_locked_at" AS "permissionsLockedAt"
+       FROM "core"."role_definition"
+       WHERE "id" = $1
+       FOR SHARE`,
+      [grantInput.roleDefinitionId],
+    );
+    const definition = definitions[0];
+    if (
+      !definition
+      || definition.scope !== grantInput.scope
+      || definition.scope === "PLATFORM"
+      || definition.disabledAt !== null
+      || definition.permissionsLockedAt === null
+      || (definition.kind === "SYSTEM" && definition.ownerOrganizationId !== null)
+      || (definition.kind === "ORGANIZATION_CUSTOM" && definition.ownerOrganizationId !== organizationId)
+      || (definition.kind !== "SYSTEM" && definition.kind !== "ORGANIZATION_CUSTOM")
+    ) return false;
+  }
+
   const target = await resolveTarget(session, organizationId, input.scope, input.parentId, expectedUserId);
   if (!target) return false;
 
