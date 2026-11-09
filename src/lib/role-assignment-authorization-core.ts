@@ -63,7 +63,7 @@ async function resolveTarget(
        FROM "core"."organization_membership"
        WHERE "id" = $1 AND "organizationId" = $2::uuid
          AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-       LIMIT 1 FOR SHARE FOR SHARE`,
+       LIMIT 1 FOR SHARE`,
       [parentId, organizationId],
     );
     const target = rows[0];
