@@ -711,6 +711,135 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       );
       assert.equal(memberRolesResponse.status, 403, "Company/Plant membership does not grant Organization role visibility");
 
+      // F-02 production role-assignment HTTP boundary: the actor comes from
+      // Better Auth, and the recipient is resolved only from the typed parent.
+      const assignmentPath = `${authURL}/api/organizations/${organizationId}/roles/assignments`;
+      const organizationMemberRoleRows = await pool.query(
+        `SELECT "id"::text AS "id" FROM "core"."role_definition"
+         WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+           AND "scope" = 'ORGANIZATION'::"core"."RoleScope"
+           AND "code" = 'ORG_MEMBER'`,
+      );
+      assert.equal(organizationMemberRoleRows.rows.length, 1);
+      const organizationMemberRoleId = organizationMemberRoleRows.rows[0].id;
+
+      const anonymousAssignmentList = await fetch(
+        `${assignmentPath}?scope=ORGANIZATION&parentId=${secondOrganizationMembershipId}&userId=${secondUserId}`,
+      );
+      assert.equal(anonymousAssignmentList.status, 401, "anonymous role-assignment reads must be rejected");
+      const anonymousAssignmentGrant = await fetch(assignmentPath, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: "ORGANIZATION",
+          parentId: secondOrganizationMembershipId,
+          roleDefinitionId: organizationMemberRoleId,
+        }),
+      });
+      assert.equal(anonymousAssignmentGrant.status, 401, "anonymous role-assignment writes must be rejected");
+
+      const spoofedAssignmentGrant = await fetch(assignmentPath, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          actorUserId: secondUserId,
+          scope: "ORGANIZATION",
+          parentId: secondOrganizationMembershipId,
+          roleDefinitionId: organizationMemberRoleId,
+        }),
+      });
+      assert.equal(spoofedAssignmentGrant.status, 400, "request-supplied actor identities must be rejected");
+      const { rows: noSpoofedAssignmentRows } = await pool.query(
+        `SELECT "id" FROM "core"."organization_role_assignment"
+         WHERE "organizationMembershipId" = $1 AND "roleDefinitionId" = $2
+           AND "revoked_at" IS NULL`,
+        [secondOrganizationMembershipId, organizationMemberRoleId],
+      );
+      assert.equal(noSpoofedAssignmentRows.length, 0, "actor-spoofed requests must not persist assignments");
+
+      const deniedAssignmentGrant = await fetch(assignmentPath, {
+        method: "POST",
+        headers: { cookie: secondCookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: "ORGANIZATION",
+          parentId: organizationMembershipId,
+          roleDefinitionId: organizationMemberRoleId,
+        }),
+      });
+      assert.equal(deniedAssignmentGrant.status, 403, "membership without roles.assign cannot grant Organization roles");
+      const { rows: noDeniedAssignmentRows } = await pool.query(
+        `SELECT "id" FROM "core"."organization_role_assignment"
+         WHERE "organizationMembershipId" = $1 AND "roleDefinitionId" = $2
+           AND "revoked_at" IS NULL`,
+        [organizationMembershipId, organizationMemberRoleId],
+      );
+      assert.equal(noDeniedAssignmentRows.length, 0, "denied role grants must not persist assignments");
+
+      const crossOrganizationAssignmentGrant = await fetch(assignmentPath, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: "ORGANIZATION",
+          parentId: foreignMembershipId,
+          roleDefinitionId: organizationMemberRoleId,
+        }),
+      });
+      assert.equal(crossOrganizationAssignmentGrant.status, 403, "Organization A actor cannot grant to an Organization B membership");
+      const { rows: noCrossOrganizationAssignmentRows } = await pool.query(
+        `SELECT "id" FROM "core"."organization_role_assignment"
+         WHERE "organizationMembershipId" = $1 AND "roleDefinitionId" = $2
+           AND "revoked_at" IS NULL`,
+        [foreignMembershipId, organizationMemberRoleId],
+      );
+      assert.equal(noCrossOrganizationAssignmentRows.length, 0, "cross-Organization grants must not persist");
+
+      const successfulAssignmentGrant = await fetch(assignmentPath, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: "ORGANIZATION",
+          parentId: secondOrganizationMembershipId,
+          roleDefinitionId: organizationMemberRoleId,
+        }),
+      });
+      const successfulAssignmentText = await successfulAssignmentGrant.text();
+      assert.equal(successfulAssignmentGrant.status, 201, successfulAssignmentText);
+      const successfulAssignment = JSON.parse(successfulAssignmentText).assignment;
+      assert.equal(successfulAssignment.scope, "ORGANIZATION");
+      assert.equal(successfulAssignment.parentId, secondOrganizationMembershipId);
+      assert.equal(successfulAssignment.roleDefinitionId, organizationMemberRoleId);
+      assert.equal(successfulAssignment.grantActorUserId, userId);
+
+      const authorizedAssignmentList = await fetch(
+        `${assignmentPath}?scope=ORGANIZATION&parentId=${secondOrganizationMembershipId}&userId=${secondUserId}`,
+        { headers: { cookie } },
+      );
+      const authorizedAssignmentText = await authorizedAssignmentList.text();
+      assert.equal(authorizedAssignmentList.status, 200, authorizedAssignmentText);
+      const authorizedAssignments = JSON.parse(authorizedAssignmentText).assignments;
+      assert.ok(
+        authorizedAssignments.some((assignment) => assignment.id === successfulAssignment.id),
+        "roles.read actor must see the target member's active effective role assignment",
+      );
+
+      const crossOrganizationAssignmentList = await fetch(
+        `${assignmentPath}?scope=ORGANIZATION&parentId=${foreignMembershipId}&userId=${adversaryUserId}`,
+        { headers: { cookie } },
+      );
+      assert.equal(crossOrganizationAssignmentList.status, 403, "cross-Organization assignment reads must be rejected");
+
+      const breakGlassAssignmentGrant = await fetch(assignmentPath, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: "ORGANIZATION",
+          parentId: secondOrganizationMembershipId,
+          roleDefinitionId: organizationMemberRoleId,
+          breakGlass: { reason: "must never be accepted" },
+        }),
+      });
+      assert.equal(breakGlassAssignmentGrant.status, 400, "tenant HTTP API must not accept break-glass grants");
+
       // Simulate an owner-approved delegable permission in this disposable fixture.
       await pool.query(
         `UPDATE "core"."permission_delegation_policy"
