@@ -229,6 +229,50 @@ jobs:
             await client.end();
           }
           NODE
+      - name: Apply migration 11 tenant RLS
+        run: |
+          set -euo pipefail
+          cp -R "$RUNNER_TEMP/v04-current-migrations/20261109130000_v04_tenant_rls" prisma/migrations/
+          pnpm db:migrate:deploy
+          pnpm db:status
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          try {
+            const { rows } = await client.query(
+              'SELECT "migration_name", "rolled_back_at" FROM public."_prisma_migrations" ORDER BY "started_at"',
+            );
+            assert.equal(rows.length, 11);
+            assert.ok(rows.every((row) => row.rolled_back_at === null));
+            assert.equal(rows[10].migration_name, "20261109130000_v04_tenant_rls");
+          } finally {
+            await client.end();
+          }
+          NODE
+      - name: Apply migration 12 permission delegation metadata
+        run: |
+          set -euo pipefail
+          cp -R "$RUNNER_TEMP/v04-current-migrations/20261109140000_v04_permission_delegation" prisma/migrations/
+          pnpm db:migrate:deploy
+          pnpm db:status
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          try {
+            const { rows } = await client.query(
+              'SELECT "migration_name", "rolled_back_at" FROM public."_prisma_migrations" ORDER BY "started_at"',
+            );
+            assert.equal(rows.length, 12);
+            assert.ok(rows.every((row) => row.rolled_back_at === null));
+            assert.equal(rows[11].migration_name, "20261109140000_v04_permission_delegation");
+          } finally {
+            await client.end();
+          }
+          NODE
       - name: Create isolated D8 fresh database
         run: |
           node --input-type=module <<'NODE'
@@ -244,7 +288,7 @@ jobs:
             await client.end();
           }
           NODE
-      - name: Deploy all ten migrations and execute D14-B
+      - name: Deploy all twelve migrations and execute D14-B
         env:
           CI_DATABASE_PORT: "55434"
           CI_DATABASE_NAME: sap_core_d8_test
