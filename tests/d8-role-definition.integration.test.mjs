@@ -301,9 +301,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
   let customRoleA;
   let customRoleB;
   let customCompanyRoleA;
-  let customCompanyRoleB;
   let customPlantRoleA;
-  let customPlantRoleB;
   let systemRoleId;
   let assignedRole;
   let assignedCompanyRole;
@@ -420,9 +418,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
       "ROLE_SCOPE_NOT_ALLOWED",
     );
     customCompanyRoleA = await getSystemRoleId("COMPANY_ADMIN");
-    customCompanyRoleB = await getSystemRoleId("COMPANY_MEMBER");
     customPlantRoleA = await getSystemRoleId("PLANT_MANAGER");
-    customPlantRoleB = await getSystemRoleId("PLANT_VIEWER");
   });
 
   await t.test("D7 grants and effective resolution enforce the custom-role owner", async () => {
@@ -444,13 +440,13 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     assignedCompanyRole = await roleAssignments.grantRoleAssignment({
       scope: "COMPANY",
       parentId: fixture.companyMembershipAId,
-      roleDefinitionId: customCompanyRoleA.id,
+      roleDefinitionId: customCompanyRoleA,
       actorUserId: fixture.actorId,
     });
     assignedPlantRole = await roleAssignments.grantRoleAssignment({
       scope: "PLANT",
       parentId: fixture.plantAssignmentAId,
-      roleDefinitionId: customPlantRoleA.id,
+      roleDefinitionId: customPlantRoleA,
       actorUserId: fixture.actorId,
     });
     assert.deepEqual(
