@@ -23,7 +23,9 @@
     "test:d7": "node --test tests/d7-role-assignment.integration.test.mjs",
     "test:d8": "node --test tests/d8-role-definition.integration.test.mjs",
     "test:d1": "node --test tests/d1-organization-slot.integration.test.mjs",
-    "test:tenant-context": "node --test tests/tenant-context.unit.test.mjs"
+    "test:tenant-context": "node --test tests/tenant-context.unit.test.mjs",
+    "test:authorization-policy": "node --test tests/authorization-policy.unit.test.mjs",
+    "test:tenant-target-context": "node --test tests/tenant-target-context.unit.test.mjs"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "1.7.17",
