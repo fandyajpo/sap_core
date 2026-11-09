@@ -23,6 +23,9 @@ async function errorResponse(error: unknown, organizationId: string, action?: "C
     return NextResponse.json({ error: error.message }, { status });
   }
   if (error instanceof TenantTargetContextError) {
+    if (action && error.code === "UNAUTHENTICATED") {
+      await recordDeniedTenantDenyWriteAttempt(organizationId, action);
+    }
     const status = error.code === "UNAUTHENTICATED" ? 401 :
       error.code === "INVALID_SCOPE" ? 400 : 403;
     return NextResponse.json({ error: "DENY policy access denied." }, { status });
