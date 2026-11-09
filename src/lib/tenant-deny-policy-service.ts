@@ -308,7 +308,6 @@ export async function revokeTenantDenyPolicy(
 }
 
 
-const deniedAuditWindow = "5 minutes";
 const deniedAuditLimit = 10;
 
 async function recordDeniedTenantDenyAttempt(
