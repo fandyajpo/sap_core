@@ -1,221 +1,113 @@
-# Production Database Roles — V04
+# Prisma Postgres Production Access Model
 
-Status: deployment runbook draft. This document describes the intended production split; it does not mean the hosted database has been provisioned or verified.
+Status: operational runbook draft. This document reflects Prisma Postgres provider constraints confirmed during the November 2026 hosted deployment. It does not claim database-level least-privilege isolation.
 
-## Goal
+## Provider constraint — no custom PostgreSQL roles
 
-Use separate PostgreSQL identities for the application and schema migrations:
+Prisma Postgres does not support custom PostgreSQL roles. The connection-string user is provider-managed, cannot create roles, and every generated credential has the same full database access. The hosted attempt to create `sap_core_runtime` failed with:
 
-- `sap_core_runtime`: application login used by Next.js through `DATABASE_URL`. It must not own tables, bypass RLS, or have elevated role attributes.
-- Migration owner: the existing database owner / migration credential, supplied only to the migration process through `MIGRATION_DATABASE_URL`. Do not expose this credential to the Vercel application runtime.
-
-Do not use the migration owner as the application's `DATABASE_URL`.
-
-## Preconditions
-
-Before running SQL:
-
-1. Confirm the hosted database credential rotation is complete.
-2. Connect with the intended migration-owner credential using a secure terminal/session. Never paste connection strings, passwords, or API keys into chat, Git, shell history, or screenshots.
-3. Confirm the target is the intended production database and that the session is not read-only.
-4. Confirm the migration owner is permitted to create roles and grant the required privileges.
-5. Take/verify a recoverable backup before making production role changes.
-
-Do not run this against a local development database or a disposable integration-test database.
-
-## 1. Create the runtime role
-
-Run once as the database administrator / migration owner. Do not put a password in this SQL file:
-
-```sql
-CREATE ROLE sap_core_runtime
-  LOGIN
-  NOSUPERUSER
-  NOBYPASSRLS
-  NOCREATEDB
-  NOCREATEROLE
-  NOINHERIT;
+```text
+ERROR: restricted superuser cannot create roles
 ```
 
-If the role already exists, inspect it first rather than blindly recreating it:
+Do not retry `CREATE ROLE`, `CREATE USER`, or `GRANT` to an invented runtime role. Do not claim that a second connection string is a restricted database role.
 
-```sql
-SELECT rolname, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole,
-       rolbypassrls, rolinherit
-FROM pg_roles
-WHERE rolname = 'sap_core_runtime';
-```
+A separate Prisma Postgres credential can still be useful for operational secret separation and independent revocation. It does **not** reduce PostgreSQL privileges. Runtime and migration credentials therefore remain equally privileged at the database layer.
 
-Set its password interactively with the PostgreSQL `psql` command `\\password sap_core_runtime`. This prompts without placing the password in the SQL text or command history. Store the resulting runtime connection string only in the deployment secret manager.
+Official provider references:
+- https://www.prisma.io/docs/postgres/faq
+- https://www.prisma.io/docs/postgres/database/connecting-to-your-database
 
-The runtime role must not be a member of any owner, migration, administrator, or other elevated role.
+## Current hosted database state
 
-## 2. Grant the minimum application privileges
+As of the recorded deployment:
+- The intended hosted database is `postgres`.
+- All 13 repository migrations were successfully applied.
+- Migration history reports 13 successful migrations and 0 rolled-back migrations.
+- The hosted database has 21 application tables across `core` and `master_data`.
+- The 13 intended V04 tenant tables have RLS enabled; the migration does not FORCE RLS.
+- All 21 application tables are owned by the provider migration identity.
+- Creating `sap_core_runtime` was rejected by Prisma Postgres. No runtime role or grants were created.
 
-The following grants mirror the runtime-role permissions exercised by `tests/v04-rls.integration.test.mjs`. Run as the migration owner:
+These observations do not prove that the hosted database enforces tenant isolation against its full-access credential. Application-layer authorization is the primary security boundary.
 
-```sql
-GRANT USAGE ON SCHEMA "core" TO sap_core_runtime;
+## Connection-string handling
 
-GRANT SELECT, INSERT, UPDATE ON
-  "core"."organization",
-  "core"."company",
-  "core"."plant",
-  "core"."organization_membership",
-  "core"."company_membership",
-  "core"."plant_assignment",
-  "core"."organization_role_assignment",
-  "core"."company_role_assignment",
-  "core"."plant_role_assignment",
-  "core"."role_definition",
-  "core"."role_permission_grant"
-TO sap_core_runtime;
+Prisma Postgres provides two endpoint forms for a credential:
+- pooled endpoint: use for application traffic and serverless concurrency;
+- direct endpoint: use for Prisma migrations, introspection, and administrative tooling.
 
-GRANT SELECT, INSERT ON
-  "core"."role_definition_audit",
-  "core"."break_glass_access_audit"
-TO sap_core_runtime;
+Both endpoints for a credential share the same database user and password. Separate credentials have distinct passwords but identical full database privileges.
 
-GRANT SELECT ON
-  "core"."permission_definition",
-  "core"."permission_delegation_policy"
-TO sap_core_runtime;
-
-GRANT SELECT, INSERT, UPDATE ON "core"."user"
-TO sap_core_runtime;
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON
-  "core"."session",
-  "core"."account",
-  "core"."verification"
-TO sap_core_runtime;
-```
-
-If the database has revoked CONNECT from PUBLIC, also grant CONNECT on the actual production database to `sap_core_runtime`. Use the exact database name; do not guess it.
-
-These grants intentionally do not give the runtime role:
-- ownership of any table or schema;
-- INSERT/UPDATE/DELETE on permission catalog or delegation policy;
-- UPDATE/DELETE on audit tables;
-- DELETE on tenant, membership, assignment, or role-definition tables;
-- CREATE on schema `core`;
-- CREATEROLE, CREATEDB, SUPERUSER, or BYPASSRLS.
-
-Do not add broad grants such as `GRANT ALL ON ALL TABLES` or `GRANT ALL ON SCHEMA core`.
-
-## 3. Verify role attributes, membership, and ownership
-
-Run as an administrator / migration owner:
-
-```sql
-SELECT rolname, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole,
-       rolbypassrls, rolinherit
-FROM pg_roles
-WHERE rolname = 'sap_core_runtime';
-```
-
-Expected: LOGIN true; SUPERUSER, CREATEDB, CREATEROLE, BYPASSRLS, and INHERIT false.
-
-Check that the runtime role has no memberships:
-
-```sql
-SELECT parent.rolname AS granted_role
-FROM pg_auth_members m
-JOIN pg_roles parent ON parent.oid = m.roleid
-JOIN pg_roles member ON member.oid = m.member
-WHERE member.rolname = 'sap_core_runtime';
-```
-
-Expected: zero rows.
-
-Check that it owns no relations in the application schema:
-
-```sql
-SELECT c.relname, c.relkind
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'core'
-  AND c.relowner = (SELECT oid FROM pg_roles WHERE rolname = 'sap_core_runtime');
-```
-
-Expected: zero rows.
-
-## 4. Verify RLS and table privileges
-
-The runtime role must be a non-owner and must not bypass RLS. Verify the 13 V04 RLS tables are enabled:
-
-```sql
-SELECT relname, relrowsecurity, relforcerowsecurity
-FROM pg_class
-WHERE relnamespace = 'core'::regnamespace
-  AND relname = ANY (ARRAY[
-    'organization', 'company', 'plant',
-    'organization_membership', 'company_membership', 'plant_assignment',
-    'organization_role_assignment', 'company_role_assignment', 'plant_role_assignment',
-    'role_definition', 'role_permission_grant',
-    'role_definition_audit', 'break_glass_access_audit'
-  ])
-ORDER BY relname;
-```
-
-Expected: 13 rows and `relrowsecurity = true` for every row. V04 currently does not FORCE RLS; the critical runtime protections are that this role is not a table owner and has NOBYPASSRLS.
-
-Verify sensitive privileges explicitly:
-
-```sql
-SELECT
-  has_table_privilege('sap_core_runtime', 'core.permission_delegation_policy', 'SELECT') AS delegation_policy_read,
-  has_table_privilege('sap_core_runtime', 'core.permission_delegation_policy', 'UPDATE') AS delegation_policy_update,
-  has_table_privilege('sap_core_runtime', 'core.role_definition_audit', 'INSERT') AS role_audit_insert,
-  has_table_privilege('sap_core_runtime', 'core.role_definition_audit', 'UPDATE') AS role_audit_update,
-  has_table_privilege('sap_core_runtime', 'core.organization', 'DELETE') AS organization_delete;
-```
-
-Expected: `true, false, true, false, false`, respectively.
-
-Also verify the role can connect to the intended database and can establish a real connection using the new runtime credential. Do not test by printing the connection string.
-
-## 5. Runtime and migration environment separation
-
-Repository behavior today:
-
-- `src/lib/prisma.ts` uses `DATABASE_URL` for the application.
-- `prisma.config.ts` requires `MIGRATION_DATABASE_URL` for Prisma CLI commands and does not fall back to `DATABASE_URL`.
+Repository configuration:
+- `src/lib/prisma.ts` reads `DATABASE_URL` for application queries.
+- `prisma.config.ts` requires `MIGRATION_DATABASE_URL` and does not fall back to `DATABASE_URL`.
 
 Deployment rules:
+1. Set `DATABASE_URL` to the pooled Prisma Postgres endpoint for the application.
+2. Set `MIGRATION_DATABASE_URL` to a direct endpoint for a separately managed migration credential.
+3. The separate migration credential is for secret lifecycle separation only; it is not a restricted role.
+4. Keep the migration credential out of the Vercel application runtime environment. Supply it only to a trusted migration job or operator environment.
+5. Keep the runtime credential in the Vercel server-side environment only. Never expose it through `NEXT_PUBLIC_*`, client bundles, logs, or error messages.
+6. Use separate generated credentials where operational revocation boundaries are useful. Record credential identifiers/last-four metadata only; never commit connection strings.
+7. Delete a credential explicitly when revocation must be certain. Provider documentation warns that rotation may fail to remove the previous password without surfacing that failure.
 
-1. Set `DATABASE_URL` to the runtime role connection string for the application.
-2. Set `MIGRATION_DATABASE_URL` only in the trusted migration execution environment, using the migration-owner connection.
-3. Do not add the migration-owner secret to the Vercel application project's Production, Preview, or Development runtime environment variables. Run migrations from a separate trusted local/CI job.
-4. `prisma.config.ts` now requires `MIGRATION_DATABASE_URL` for Prisma CLI commands instead of falling back to `DATABASE_URL`. This is deliberately fail-closed; commands such as `prisma validate` and `prisma generate` also load the Prisma config, so provide the migration URL in trusted local/CI command environments when running them.
-5. For local development only, `.env.example` shows both variables pointing to the same local disposable database. Never copy that arrangement to production.
-6. If the provider supplies a pooled runtime URL and a direct migration URL, use the provider's documented forms for those separate purposes. Do not assume a connection string is pooled based only on its label.
+For local development, `.env.example` may point both variables at the same disposable local database. Never copy local credentials into hosted production.
 
-Vercel application variables to configure later:
-- `DATABASE_URL`: runtime role only.
-- `BETTER_AUTH_SECRET`: production secret.
-- `BETTER_AUTH_URL`: canonical production HTTPS origin.
+## Application-layer authorization requirements
 
-Do not configure `MIGRATION_DATABASE_URL` in the Vercel application runtime.
+Because the hosted database credential has full access, every tenant-facing operation must enforce authorization in trusted server code. A tenant ID, user ID, role, permission, or scope supplied by the browser is untrusted input.
 
-## 6. Operational maintenance
+Required invariants:
+- Resolve the actor only from a verified Better Auth session.
+- Revalidate the exact session row and expiry inside the protected transaction when the operation depends on session validity.
+- Derive actor identity server-side; reject caller-supplied actor identity fields.
+- Verify active Organization membership before accessing tenant resources.
+- Verify Company belongs to the requested Organization and Plant belongs to both the requested Company and Organization.
+- Load persisted role assignments and permission grants for the verified actor and exact target scope.
+- Apply explicit DENY precedence and delegation/role-governance constraints.
+- Perform authorization reads and the protected read/write in the same database transaction.
+- Use parameterized SQL. Never interpolate untrusted identifiers into SQL. Dynamic table/column fragments must come only from closed server-side allowlists.
+- Do not expose a raw Prisma client, generic query executor, or unbound tenant service to request handlers.
+- Background jobs and administrative operations must have explicit, separate trusted entry points and must not impersonate a browser actor.
+- Fail closed on missing session, membership, scope ancestry, permission, or malformed persisted policy data.
 
-- When a migration introduces a new table or changes runtime operations, update the explicit GRANT list and this runbook in the same change.
-- Re-run the V04 RLS integration test against a fresh disposable database after privilege changes.
-- Re-run the role/privilege verification queries against production after provisioning.
-- Keep the migration credential separate, restricted, and out of application logs and runtime environments.
-- Never use the runtime role to run Prisma migrations.
+RLS and transaction-local tenant GUCs remain defense-in-depth and useful for disposable PostgreSQL integration testing. On Prisma Postgres, do not present them as a boundary against arbitrary SQL executed with the provider credential.
 
-## Verification record
+## Verified application paths and remaining audit
 
-Do not mark this runbook as production-complete until the following evidence exists:
+The following code paths were inspected on `main`:
+- `requireTenantPermission` locks/revalidates the Better Auth session, sets transaction-local actor context, resolves active membership and target ancestry, loads persisted grants, and evaluates the requested permission.
+- Organization member, Company, Plant, Organization role listing, custom role create/revise, and role-assignment adapters use server-derived sessions and/or transaction-bound authorization.
+- `createSessionBoundScopedAccessDatabase` binds the exact session identity and locks the session row in the same transaction.
+- `scopedAccessDatabase` is also exported as an unbound adapter from `src/lib/scoped-access.ts`. No use of this export was established in the limited inspection. It must remain unused by tenant request paths; complete call-site inventory and static enforcement are still required before declaring the audit complete.
 
-- [ ] Runtime role created on the intended hosted database.
-- [ ] Role attributes verified: non-superuser, NOBYPASSRLS, no CREATEDB/CREATEROLE.
-- [ ] No elevated role memberships.
-- [ ] Runtime role owns no application tables.
-- [ ] Required grants verified; prohibited grants absent.
-- [ ] RLS enabled on all 13 V04 tenant tables.
-- [ ] Runtime connection succeeds with the runtime credential.
-- [ ] Migration owner credential is used only by the trusted migration process.
-- [ ] Vercel Production environment contains runtime credentials only.
+This document is not a claim that every application call-site or every adversarial HTTP path has been exhaustively audited. Complete the remaining checks before production traffic:
+1. Inventory every Prisma client access, raw SQL call, service constructor, server action, route handler, server component, and background entry point.
+2. Prove each tenant-facing path is protected by the verified-session and permission boundary; remove or isolate any unbound adapter call-site.
+3. Add HTTP-level negative tests for unauthenticated requests, spoofed actor IDs, cross-Organization IDs, sibling Company/Plant IDs, inactive membership, revoked/expired sessions, explicit DENY, and unauthorized role delegation.
+4. Add concurrency tests for session revocation and membership/assignment changes racing protected operations.
+5. Run the adversarial suites against a fresh disposable PostgreSQL database. Keep RLS tests, but distinguish what they prove locally from what Prisma Postgres enforces.
+6. Review production logs, error handling, and client payloads to ensure secrets, SQL, and internal authorization details are not disclosed.
+
+## Vercel environment
+
+When a Vercel project is created:
+- Application server environment: pooled `DATABASE_URL`, `BETTER_AUTH_SECRET`, and canonical HTTPS `BETTER_AUTH_URL`.
+- Trusted migration environment only: direct `MIGRATION_DATABASE_URL`.
+- Do not configure `MIGRATION_DATABASE_URL` in the Vercel application runtime.
+- Do not assume the separate credentials have different database privileges.
+- Confirm the Next.js runtime is Node.js for the current Prisma TCP client.
+
+## Deployment gate
+
+Do not mark production security readiness complete until:
+- [ ] Application-layer call-site inventory is complete.
+- [ ] No tenant request path uses an unbound database/service adapter.
+- [ ] HTTP-level adversarial authorization tests pass.
+- [ ] Concurrency/session-revocation tests pass.
+- [ ] Secret handling and production environment separation are verified.
+- [ ] The residual risk of a full-access hosted database credential is explicitly accepted.
+- [ ] A backup/restore plan appropriate to the Prisma Postgres plan is verified.
+
+No hosted database role provisioning is possible on Prisma Postgres. No custom runtime role is expected or required by this runbook.
