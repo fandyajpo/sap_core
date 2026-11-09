@@ -65,9 +65,9 @@ The remaining V04.4 sequence is to establish and verify isolation; install from 
 | D7/D8/D14 role edges | D14 run `be466697eab242d59088eb6efb0f1c37` applied exactly migrations 1–8 and checked six valid matching-scope fixtures, two per Role Assignment table. FK catalog run `0ce2c3bc1f384957894e3c3c32b08595` inspected the expected 19-row catalog on migrations 1–8. | Bounded PASS: D14 history-protection assertions passed 42/42; FK catalog returned all 19 expected constraints with matching ordered columns, names, actions, and `convalidated = true`. Migration 9 was not applied in the FK run. | Independent insert-time mismatched-scope/definition cases and Role Definition owner/kind and retirement/disablement governance remain NOT RUN on this verified baseline. The historical `22e1b72960eb4eab910774b40a9181b7` observation is retained, but its exact migration baseline remains unverified. D14 covers role edges only; no additional P05 edge is implied. |
 | X06 baseline | The V04.5.1 note records the earlier seven-migration X06 replay and a separate later nine-migration fresh replay/catalog audit. X06 transactional behavior checks were exercised against the seven-migration replay. | The documented current actions are `ON DELETE RESTRICT ON UPDATE RESTRICT` for session→user and account→user; do not rewrite or drop either constraint in an experiment. | Treat `v04.5.1-x06-forward-migration-note.md` as the bounded evidence record. The nine-migration replay is fresh local disposable-PostgreSQL evidence, not CI or current/production-database evidence, and neither run establishes full V04 acceptance, application authorization, protected operations, RLS, or production state. |
 
-### D5 and X01 / D9 recovery and case plans — NOT RUN
+### D5 and X01 / D9 case plans — D5 BOUNDED PASS; X01 / D9 NOT RUN
 
-The matrix row groups D5 and X01 / D9 for sequence tracking only. Record and assess them as two separate cases: D5 is Organization→Company cardinality; X01 is the independently approved required Company→Organization FK and its referential actions. **Recommended order:** recover and verify the baseline first, then run D5 before X01/D9. This follows the Section 5 order and isolates the unresolved cardinality result before testing D9’s separate nullability/FK-action requirements; do not combine or cross-credit the outcomes.
+The matrix row groups D5 and X01 / D9 for sequence tracking only. Record and assess them as two separate cases: D5 is Organization→Company cardinality; X01 is the independently approved required Company→Organization FK and its referential actions. D5 has now achieved a bounded PASS on both recovered migrations 1–8 replay paths; see [V04.6 D5 baseline execution record](v04.6-d5-baseline-execution-record-2026-11-09.md). X01 / D9 remains NOT RUN and is the next case; do not combine or cross-credit the outcomes.
 
 #### Prior D5 evidence and baseline decision
 
@@ -79,9 +79,9 @@ For baseline recovery, use source commit `928260b25309163e26cb616a50e2107e9a42e5
 
 To satisfy the replay condition in Section 6, prepare two independent disposable databases from that same pinned source: one fresh replay of migrations 1–8 and one staged replay of migrations 1–7 followed by migration 8. Confirm eight successful migration records, zero rolled-back records, and up-to-date status in each; compare the relevant catalog definitions before testing. These reconstructed baselines are new evidence, not retroactive validation of either historical run. Use the loopback-only dynamic port, disposable storage, no named volume, and no repository `.env` required by Sections 2–4. Do not modify checked-in schema or migrations; no experiment-only DDL is needed for these cases.
 
-#### Case A — D5 zero-to-many cardinality
+#### Case A — D5 zero-to-many cardinality — BOUNDED PASS
 
-**Preconditions:** The recovered baseline above passes on both replay paths; the catalog inspection includes all Company unique indexes/constraints and predicates. Use isolated fixture IDs and a transaction that can be rolled back. D5 tests only database cardinality; do not test single-company-first provisioning/UI policy, membership, or authorization here.
+**Execution result:** BOUNDED PASS on both fresh and staged migrations 1–8 replay targets. The Organization-with-zero-Companies, two-Companies-under-one-Organization, nonexistent-parent FK rejection, no-organizationId-only-unique-index, and zero-residual-fixture rollback assertions passed. See the V04.6 D5 execution record for run identity and exact outputs. The original procedure below describes the accepted test scope; it is not a request to repeat the case.
 
 **Procedure and expected outcomes:** For each replay path, insert an Organization with no Company and confirm it remains valid with zero child rows. Then insert two distinct Companies referencing the same Organization and confirm both persist and the count is two. Inspect the Company unique/index catalog: there must be no permanent uniqueness on `organizationId` alone. The composite unique `(organizationId, id)` target key and ordinary `organizationId` index are allowed and expected in this baseline. Roll back and verify no fixture rows remain.
 
@@ -138,7 +138,7 @@ The isolated V04.4 execution recorded in `v04.4-execution-record-2026-11-07.md` 
 
 **Remaining NOT RUN / not established:**
 
-**Next NOT RUN case in Section 5 matrix order:** D5 and X01 / D9 — verify zero-to-many Organization→Company cardinality and remaining X01 behavior beyond selected evidence on the verified baseline. Then continue through X02–X05 in matrix order, including X02 parent-mutation/child-insert concurrency; use the approved same-transaction Core fallback only if a concrete ORM/provider mapping limitation is demonstrated. The earlier D5 run is recorded, but its exact migration baseline is unverified.
+**Next NOT RUN case in Section 5 matrix order:** X01 / D9 — verify the remaining required Company→Organization FK behavior on the recovered migrations 1–8 baseline. D5 cardinality has a bounded PASS on both replay paths (see the V04.6 D5 execution record); the older D5 run remains historical and baseline-unverified. After X01 / D9, continue through X02–X05 in matrix order, including X02 parent-mutation/child-insert concurrency; use the approved same-transaction Core fallback only if a concrete ORM/provider mapping limitation is demonstrated.
 
 - X01–X05 case-level tenant behavior beyond the selected V04.4 cases, including X02 parent-mutation/child-insert concurrency and approved same-transaction fallback/rollback cases only if a concrete ORM mapping limitation requires them. The separate V04.5.1 catalog audit validated all 19 FK definitions/actions; this is distinct from runtime behavior coverage.
 - D1/D3 complete lifecycle, suspension/restore on the same row, terminal/history combinations, and concurrent activation across organizations.
@@ -235,6 +235,11 @@ The owner completed the pinned-source extraction described in the isolated-envir
 
 This closes the **source extraction/checksum preparation** prerequisite only. It does not satisfy either database replay path, Prisma validation/generation, migration status, catalog comparison, D5 cardinality, X01 FK/action behavior, or any remaining V04 acceptance criterion. No Docker, PostgreSQL, SQL, Prisma, migration, test, or build operation was performed in this preparation.
 
-**Current case state:** D5 and X01/D9 remain **NOT RUN** on the recovered baseline. Next required work is a separately authorized, isolated fresh replay and staged 1–7 then 8 replay, with exact migration history/status and catalog comparison. Only after both replay paths pass may D5 and X01/D9 case execution be separately authorized. Do not use current main's nine-migration history as a substitute for this pinned eight-migration case baseline.
+**Current case state:** D5 is **BOUNDED PASS** on the recovered migrations 1–8 fresh and staged replay targets, documented in [V04.6 D5 baseline execution record](v04.6-d5-baseline-execution-record-2026-11-09.md). X01 / D9 remains **NOT RUN** and requires its own separately authorized runtime execution; do not reuse D5 results as X01 evidence. The current main nine-migration history is not a substitute for this pinned eight-migration case baseline.
 
 V04 remains **BLOCKED**. This update changes no policy, schema, migration, or gate state.
+
+
+### V04.6 D5 execution status — 2026-11-09
+
+D5 Organization→Company zero-to-many cardinality completed with a bounded PASS on both recovered migrations 1–8 replay targets (fresh and staged). The exact assertions, index definitions, rollback checks, and run identity are recorded in [V04.6 D5 baseline execution record](v04.6-d5-baseline-execution-record-2026-11-09.md). X01 / D9 remains a separate NOT RUN case and requires separate authorization. V04 remains BLOCKED.
