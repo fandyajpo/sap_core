@@ -63,7 +63,7 @@ async function resolveTarget(
        FROM "core"."organization_membership"
        WHERE "id" = $1 AND "organizationId" = $2::uuid
          AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-       LIMIT 1`,
+       LIMIT 1 FOR SHARE FOR SHARE`,
       [parentId, organizationId],
     );
     const target = rows[0];
@@ -85,7 +85,7 @@ async function resolveTarget(
         AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
        WHERE cm."id" = $1 AND cm."organizationId" = $2::uuid
          AND cm."status" = 'ACTIVE'::"core"."ScopedAccessStatus"
-       LIMIT 1`,
+       LIMIT 1 FOR SHARE OF cm, om`,
       [parentId, organizationId],
     );
     const target = rows[0];
@@ -115,7 +115,7 @@ async function resolveTarget(
       AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
      WHERE pa."id" = $1 AND pa."organizationId" = $2::uuid
        AND pa."status" = 'ACTIVE'::"core"."ScopedAccessStatus"
-     LIMIT 1`,
+     LIMIT 1 FOR SHARE OF pa, cm, om`,
     [parentId, organizationId],
   );
   const target = rows[0];
@@ -275,7 +275,7 @@ async function authorize(
     `SELECT "id" FROM "core"."organization_membership"
      WHERE "userId" = $1 AND "organizationId" = $2::uuid
        AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-     LIMIT 1`,
+     LIMIT 1 FOR SHARE`,
     [sessionUserId, organizationId],
   );
   if (!actorMemberships[0]) return false;
