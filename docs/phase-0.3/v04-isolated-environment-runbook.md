@@ -484,3 +484,19 @@ The separately authorized X02 / D10 case completed with **BOUNDED PASS** on both
 The case verified the exact composite FK core.plant(organizationId, companyId) → core.company(organizationId, id), the matching composite target key, and RESTRICT for both delete and update. Same-Organization Company/Plant insertion succeeded; a Plant pairing an Organization with a Company belonging to another Organization was rejected by the expected FK with SQLSTATE 23503. Updating either referenced Company key component and deleting the referenced Company were rejected. Both concurrency orders were exercised on each target: a parent-key update that rolled back allowed the waiting child insert; a child insert that committed caused the waiting parent-key update to fail with SQLSTATE 23503. Both targets passed final invariant checks and an explicit zero-residual-fixture query after cleanup.
 
 The result is bounded to the exact pinned migrations 1–8 recovery baseline and the two recorded disposable targets. It does not establish application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or complete V04 acceptance. No schema, migration, policy, or gate state changed. **Case register:** D5 = BOUNDED PASS; X01/D9 = BOUNDED PASS; X02/D10 = BOUNDED PASS; X03–X05 remain NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**.
+
+
+## V04.6 X03 / D11 OrganizationMembership verification — 2026-11-09
+
+X03 / D11 completed as a bounded database-level case on the two recovered migrations 1–8 disposable targets:
+
+- Fresh: `sap-core-v04-fresh-816b14f5`, database `v04_fresh`.
+- Staged: `sap-core-v04-staged-816b14f5`, database `v04_staged`.
+
+Both targets passed read-only catalog checks for the direct User and Organization FKs, non-null columns and expected TEXT/UUID scalar types. Both constraints were validated and used `ON DELETE RESTRICT ON UPDATE RESTRICT`. The current-slot unique index was confirmed as unique on `userId` with the `ACTIVE`/`SUSPENDED` predicate.
+
+Transactional behavior passed on both targets: duplicate ACTIVE and SUSPENDED current slots were rejected by the expected partial unique index; missing User and Organization parents were rejected by their respective named FKs; update/delete of referenced User and Organization keys were rejected; one ACTIVE episode and separate REVOKED/ENDED historical episodes coexisted; all assertions passed; and post-rollback residual counts for User, Organization, and OrganizationMembership were zero.
+
+The exact evidence and limitations are recorded in [v04.6 X03/D11 execution record](v04.6-x03-d11-referential-integrity-execution-record-2026-11-09.md). No concurrency schedule was run. This result does not establish complete D1/D3 lifecycle behavior, authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
+
+**Latest case register:** D5 = BOUNDED PASS; X01/D9 = BOUNDED PASS; X02/D10 = BOUNDED PASS; X03/D11 = BOUNDED PASS; X04/D12 and X05/D13 = NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No schema, migration, policy, or gate state changed.
