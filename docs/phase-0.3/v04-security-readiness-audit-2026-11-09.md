@@ -73,8 +73,9 @@ The repository and disposable CI boundary are verified. The owner-approved permi
 **Conclusion:** Repository implementation and disposable-CI acceptance are PASS. V04 production acceptance remains BLOCKED by the two owner-controlled gates above.
 
 
+
 ## Session revocation implementation evidence — PR #62
 
-The owner-approved implementation is merged at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; [CI run #42594868627](https://github.com/fandyajpo/sap_core/actions/runs/42594868627) is not the relevant run. The verified run is [#42594868685](https://github.com/fandyajpo/sap_core/actions/runs/42594868685). [Correction: the run attached to PR #62 is #42594868685.] It passed all eight jobs. The merge commit tree matches the PR head tree. The session lock revalidates the exact Better Auth session ID/user ID and DB expiry, then holds `FOR SHARE` before tenant GUCs and protected authorization/work. This covers Organization member reads, Company/Plant reads, custom-role operations and role-assignment GET/POST.
+The owner-approved implementation is merged at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; [CI run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs. The merge commit tree matches the PR head tree. The session lock revalidates the exact Better Auth session ID/user ID and database expiry, then holds `FOR SHARE` before tenant GUCs and protected authorization/work. This covers Organization member reads, Company/Plant reads, custom-role operations and role-assignment GET/POST.
 
 Acceptance remains incomplete: real HTTP sign-out race interleavings, injected fail-closed database errors, and explicit session-lock pool-reuse isolation are pending. V04 remains BLOCKED; hosted runtime-role provisioning, grants, deployment secrets, hosted migration and production smoke test remain NOT VERIFIED. No hosted database was accessed or modified for this reconciliation.
