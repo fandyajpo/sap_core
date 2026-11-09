@@ -39,16 +39,6 @@ export interface RoleAssignmentRecord {
   revokedAt: Date | null;
 }
 
-export interface BreakGlassAccessAuditRecord {
-  id: string;
-  actorUserId: string;
-  roleAssignmentId: string;
-  scope: AssignableRoleScope;
-  scopeParentId: string;
-  reason: string;
-  occurredAt: Date;
-}
-
 export type RoleAssignmentGrantInput = {
   scope: AssignableRoleScope;
   parentId: string;
@@ -62,33 +52,26 @@ export interface RoleAssignmentGrantAuthorization {
   parentId: string;
   roleDefinitionId: string;
   actorUserId: string;
-  breakGlass: boolean;
-  reason: string | null;
 }
 
-export interface BreakGlassUseRequest {
-  scope: AssignableRoleScope;
-  scopeParentId: string;
-  roleAssignmentId: string;
+export interface RoleAssignmentListAuthorization {
   actorUserId: string;
-  reason: string;
-}
-
-export interface BreakGlassUseAuthorization extends BreakGlassUseRequest {
-  roleDefinitionId: string;
-}
-
-/** Implementations must bind the actor to a verified session and apply the caller's approved policy. */
-export interface RoleAssignmentAuthorization {
-  authorizeGrant(input: RoleAssignmentGrantAuthorization): Promise<boolean>;
-  authorizeBreakGlassUse(input: BreakGlassUseAuthorization): Promise<boolean>;
-}
-
-export interface EffectiveRoleAssignmentInput {
   userId: string;
   scope: AssignableRoleScope;
   parentId: string;
 }
+
+/**
+ * Production adapters must derive and verify actorUserId from the current
+ * authenticated session, then perform every authorization read through the
+ * supplied transaction session. The target userId is not the acting principal.
+ */
+export interface RoleAssignmentAuthorization {
+  authorizeGrant(input: RoleAssignmentGrantAuthorization, session: ScopedAccessSession): Promise<boolean>;
+  authorizeList(input: RoleAssignmentListAuthorization, session: ScopedAccessSession): Promise<boolean>;
+}
+
+export type EffectiveRoleAssignmentInput = RoleAssignmentListAuthorization;
 
 interface RoleDefinitionRow {
   id: string;
@@ -102,14 +85,7 @@ interface TypedParentRow {
   organizationId: string;
 }
 
-interface RoleAssignmentRow {
-  id: string;
-  roleDefinitionId: string;
-}
-
 type RoleAssignmentRecordRow = RoleAssignmentRecord;
-
-type BreakGlassAuditRow = BreakGlassAccessAuditRecord;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -147,13 +123,6 @@ function requireAssignableScope(value: string): asserts value is AssignableRoleS
   if (value !== "ORGANIZATION" && value !== "COMPANY" && value !== "PLANT") {
     throw new RoleAssignmentError("SCOPE_NOT_ASSIGNABLE", "Role Assignments require a typed tenant scope.");
   }
-}
-
-function requireReason(value: string, label: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new RoleAssignmentError("INVALID_INPUT", `${label} is required.`);
-  }
-  return value.trim();
 }
 
 async function requireHumanActor(session: ScopedAccessSession, actorUserId: string): Promise<void> {
@@ -296,72 +265,6 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput): string {
       AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE`;
 }
 
-function breakGlassUseQuery(scope: AssignableRoleScope): string {
-  const mapping = assignmentTables[scope];
-  const assignmentSelect = `
-    ra."id",
-    ra."roleDefinitionId",
-    ra.${mapping.parentColumn} AS "parentId"`;
-
-  if (scope === "ORGANIZATION") {
-    return `SELECT ${assignmentSelect}
-      FROM ${mapping.table} ra
-      JOIN "core"."organization_membership" om
-        ON om."id" = ra."organizationMembershipId"
-      JOIN "core"."role_definition" rd
-        ON rd."id" = ra."roleDefinitionId"
-       AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
-         OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
-           AND rd."ownerOrganizationId" = om."organizationId"))
-      WHERE ra."id" = $1 AND om."id" = $2
-        AND om."status" = 'ACTIVE' AND ra."revoked_at" IS NULL
-        AND ra."is_break_glass" = TRUE
-      FOR SHARE OF ra, om, rd`;
-  }
-
-  if (scope === "COMPANY") {
-    return `SELECT ${assignmentSelect}
-      FROM ${mapping.table} ra
-      JOIN "core"."company_membership" cm
-        ON cm."id" = ra."companyMembershipId"
-      JOIN "core"."organization_membership" om
-        ON om."id" = cm."organizationMembershipId"
-       AND om."userId" = cm."userId"
-       AND om."organizationId" = cm."organizationId"
-      JOIN "core"."role_definition" rd
-        ON rd."id" = ra."roleDefinitionId"
-       AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
-         OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
-           AND rd."ownerOrganizationId" = cm."organizationId"))
-      WHERE ra."id" = $1 AND cm."id" = $2
-        AND cm."status" = 'ACTIVE' AND om."status" = 'ACTIVE'
-        AND ra."revoked_at" IS NULL AND ra."is_break_glass" = TRUE
-      FOR SHARE OF ra, cm, om, rd`;
-  }
-
-  return `SELECT ${assignmentSelect}
-    FROM ${mapping.table} ra
-    JOIN "core"."plant_assignment" pa
-      ON pa."id" = ra."plantAssignmentId"
-    JOIN "core"."company_membership" cm
-      ON cm."id" = pa."companyMembershipId"
-     AND cm."userId" = pa."userId"
-     AND cm."organizationId" = pa."organizationId"
-     AND cm."companyId" = pa."companyId"
-    JOIN "core"."organization_membership" om
-      ON om."id" = cm."organizationMembershipId"
-     AND om."userId" = cm."userId"
-     AND om."organizationId" = cm."organizationId"
-    JOIN "core"."role_definition" rd
-      ON rd."id" = ra."roleDefinitionId"
-     AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
-       OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
-         AND rd."ownerOrganizationId" = pa."organizationId"))
-    WHERE ra."id" = $1 AND pa."id" = $2
-      AND pa."status" = 'ACTIVE' AND cm."status" = 'ACTIVE' AND om."status" = 'ACTIVE'
-      AND ra."revoked_at" IS NULL AND ra."is_break_glass" = TRUE
-    FOR SHARE OF ra, pa, cm, om, rd`;
-}
 
 export function createRoleAssignmentService(
   database: ScopedAccessDatabase,
@@ -369,9 +272,9 @@ export function createRoleAssignmentService(
 ) {
   if (
     typeof authorization?.authorizeGrant !== "function" ||
-    typeof authorization?.authorizeBreakGlassUse !== "function"
+    typeof authorization?.authorizeList !== "function"
   ) {
-    throw new Error("Role Assignment and break-glass authorization policies are required.");
+    throw new Error("Transaction-bound Role Assignment grant and list authorization policies are required.");
   }
 
   return {
@@ -380,7 +283,12 @@ export function createRoleAssignmentService(
       requireUuid(input.parentId, "Role Assignment parent ID");
       requireUuid(input.roleDefinitionId, "Role Definition ID");
       requireUserId(input.actorUserId, "Grant actor user ID");
-      const reason = input.breakGlass ? requireReason(input.breakGlass.reason, "Break-glass grant reason") : null;
+      if (input.breakGlass !== undefined) {
+        throw new RoleAssignmentError(
+          "BREAK_GLASS_ACCESS_DENIED",
+          "Break-glass role assignments are disabled by the approved V04 tenant policy.",
+        );
+      }
 
       return database.transaction(async (session) => {
         await requireHumanActor(session, input.actorUserId);
@@ -405,10 +313,8 @@ export function createRoleAssignmentService(
           parentId: input.parentId,
           roleDefinitionId: input.roleDefinitionId,
           actorUserId: input.actorUserId,
-          breakGlass: reason !== null,
-          reason,
         };
-        if (!(await authorization.authorizeGrant(authorizationInput))) {
+        if (!(await authorization.authorizeGrant(authorizationInput, session))) {
           throw new RoleAssignmentError("AUTHORIZATION_DENIED", "The Role Assignment grant was not authorized.");
         }
 
@@ -431,8 +337,8 @@ export function createRoleAssignmentService(
             input.roleDefinitionId,
             input.scope,
             input.actorUserId,
-            reason !== null,
-            reason,
+            false,
+            null,
           ],
         );
         return rows[0];
@@ -441,59 +347,25 @@ export function createRoleAssignmentService(
 
     async listEffectiveRoleAssignments(input: EffectiveRoleAssignmentInput): Promise<RoleAssignmentRecord[]> {
       requireAssignableScope(input.scope);
-      requireUserId(input.userId, "User ID");
+      requireUserId(input.actorUserId, "Role Assignment actor user ID");
+      requireUserId(input.userId, "Target user ID");
       requireUuid(input.parentId, "Role Assignment parent ID");
-      const rows = await database.query<RoleAssignmentRecordRow>(
-        effectiveAssignmentQuery(input),
-        [input.userId, input.parentId],
-      );
-      return rows.map((row) => ({ ...row, scope: input.scope, parentId: input.parentId }));
-    },
-
-    async recordBreakGlassUse(input: BreakGlassUseRequest): Promise<BreakGlassAccessAuditRecord> {
-      requireAssignableScope(input.scope);
-      requireUserId(input.actorUserId, "Break-glass actor user ID");
-      requireUuid(input.scopeParentId, "Break-glass scope parent ID");
-      requireUuid(input.roleAssignmentId, "Role Assignment ID");
-      const reason = requireReason(input.reason, "Break-glass access reason");
 
       return database.transaction(async (session) => {
         await requireHumanActor(session, input.actorUserId);
-        const rows = await session.query<RoleAssignmentRow>(
-          breakGlassUseQuery(input.scope),
-          [input.roleAssignmentId, input.scopeParentId],
-        );
-        const assignment = rows[0];
-        if (!assignment) {
-          throw new RoleAssignmentError(
-            "ROLE_ASSIGNMENT_NOT_ACTIVE",
-            "An active break-glass Role Assignment at the exact requested scope is required.",
-          );
+        if (!(await authorization.authorizeList({
+          actorUserId: input.actorUserId,
+          userId: input.userId,
+          scope: input.scope,
+          parentId: input.parentId,
+        }, session))) {
+          throw new RoleAssignmentError("AUTHORIZATION_DENIED", "The effective Role Assignment read was not authorized.");
         }
-
-        const authorizationInput: BreakGlassUseAuthorization = {
-          ...input,
-          roleDefinitionId: assignment.roleDefinitionId,
-          reason,
-        };
-        if (!(await authorization.authorizeBreakGlassUse(authorizationInput))) {
-          throw new RoleAssignmentError(
-            "BREAK_GLASS_ACCESS_DENIED",
-            "The break-glass access request was not authorized.",
-          );
-        }
-
-        const auditRows = await session.query<BreakGlassAuditRow>(
-          `INSERT INTO "core"."break_glass_access_audit"
-             ("id", "actor_user_id", "role_assignment_id", "scope", "scope_parent_id", "reason", "occurred_at")
-           VALUES ($1, $2, $3, $4::"core"."RoleScope", $5, $6, NOW())
-           RETURNING
-             "id", "actor_user_id" AS "actorUserId",
-             "role_assignment_id" AS "roleAssignmentId", "scope"::text AS "scope",
-             "scope_parent_id" AS "scopeParentId", "reason", "occurred_at" AS "occurredAt"`,
-          [randomUUID(), input.actorUserId, input.roleAssignmentId, input.scope, input.scopeParentId, reason],
+        const rows = await session.query<RoleAssignmentRecordRow>(
+          effectiveAssignmentQuery(input),
+          [input.userId, input.parentId],
         );
-        return auditRows[0];
+        return rows.map((row) => ({ ...row, scope: input.scope, parentId: input.parentId }));
       });
     },
   };
