@@ -85,12 +85,12 @@ The following code paths were inspected on `main`:
 - Tenant target resolution now holds shared locks on the active Organization membership, Company row, and Plant plus parent Company rows while the protected query runs.
 - Permission evaluation holds shared locks on the effective persisted role assignments and role/permission rows for the target scope until the protected operation commits.
 - Custom role create/revise authorization holds shared locks on the acting user's active Organization membership and the persisted delegation grants through commit.
-- `scopedAccessDatabase` is also exported as an unbound adapter from `src/lib/scoped-access.ts`. No use of this export was established in the limited inspection. It must remain unused by tenant request paths; complete call-site inventory and static enforcement are still required before declaring the audit complete.
+- The unbound `scopedAccessDatabase` export was removed from `src/lib/scoped-access.ts` in this change. The current production adapters use `createSessionBoundScopedAccessDatabase`; the complete call-site inventory and static enforcement remain required before declaring the audit complete.
 
 This document is not a claim that every application call-site or every adversarial HTTP path has been exhaustively audited. The unbound `scopedAccessDatabase` export was removed from `src/lib/scoped-access.ts` in this change; production code must use `createSessionBoundScopedAccessDatabase` and still apply operation-specific authorization. Complete the remaining checks before production traffic:
 1. Inventory every Prisma client access, raw SQL call, service constructor, server action, route handler, server component, and background entry point.
 2. Prove each tenant-facing path is protected by the verified-session and permission boundary; keep all unbound adapters out of production call-sites.
-3. Add HTTP-level negative tests for unauthenticated requests, spoofed actor IDs, cross-Organization IDs, sibling Company/Plant IDs, inactive membership, revoked/expired sessions, explicit DENY, and unauthorized role delegation.
+3. HTTP-level coverage now includes unauthenticated requests, spoofed actor/recipient IDs, cross-Organization identifiers, malformed input, revoked-session rejection, and suspended membership rejection for member and role-assignment readers. Still add HTTP-level negative tests for sibling Company/Plant identifiers, explicit DENY, and unauthorized role delegation; the lower-level session-row tests cover expired and mismatched-user sessions.
 4. Add concurrency tests for session revocation and membership/assignment changes racing protected operations.
 5. Run the adversarial suites against a fresh disposable PostgreSQL database. Keep RLS tests, but distinguish what they prove locally from what Prisma Postgres enforces.
 6. Review production logs, error handling, and client payloads to ensure secrets, SQL, and internal authorization details are not disclosed.
