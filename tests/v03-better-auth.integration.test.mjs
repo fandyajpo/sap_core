@@ -192,6 +192,10 @@ after(async () => {
         );
       }
 
+      await pool.query(
+        `UPDATE "core"."permission_definition" SET "is_delegable" = FALSE WHERE "code" = 'organization.read'`,
+      );
+
       const cleanupQueries = [
         `DELETE FROM "core"."session"
          WHERE "userId" IN (
@@ -583,6 +587,76 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
         { headers: { cookie: secondCookie } },
       );
       assert.equal(siblingPlantDenied.status, 403, "Plant assignment does not extend to a sibling Plant");
+
+      const ownerRolesResponse = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/roles",
+        { headers: { cookie } },
+      );
+      assert.equal(ownerRolesResponse.status, 200);
+      const ownerRoles = await ownerRolesResponse.json();
+      assert.ok(ownerRoles.roles.some((role) => role.code === "ORG_OWNER"));
+
+      const memberRolesResponse = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/roles",
+        { headers: { cookie: secondCookie } },
+      );
+      assert.equal(memberRolesResponse.status, 403, "Company/Plant membership does not grant Organization role visibility");
+
+      // Simulate an owner-approved delegable permission in this disposable fixture.
+      await pool.query(
+        `UPDATE "core"."permission_definition" SET "is_delegable" = TRUE WHERE "code" = 'organization.read'`,
+      );
+
+      const spoofedRoleCreate = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/roles",
+        {
+          method: "POST",
+          headers: { cookie: secondCookie, "content-type": "application/json" },
+          body: JSON.stringify({
+            actorUserId: userId,
+            code: "spoofed-" + randomUUID(),
+            scope: "ORGANIZATION",
+            permissions: ["organization.read"],
+          }),
+        },
+      );
+      assert.equal(spoofedRoleCreate.status, 403, "the API must ignore a browser-supplied actorUserId and use the verified session");
+
+      const customRoleCode = "api-role-" + randomUUID();
+      const customRoleCreate = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/roles",
+        {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({
+            actorUserId: secondUserId,
+            code: customRoleCode,
+            scope: "ORGANIZATION",
+            permissions: ["organization.read"],
+          }),
+        },
+      );
+      assert.equal(customRoleCreate.status, 201, await customRoleCreate.text());
+      const createdCustomRole = await customRoleCreate.json();
+      assert.equal(createdCustomRole.role.ownerOrganizationId, organizationId);
+      assert.equal(createdCustomRole.role.version, 1);
+
+      const customRoleRevision = await fetch(
+        authURL + "/api/organizations/" + organizationId + "/roles/" + createdCustomRole.role.id + "/revisions",
+        {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ code: customRoleCode + "-v2" }),
+        },
+      );
+      assert.equal(customRoleRevision.status, 200, await customRoleRevision.text());
+      const revisedCustomRole = await customRoleRevision.json();
+      assert.equal(revisedCustomRole.role.version, 2);
+      assert.equal(revisedCustomRole.role.code, customRoleCode + "-v2");
+
+      await pool.query(
+        `UPDATE "core"."permission_definition" SET "is_delegable" = FALSE WHERE "code" = 'organization.read'`,
+      );
 
       const firstProfileResponse = await fetch(`${authURL}/account`, {
         headers: { cookie },
