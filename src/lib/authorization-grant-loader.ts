@@ -1,7 +1,6 @@
 import "server-only";
 
-import { getCurrentSession } from "@/lib/auth-session";
-import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import {
   authorizationPermissions,
   type AuthorizationPermission,
@@ -44,13 +43,10 @@ const builtInRoles = new Set<string>([
 ]);
 
 export async function loadAuthorizationGrants(
+  tx: Prisma.TransactionClient,
   context: TenantTargetContext,
 ): Promise<LoadedAuthorizationGrants> {
-  const session = await getCurrentSession();
-  const actorUserId = session?.user?.id;
-  if (!actorUserId || actorUserId !== context.userId) {
-    throw new AuthorizationGrantLoadError("The current session does not match the resolved tenant actor.");
-  }
+  const actorUserId = context.userId;
   if (context.scope !== "ORGANIZATION" && context.scope !== "COMPANY" && context.scope !== "PLANT") {
     throw new AuthorizationGrantLoadError("The tenant target scope is invalid.");
   }
@@ -61,7 +57,7 @@ export async function loadAuthorizationGrants(
     throw new AuthorizationGrantLoadError("A Plant target requires a Plant identifier.");
   }
 
-  const rows = await prisma.$queryRaw<PersistedGrantRow[]>`
+  const rows = await tx.$queryRaw<PersistedGrantRow[]>`
     SELECT ra."id"::text AS "assignmentId", rd."id"::text AS "roleDefinitionId",
       rd."code" AS "roleCode", rd."kind"::text AS "roleKind",
       rd."scope"::text AS "roleScope", om."organizationId"::text AS "scopeId",
