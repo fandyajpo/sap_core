@@ -159,7 +159,7 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
   });
   assert.equal(anonymous.status, 401);
 
-  // The per-actor / tenant / event budget is serialized in the DB transaction.
+  // The per-actor and per-tenant event budgets are serialized in the DB transaction.
   const burst = await Promise.all(Array.from({ length: 12 }, () =>
     denyRequest(admin, "POST", "", input, owner.organizationId)
   ));
