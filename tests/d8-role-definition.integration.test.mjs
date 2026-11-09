@@ -53,6 +53,11 @@ let savepointCounter = 0;
 let transactionQueue = Promise.resolve();
 let allowCreate = true;
 let allowRevise = true;
+let delegablePermissions = [
+  "organization.read", "organization.update", "organization.members.read", "organization.members.manage",
+  "company.read", "company.manage", "company.members.manage", "plant.read", "plant.manage",
+  "plant.assignments.manage", "roles.read", "roles.create", "roles.revise", "roles.assign", "audit.read",
+];
 const authorizationCalls = [];
 
 function createSession(databaseClient) {
@@ -97,11 +102,7 @@ const database = {
 
 const roleDefinitions = createRoleDefinitionService(database, {
   async getDelegablePermissions() {
-    return [
-      "organization.read", "organization.update", "organization.members.read", "organization.members.manage",
-      "company.read", "company.manage", "company.members.manage", "plant.read", "plant.manage",
-      "plant.assignments.manage", "roles.read", "roles.create", "roles.revise", "roles.assign", "audit.read",
-    ];
+    return delegablePermissions;
   },
   async authorizeCreate(input) {
     authorizationCalls.push({ operation: "CREATE", ...input });
@@ -405,6 +406,23 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     allowCreate = true;
     assert.equal(await auditCount(), before, "a denied create must not persist an audit event");
 
+    delegablePermissions = ["organization.read"];
+    await assertDefinitionError(
+      createCustomRole({
+        actorUserId: fixture.actorId,
+        organizationId: fixture.organizationAId,
+        code: "d8.out-of-delegation",
+        scope: "ORGANIZATION",
+        permissions: ["organization.update"],
+      }),
+      "AUTHORIZATION_DENIED",
+    );
+    delegablePermissions = [
+      "organization.read", "organization.update", "organization.members.read", "organization.members.manage",
+      "company.read", "company.manage", "company.members.manage", "plant.read", "plant.manage",
+      "plant.assignments.manage", "roles.read", "roles.create", "roles.revise", "roles.assign", "audit.read",
+    ];
+
     await assertDefinitionError(
       createCustomRole({
         actorUserId: fixture.actorId,
@@ -435,6 +453,14 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     assert.equal(customRoleA.ownerOrganizationId, fixture.organizationAId);
     assert.equal(customRoleA.scope, "ORGANIZATION");
     assert.ok(customRoleA.roleFamilyId);
+    assert.ok(customRoleA.permissionsLockedAt instanceof Date);
+    const { rows: snapshotRows } = await client.query(
+      `SELECT pd."code" FROM "core"."role_permission_grant" g
+        JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
+       WHERE g."role_definition_id" = $1 AND g."effect" = 'ALLOW'`,
+      [customRoleA.id],
+    );
+    assert.deepEqual(snapshotRows, [{ code: "organization.read" }]);
     const createCall = authorizationCalls.find((call) => call.operation === "CREATE");
     assert.equal(createCall.organizationId, fixture.organizationAId);
     assert.equal(createCall.actorUserId, fixture.actorId);
@@ -604,6 +630,14 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     assert.equal(revision.version, 2);
     assert.equal(revision.code, "d8.organization-reader-v2");
     assert.equal(revision.scope, customRoleA.scope);
+    assert.ok(revision.permissionsLockedAt instanceof Date);
+    const { rows: revisionSnapshot } = await client.query(
+      `SELECT pd."code" FROM "core"."role_permission_grant" g
+        JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
+       WHERE g."role_definition_id" = $1 AND g."effect" = 'ALLOW'`,
+      [revision.id],
+    );
+    assert.deepEqual(revisionSnapshot, [{ code: "organization.read" }]);
     const reviseCall = authorizationCalls.find((call) => call.operation === "REVISE");
     assert.equal(reviseCall.organizationId, fixture.organizationAId);
     assert.equal(reviseCall.currentVersion, 1);
