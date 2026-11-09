@@ -413,9 +413,60 @@ export async function listTenantDenyPolicyHistory(organizationId: string) {
     throw new TenantDenyPolicyError("INVALID_INPUT", "Organization ID must be a UUID.");
   }
   const session = await getCurrentSession();
+  let deniedRead = false;
 
-  return prisma.$transaction(async (tx) => {
-    const context = await resolveOwnerContext(tx, session, organizationId);
+  const result = await prisma.$transaction(async (tx) => {
+    let context: Awaited<ReturnType<typeof resolveTenantTargetContext>>;
+    try {
+      context = await resolveOwnerContext(tx, session, organizationId);
+    } catch (error) {
+      // A verified, active Organization member who is not an ORG_OWNER is
+      // allowed to produce one attributable denial event. Persist it in this
+      // transaction before returning the 403, so it cannot be lost when the
+      // failed authorization transaction rolls back.
+      if (
+        !(error instanceof TenantDenyPolicyError) ||
+        error.code !== "FORBIDDEN" ||
+        !session?.session?.id ||
+        !session.user?.id
+      ) {
+        throw error;
+      }
+
+      // resolveOwnerContext has already locked and verified the session,
+      // resolved the active membership, and installed the tenant GUCs.
+      const eventType = "POLICY_READ_DENIED" as const;
+      const lockKey = `${organizationId}:${eventType}`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+
+      const recent = await tx.$queryRaw<Array<{ actorCount: number; organizationCount: number }>>`
+        SELECT
+          COUNT(*) FILTER (WHERE "actor_user_id" = ${session.user.id})::int AS "actorCount",
+          COUNT(*)::int AS "organizationCount"
+        FROM "core"."tenant_deny_audit_event"
+        WHERE "organization_id" = ${organizationId}::uuid
+          AND "event_type" = 'POLICY_READ_DENIED'::"core"."DenyAuditEventType"
+          AND "occurred_at" >= clock_timestamp() - interval '5 minutes'
+      `;
+      if (
+        (recent[0]?.actorCount ?? 0) < deniedAuditActorLimit &&
+        (recent[0]?.organizationCount ?? 0) < deniedAuditOrganizationLimit
+      ) {
+        await tx.$executeRaw`
+          INSERT INTO "core"."tenant_deny_audit_event"
+            ("id", "organization_id", "actor_user_id", "event_type", "outcome",
+             "reason", "reason_code", "occurred_at")
+          VALUES
+            (gen_random_uuid(), ${organizationId}::uuid, ${session.user.id},
+             'POLICY_READ_DENIED'::"core"."DenyAuditEventType",
+             'DENIED'::"core"."DenyAuditOutcome",
+             'DENY policy history read was not authorized.',
+             'READER_NOT_AUTHORIZED', clock_timestamp())
+        `;
+      }
+      deniedRead = true;
+      return null;
+    }
 
     const policies = await tx.$queryRaw<Array<Record<string, unknown>>>`
       SELECT p."id"::text AS "id", p."target_membership_id"::text AS "targetMembershipId",
@@ -450,7 +501,11 @@ export async function listTenantDenyPolicyHistory(organizationId: string) {
       ORDER BY "occurred_at" DESC, "id" DESC
     `;
 
-
     return { policies, events };
   });
+
+  if (deniedRead || !result) {
+    throw new TenantDenyPolicyError("FORBIDDEN", "Only an active ORG_OWNER may manage or read DENY policies.");
+  }
+  return result;
 }
