@@ -151,7 +151,7 @@ function createAuthorization(sessionUserId: string) {
            AND "organizationId" = $2::uuid
            AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
          LIMIT 1
-         FOR SHARE
+         FOR SHARE`,
         [sessionUserId, input.organizationId],
       );
       if (!memberships[0]) {
