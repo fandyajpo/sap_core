@@ -39,7 +39,7 @@ RLS is enabled for:
 - Role definitions/grants: `core.role_definition`, `core.role_permission_grant`.
 - Audit: `core.role_definition_audit`, `core.break_glass_access_audit`.
 
-The permission catalog now carries an owner-controlled `is_delegable` flag. It defaults to `false` for every existing permission and is read-only to the runtime role. Custom-role create/revise authorization uses this catalog flag in addition to the creator's persisted Organization role grants; a permission is delegable only when it is both effectively ALLOW and explicitly marked delegable. DENY removes it from the delegable set. Until an owner-approved permission classification is applied through a forward migration, custom-role creation/revision fails closed.
+The immutable permission catalog is paired with an owner-controlled `core.permission_delegation_policy` table. It is seeded with `is_delegable = false` for every permission and is read-only to the runtime role. Custom-role create/revise authorization reads this separate policy table in addition to the creator's persisted Organization role grants; a permission is delegable only when it is both effectively ALLOW and explicitly marked delegable with approval metadata. DENY removes it from the delegable set. Until an owner-approved permission classification is applied through a forward migration, custom-role creation/revision fails closed.
 
 The following remain outside the initial tenant RLS scope:
 
