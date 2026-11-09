@@ -41,6 +41,8 @@ export interface AuthorizationRoleGrant {
   scopeId: string;
   /** Present only when loaded from a trusted, server-side role-definition source. */
   customPermissions?: readonly AuthorizationPermission[];
+  roleKind?: "SYSTEM" | "ORGANIZATION_CUSTOM";
+  ownerOrganizationId?: string | null;
   /** Break-glass grants are excluded by the v0.1 policy. */
   isBreakGlass?: boolean;
 }
@@ -111,10 +113,19 @@ function targetId(target: AuthorizationTarget): string | null {
   return target.plantId ?? null;
 }
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function isValidTarget(target: AuthorizationTarget): boolean {
-  if (!target.organizationId) return false;
-  if (target.scope === "COMPANY") return Boolean(target.companyId);
-  if (target.scope === "PLANT") return Boolean(target.companyId && target.plantId);
+  if (!uuidPattern.test(target.organizationId)) return false;
+  if (target.scope === "COMPANY") return Boolean(target.companyId && uuidPattern.test(target.companyId));
+  if (target.scope === "PLANT") return Boolean(target.companyId && uuidPattern.test(target.companyId) && target.plantId && uuidPattern.test(target.plantId));
+  return true;
+}
+
+function permissionFitsTarget(permission: AuthorizationPermission, target: AuthorizationTarget): boolean {
+  if (organizationPermissions.has(permission)) return target.scope === "ORGANIZATION";
+  if (companyPermissions.has(permission)) return target.scope === "COMPANY";
+  if (plantPermissions.has(permission)) return target.scope === "COMPANY" || target.scope === "PLANT";
   return true;
 }
 
@@ -125,10 +136,18 @@ function grantApplies(
 ): boolean {
   if (grant.isBreakGlass) return false;
 
-  const rolePermissionsForGrant = (rolePermissions as Record<string, readonly AuthorizationPermission[]>)[grant.roleCode]
-    ?? grant.customPermissions
-    ?? [];
-  if (!rolePermissionsForGrant.includes(permission)) return false;
+  const builtInPermissions = (rolePermissions as Record<string, readonly AuthorizationPermission[]>)[grant.roleCode];
+  let rolePermissionsForGrant = builtInPermissions;
+  if (!builtInPermissions) {
+    if (
+      grant.roleKind !== "ORGANIZATION_CUSTOM"
+      || grant.scope !== "ORGANIZATION"
+      || grant.ownerOrganizationId !== target.organizationId
+      || !grant.customPermissions
+    ) return false;
+    rolePermissionsForGrant = grant.customPermissions;
+  }
+  if (!rolePermissionsForGrant.includes(permission) || !permissionFitsTarget(permission, target)) return false;
 
   if (grant.scope === target.scope && grant.scopeId === targetId(target)) {
     return true;
