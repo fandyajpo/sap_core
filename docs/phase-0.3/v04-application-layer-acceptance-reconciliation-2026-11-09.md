@@ -69,9 +69,11 @@ The hosted Prisma Postgres credential was previously observed with `rolsuper = t
 
 No hosted database connection or mutation was performed for PR #55–#59 or this reconciliation. Hosted runtime-role provisioning, grants, deployment secrets, hosted migration and production smoke testing remain **NOT VERIFIED** and require separate explicit authorization.
 
-### 5.2 Session revocation race
+### 5.2 Session revocation linearization
 
-Better Auth session lookup still happens before the protected tenant transaction. The time-of-check/time-of-use window for a session revocation racing with transaction start remains a separate design decision. The current implementation must not be described as making session lookup and the protected transaction atomic.
+The owner-approved transaction-bound session-row lock is implemented and merged in [PR #62](https://github.com/fandyajpo/sap_core/pull/62), merge `f8995b2f84a7e34f209e358d55a976a0e8a71be8`. The exact verified Better Auth session row is revalidated and locked with `FOR SHARE` before tenant GUCs and authorization queries; the lock is held through the protected transaction. CI run [#42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs.
+
+This is transaction-level serialization, not atomicity between the earlier cookie verification and the database transaction. If revocation wins before lock acquisition, the protected request denies; if the request obtains the lock first, the operation may complete before revocation. Remaining acceptance gaps are real Better Auth HTTP-cookie/sign-out request-first and revocation-first races with HTTP/database assertions, injected lock/query failure proving fail-closed behavior, and explicit pool-reuse isolation. The current request-first PostgreSQL test uses a bounded lock timeout followed by retry and is not a complete HTTP sign-out race.
 
 ### 5.3 Scope of implemented operations
 
