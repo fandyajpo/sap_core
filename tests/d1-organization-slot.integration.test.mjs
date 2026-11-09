@@ -62,6 +62,7 @@ async function assertSlotViolation(statement, values) {
   const client = await pool.connect();
   const savepoint = `d1_expected_failure_${randomUUID().replaceAll("-", "")}`;
   try {
+    await client.query("BEGIN");
     await client.query(`SAVEPOINT "${savepoint}"`);
     let caught;
     try {
@@ -71,6 +72,7 @@ async function assertSlotViolation(statement, values) {
     }
     await client.query(`ROLLBACK TO SAVEPOINT "${savepoint}"`);
     await client.query(`RELEASE SAVEPOINT "${savepoint}"`);
+    await client.query("ROLLBACK");
     assert.equal(caught?.code, "23505");
     assert.equal(caught?.constraint, "organization_membership_user_slot_key");
   } finally {
@@ -122,7 +124,7 @@ after(async () => {
       await pool.query(
         `DELETE FROM "core"."organization_membership"
          WHERE "id" = ANY($1::uuid[])`,
-        [...membershipIds, ...concurrentMembershipIds],
+        [[...membershipIds, ...concurrentMembershipIds]],
       );
       await pool.query(
         `DELETE FROM "core"."organization"
