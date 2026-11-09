@@ -636,8 +636,9 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
           }),
         },
       );
-      assert.equal(customRoleCreate.status, 201, await customRoleCreate.text());
-      const createdCustomRole = await customRoleCreate.json();
+      const customRoleCreateText = await customRoleCreate.text();
+      assert.equal(customRoleCreate.status, 201, customRoleCreateText);
+      const createdCustomRole = JSON.parse(customRoleCreateText);
       assert.equal(createdCustomRole.role.ownerOrganizationId, organizationId);
       assert.equal(createdCustomRole.role.version, 1);
 
@@ -649,8 +650,9 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
           body: JSON.stringify({ code: customRoleCode + "-v2" }),
         },
       );
-      assert.equal(customRoleRevision.status, 200, await customRoleRevision.text());
-      const revisedCustomRole = await customRoleRevision.json();
+      const customRoleRevisionText = await customRoleRevision.text();
+      assert.equal(customRoleRevision.status, 200, customRoleRevisionText);
+      const revisedCustomRole = JSON.parse(customRoleRevisionText);
       assert.equal(revisedCustomRole.role.version, 2);
       assert.equal(revisedCustomRole.role.code, customRoleCode + "-v2");
 
