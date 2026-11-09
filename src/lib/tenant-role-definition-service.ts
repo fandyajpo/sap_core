@@ -9,7 +9,8 @@ import {
   type ExplicitPermissionDeny,
 } from "@/lib/authorization-policy-core";
 import { prisma } from "@/lib/prisma";
-import { scopedAccessDatabase } from "@/lib/scoped-access";
+import { createSessionBoundScopedAccessDatabase } from "@/lib/scoped-access";
+import { lockVerifiedSessionRow } from "@/lib/verified-session-lock";
 import {
   createRoleDefinitionService,
   RoleDefinitionError,
@@ -203,19 +204,24 @@ function createAuthorization(sessionUserId: string) {
   };
 }
 
-async function getVerifiedActor(): Promise<string> {
+async function getVerifiedSession() {
   const session = await getCurrentSession();
   if (!session?.user?.id) {
     throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
   }
-  return session.user.id;
+  if (!session.session?.id) {
+    throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
+  }
+  return session;
 }
 
 export async function createCustomRoleForCurrentUser(
   input: Omit<CustomRoleCreateInput, "actorUserId">,
 ): Promise<RoleDefinitionRecord> {
-  const actorUserId = await getVerifiedActor();
-  const service = createRoleDefinitionService(scopedAccessDatabase, createAuthorization(actorUserId));
+  const session = await getVerifiedSession();
+  const actorUserId = session.user.id;
+  const database = createSessionBoundScopedAccessDatabase({ sessionId: session.session.id, userId: actorUserId });
+  const service = createRoleDefinitionService(database, createAuthorization(actorUserId));
   return service.createCustomRole({ ...input, actorUserId });
 }
 
@@ -240,7 +246,14 @@ export interface OrganizationRoleSummary {
 
 export async function listOrganizationRoles(organizationId: string): Promise<OrganizationRoleSummary[]> {
   const session = await getCurrentSession();
+  if (!session?.session?.id || !session.user?.id) {
+    throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
+  }
   return prisma.$transaction(async (tx) => {
+    await lockVerifiedSessionRow((statement, values = []) => tx.$queryRawUnsafe<Array<{ id: string }>>(statement, ...values), {
+      sessionId: session.session.id,
+      userId: session.user.id,
+    });
     await requireTenantPermission(tx, session, { kind: "ORGANIZATION", organizationId }, "roles.read");
     return tx.$queryRaw<OrganizationRoleSummary[]>`
       SELECT
