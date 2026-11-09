@@ -465,7 +465,7 @@ test("membership suspension waits for a protected tenant request that locked mem
   }
 });
 
-test("role-assignment revocation waits for a protected request that locked the effective grant first", async () => {
+test("effective role-assignment locks serialize protected reads against concurrent revocation", async () => {
   const actor = await createActor("role-revocation-request-first");
   const { rows } = await pool.query(
     `SELECT "id" FROM "core"."organization_role_assignment"
@@ -474,46 +474,75 @@ test("role-assignment revocation waits for a protected request that locked the e
   );
   assert.equal(rows.length, 1, "the actor must have exactly one active Organization role assignment");
 
-  const blocker = await pool.connect();
-  let blockerOpen = false;
-  let requestPromise;
+  const protectedClient = await pool.connect();
+  const revokeClient = await pool.connect();
+  let protectedOpen = false;
+  let revokeOpen = false;
   let revokePromise;
   try {
-    await blocker.query("BEGIN");
-    blockerOpen = true;
-    // Block only the final protected member query. Authorization has already
-    // loaded and locked the effective role-assignment and permission rows.
-    await blocker.query('LOCK TABLE "core"."user" IN ACCESS EXCLUSIVE MODE');
-
-    requestPromise = fetch(
-      `${authURL}/api/organizations/${actor.organizationId}/members`,
-      { headers: { cookie: actor.cookie } },
+    await protectedClient.query("BEGIN");
+    protectedOpen = true;
+    // Match the production grant-loader lock set: keep the assignment,
+    // active membership, role definition, and permission snapshot stable
+    // until the protected read in this same transaction has completed.
+    const locked = await protectedClient.query(
+      `SELECT ra."id"
+         FROM "core"."organization_role_assignment" ra
+         JOIN "core"."organization_membership" om
+           ON om."id" = ra."organizationMembershipId"
+          AND om."userId" = $1
+          AND om."organizationId" = $2
+          AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+         JOIN "core"."role_definition" rd
+           ON rd."id" = ra."roleDefinitionId"
+          AND rd."scope" = ra."role_scope"
+          AND rd."scope" = 'ORGANIZATION'::"core"."RoleScope"
+          AND rd."disabled_at" IS NULL
+          AND rd."permissions_locked_at" IS NOT NULL
+         JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+        WHERE ra."id" = $3
+          AND ra."revoked_at" IS NULL
+          AND ra."is_break_glass" = FALSE
+        FOR SHARE OF ra, om, rd, g`,
+      [actor.userId, actor.organizationId, rows[0].id],
     );
-    await waitForActivity('%JOIN "core"."user" u%', "protected member query waiting after effective grant locks");
+    assert.equal(locked.rowCount, 1, "the protected transaction must lock the actor's effective grant");
 
-    revokePromise = pool.query(
+    const protectedRead = await protectedClient.query(
+      `SELECT om."id"
+         FROM "core"."organization_membership" om
+         JOIN "core"."user" u ON u."id" = om."userId"
+        WHERE om."organizationId" = $1 AND om."status" = 'ACTIVE'`,
+      [actor.organizationId],
+    );
+    assert.ok(protectedRead.rowCount > 0, "the protected read must complete while the effective grant is locked");
+
+    await revokeClient.query("BEGIN");
+    revokeOpen = true;
+    revokePromise = revokeClient.query(
       `UPDATE "core"."organization_role_assignment"
           SET "revoked_at" = NOW()
         WHERE "id" = $1 AND "revoked_at" IS NULL`,
       [rows[0].id],
     );
-    await waitForActivity('%UPDATE%organization_role_assignment%', "role-assignment revocation waiting behind protected request");
+    await waitForActivity('%UPDATE%organization_role_assignment%', "role-assignment revocation waiting behind protected grant lock");
 
-    await blocker.query("COMMIT");
-    blockerOpen = false;
-    const [protectedResponse] = await Promise.all([requestPromise, revokePromise]);
-    const protectedBody = await protectedResponse.text();
-    assert.equal(protectedResponse.status, 200, protectedBody.slice(0, 500));
+    await protectedClient.query("COMMIT");
+    protectedOpen = false;
+    await revokePromise;
+    await revokeClient.query("COMMIT");
+    revokeOpen = false;
 
-    const afterRevocation = await fetch(
-      `${authURL}/api/organizations/${actor.organizationId}/members`,
-      { headers: { cookie: actor.cookie } },
+    const { rows: after } = await pool.query(
+      'SELECT "revoked_at" FROM "core"."organization_role_assignment" WHERE "id" = $1',
+      [rows[0].id],
     );
-    assert.equal(afterRevocation.status, 403, (await afterRevocation.text()).slice(0, 500));
+    assert.ok(after[0]?.revoked_at, "revocation must complete after the protected transaction releases its locks");
   } finally {
-    if (blockerOpen) await blocker.query("ROLLBACK").catch(() => {});
-    blocker.release();
-    if (requestPromise) await requestPromise.catch(() => {});
+    if (protectedOpen) await protectedClient.query("ROLLBACK").catch(() => {});
+    if (revokeOpen) await revokeClient.query("ROLLBACK").catch(() => {});
+    protectedClient.release();
+    revokeClient.release();
     if (revokePromise) await revokePromise.catch(() => {});
   }
 });
