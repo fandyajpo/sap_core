@@ -1,0 +1,98 @@
+import { NextResponse } from "next/server";
+import {
+  RoleAssignmentError,
+} from "@/lib/role-assignment-service";
+import {
+  RoleAssignmentAuthorizationError,
+} from "@/lib/role-assignment-authorization-core";
+import {
+  grantRoleAssignmentForCurrentUser,
+  listRoleAssignmentsForCurrentUser,
+} from "@/lib/tenant-role-assignment-service";
+import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
+
+export const runtime = "nodejs";
+
+type AssignableScope = "ORGANIZATION" | "COMPANY" | "PLANT";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isScope(value: unknown): value is AssignableScope {
+  return value === "ORGANIZATION" || value === "COMPANY" || value === "PLANT";
+}
+
+function errorResponse(error: unknown) {
+  if (error instanceof TenantTargetContextError) {
+    const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "INVALID_SCOPE" ? 400 : 403;
+    return NextResponse.json({ error: "Role assignment access denied." }, { status });
+  }
+  if (error instanceof RoleAssignmentAuthorizationError) {
+    return NextResponse.json({ error: "Role assignment access denied." }, { status: 403 });
+  }
+  if (error instanceof RoleAssignmentError) {
+    const status =
+      error.code === "ROLE_DEFINITION_NOT_FOUND" || error.code === "ACTOR_NOT_FOUND" ? 404 :
+      error.code === "AUTHORIZATION_DENIED" || error.code === "ROLE_DEFINITION_OWNER_MISMATCH" ||
+      error.code === "BREAK_GLASS_ACCESS_DENIED" ? 403 :
+      error.code === "ROLE_ASSIGNMENT_NOT_ACTIVE" ? 404 : 400;
+    return NextResponse.json({ error: error.message, code: error.code }, { status });
+  }
+  return NextResponse.json({ error: "Unable to process role assignments." }, { status: 500 });
+}
+
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ organizationId: string }> },
+) {
+  const { organizationId } = await context.params;
+  const query = new URL(request.url).searchParams;
+  const scope = query.get("scope");
+  const parentId = query.get("parentId");
+  const userId = query.get("userId");
+
+  if (!isScope(scope) || !parentId || !userId) {
+    return NextResponse.json(
+      { error: "scope, parentId, and userId query parameters are required." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const assignments = await listRoleAssignmentsForCurrentUser({
+      organizationId, scope, parentId, userId,
+    });
+    return NextResponse.json({ organizationId, scope, parentId, userId, assignments });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ organizationId: string }> },
+) {
+  const { organizationId } = await context.params;
+  try {
+    const body: unknown = await request.json();
+    if (!isRecord(body) || !isScope(body.scope) ||
+        typeof body.parentId !== "string" || typeof body.roleDefinitionId !== "string" ||
+        Object.hasOwn(body, "actorUserId") || Object.hasOwn(body, "userId") ||
+        Object.hasOwn(body, "breakGlass")) {
+      return NextResponse.json(
+        { error: "scope, parentId, and roleDefinitionId are required; actor and recipient identities are resolved from the typed parent." },
+        { status: 400 },
+      );
+    }
+    const assignment = await grantRoleAssignmentForCurrentUser({
+      organizationId,
+      scope: body.scope,
+      parentId: body.parentId,
+      roleDefinitionId: body.roleDefinitionId,
+    });
+    return NextResponse.json({ assignment }, { status: 201 });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
