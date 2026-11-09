@@ -44,9 +44,10 @@ export async function listRoleAssignmentsForCurrentUser(input: {
   parentId: string;
   userId: string;
 }) {
-  const actorUserId = await getVerifiedActor();
+  const session = await getVerifiedSession();
+  const actorUserId = session.user.id;
   const service = createRoleAssignmentService(
-    scopedAccessDatabase,
+    createSessionBoundScopedAccessDatabase({ sessionId: session.session.id, userId: actorUserId }),
     createRoleAssignmentAuthorization(actorUserId, input.organizationId),
     { enforceRoleDefinitionGovernance: true },
   );
