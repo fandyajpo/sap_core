@@ -37,6 +37,7 @@ jobs:
       - run: pnpm test:authorization-policy
       - run: pnpm test:organization-members-reader
       - run: pnpm test:v04-transaction-boundary
+      - run: pnpm test:v04-session-revocation:unit
       - run: pnpm test:v04-role-assignment
       - run: pnpm test:v04-role-assignment-production
 
@@ -62,6 +63,7 @@ jobs:
       CI_DATABASE_PORT: "55432"
       CI_DATABASE_NAME: sap_core_v03_test
       V03_ALLOW_DISPOSABLE_DB: "1"
+      V04_SESSION_LOCK_ALLOW_DISPOSABLE_DB: "1"
       BETTER_AUTH_URL: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v4
@@ -115,6 +117,7 @@ jobs:
           cat "$NEXT_SERVER_LOG" >&2
           exit 1
       - run: pnpm test:v03
+      - run: pnpm test:v04-session-revocation:integration
 
   v04-pinned-replay:
     runs-on: ubuntu-latest

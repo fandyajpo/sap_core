@@ -1,7 +1,7 @@
 # V04 session revocation and protected-transaction linearization proposal
 
-**Status:** Engineering proposal only — **NOT OWNER-APPROVED; NOT IMPLEMENTED**.  
-**Baseline:** `main` at `8ed85972123d4a07c2f13d42c034f76782e5b25b`.  
+**Status:** **OWNER-APPROVED (2026-11-09); IMPLEMENTATION IN PR #62; VALIDATION PENDING**.  
+**Baseline:** `main` at `7f95456f87378a8e6f0f5cf571fbd1c2a638c079` (after PR #61).  
 **Better Auth version:** `1.7.17`; Prisma `7.10.1`.  
 **Scope:** Close the time-of-check/time-of-use gap between Better Auth session verification and the transaction that performs a protected tenant operation.  
 **Database boundary:** Source/schema review only. No database was connected to or modified.
@@ -90,7 +90,7 @@ Use disposable PostgreSQL and real Better Auth session cookies/HTTP handlers. No
 
 Tests must assert both HTTP status and database state. Use bounded timeouts for lock-wait assertions to avoid hanging CI.
 
-## 7. Risks and questions to resolve before implementation
+## 7. Implementation verification and remaining risks
 
 - Confirm the exact Better Auth 1.7.17 `getSession` return contract and that `session.id` and `session.userId` are always available for this adapter.
 - Inspect Better Auth 1.7.17 sign-out/revocation implementation and every administrative session deletion path to confirm they mutate `core.session` in the same database.

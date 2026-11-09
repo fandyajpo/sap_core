@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { lockVerifiedSessionRow, type VerifiedSessionIdentity } from "@/lib/verified-session-lock";
 import type {
   ScopedAccessDatabase,
   ScopedAccessSession,
@@ -31,6 +32,20 @@ function createSession(client: unknown): ScopedAccessSession {
  * those operations require a verified actor and permission guard at the
  * application service boundary before they can be exposed to tenant requests.
  */
+export function createSessionBoundScopedAccessDatabase(identity: VerifiedSessionIdentity): ScopedAccessDatabase {
+  return {
+    query: async <Row extends object>(_statement: string, _values: unknown[] = []): Promise<Row[]> => {
+      throw new Error("Session-bound scoped access queries must run inside transaction().");
+    },
+    transaction: <T>(work: (session: ScopedAccessSession) => Promise<T>) =>
+      prisma.$transaction(async (transaction) => {
+        const session = createSession(transaction);
+        await lockVerifiedSessionRow(session.query, identity);
+        return work(session);
+      }),
+  };
+}
+
 export const scopedAccessDatabase: ScopedAccessDatabase = {
   ...createSession(prisma),
   transaction: <T>(work: (session: ScopedAccessSession) => Promise<T>) =>
