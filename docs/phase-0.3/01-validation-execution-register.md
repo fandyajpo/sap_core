@@ -216,3 +216,22 @@ Transactional assertions passed on both targets: a valid PlantAssignment inserte
 See [V04.6 X05/D13 execution record](v04.6-x05-d13-referential-integrity-execution-record-2026-11-09.md) for target identities, exact constraint names, assertions, and limitations. The direct User FK was catalog-verified but not separately behavior-tested with a nonexistent User or direct User parent update/delete. The run did not isolate an organizationId-only tuple mismatch or run a concurrency schedule. D6 status lifecycle/partial-unique behavior is a separate case and is not established by this X05 result. This does not establish application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
 
 **Latest bounded case register:** D5, X01/D9, X02/D10, X03/D11, X04/D12, and X05/D13 = BOUNDED PASS. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No schema, migration, policy, or gate state changed.
+
+
+## V04.6 PR #20 CI evidence reconciliation — 2026-11-09
+
+PR [#20](https://github.com/fandyajpo/sap_core/pull/20) was merged to `main` as merge commit `f0a3f362ee22858d96933c940d3437b0a6533a81`. Its pull-request workflow run [#42557097851](https://github.com/fandyajpo/sap_core/actions/runs/42557097851) completed with conclusion `success`; all seven jobs and their steps passed:
+
+- `static`: Prisma validate/generate, lint, and typecheck.
+- `v03-integration`: V03 integration suite.
+- `d1-integration`: D1 OrganizationMembership slot lifecycle and concurrent activation suite.
+- `d6-integration`: D6 CompanyMembership and PlantAssignment lifecycle and concurrent terminal-status/replacement-insert suite.
+- `d7-integration`: D7 typed Role Assignment integration suite, including direct insert-time scope/Role Definition mismatch rejection assertions.
+- `d8-integration`: D8 Role Definition governance integration suite.
+- `v04-pinned-replay`: exact eight-migration D14-A baseline replay and test; migration 9 applied as a staged upgrade; separate fresh nine-migration D14-B deployment and test. The job verified migration-history counts and successful status at each checkpoint.
+
+The D14-A pinned source is commit `d27af783d3e9499a451331f720ec111e6b5e7049`, containing exactly migrations 1–8. D14-B was exercised against all nine migrations. The staged path applied migration 9 after the exact eight-migration baseline. These are disposable PostgreSQL CI targets, not hosted or production database evidence.
+
+**Result:** the PR #20 CI evidence closes the previously recorded D1 and D6 runtime test gaps, D14-A/B execution gaps on the specified baselines, and the nine-migration staged-upgrade replay gap. Treat these as bounded CI results for the test scenarios and baselines actually executed, not as blanket proof of all tenant isolation behavior.
+
+**V04 remains `BLOCKED`.** PR #20 does not establish the remaining application-level acceptance boundary: complete application authorization and tenant context enforcement, protected operations, RLS policy design/enforcement and pooled-session isolation, or end-to-end application tenant isolation. It also does not establish hosted/production database state. V05–V10 and Phase 1 remain independently blocked pending their own criteria.
