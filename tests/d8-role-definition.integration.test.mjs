@@ -96,6 +96,13 @@ const database = {
 };
 
 const roleDefinitions = createRoleDefinitionService(database, {
+  async getDelegablePermissions() {
+    return [
+      "organization.read", "organization.update", "organization.members.read", "organization.members.manage",
+      "company.read", "company.manage", "company.members.manage", "plant.read", "plant.manage",
+      "plant.assignments.manage", "roles.read", "roles.create", "roles.revise", "roles.assign", "audit.read",
+    ];
+  },
   async authorizeCreate(input) {
     authorizationCalls.push({ operation: "CREATE", ...input });
     return allowCreate;
@@ -382,7 +389,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
   await t.test("create authorization is mandatory, Organization-scoped, and atomic", async () => {
     assert.throws(
       () => createRoleDefinitionService(database, {}),
-      /Organization custom-role create and revise authorization policies are required\./,
+      /Organization custom-role delegation, create, and revise authorization policies are required\./,
     );
     const before = await auditCount();
     allowCreate = false;
