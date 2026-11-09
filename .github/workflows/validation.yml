@@ -68,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
-          printf 'BETTER_AUTH_SECRET=%s\\n' "$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
