@@ -1,8 +1,9 @@
+import "server-only";
+
 import { prisma } from "@/lib/prisma";
-import {
-  createScopedAccessService,
-  type ScopedAccessDatabase,
-  type ScopedAccessSession,
+import type {
+  ScopedAccessDatabase,
+  ScopedAccessSession,
 } from "@/lib/scoped-access-service";
 
 type RawQueryClient = {
@@ -24,25 +25,14 @@ function createSession(client: unknown): ScopedAccessSession {
   };
 }
 
+/**
+ * Server-only persistence adapter for transaction-bound domain services.
+ * Do not export membership/assignment lifecycle helpers from this module:
+ * those operations require a verified actor and permission guard at the
+ * application service boundary before they can be exposed to tenant requests.
+ */
 export const scopedAccessDatabase: ScopedAccessDatabase = {
   ...createSession(prisma),
   transaction: <T>(work: (session: ScopedAccessSession) => Promise<T>) =>
     prisma.$transaction((transaction) => work(createSession(transaction))),
 };
-
-export const scopedAccess = createScopedAccessService(scopedAccessDatabase);
-
-export const {
-  grantCompanyMembership,
-  suspendCompanyMembership,
-  restoreCompanyMembership,
-  revokeCompanyMembership,
-  endCompanyMembership,
-  grantPlantAssignment,
-  suspendPlantAssignment,
-  restorePlantAssignment,
-  revokePlantAssignment,
-  endPlantAssignment,
-  hasCompanyAccess,
-  hasPlantAccess,
-} = scopedAccess;
