@@ -1,3 +1,4 @@
+import { isUuid } from "@/lib/http-validation";
 import { NextResponse } from "next/server";
 import { RoleDefinitionError } from "@/lib/role-definition-service";
 import {
@@ -16,6 +17,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof SyntaxError) {
+    return NextResponse.json({ error: "A valid JSON request body is required." }, { status: 400 });
+  }
   if (error instanceof TenantTargetContextError) {
     const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "INVALID_SCOPE" ? 400 : 403;
     return NextResponse.json({ error: "Role access denied." }, { status });
@@ -39,6 +43,9 @@ export async function GET(
   context: { params: Promise<{ organizationId: string }> },
 ) {
   const { organizationId } = await context.params;
+  if (!isUuid(organizationId)) {
+    return NextResponse.json({ error: "A valid Organization ID is required." }, { status: 400 });
+  }
   try {
     const roles = await listOrganizationRoles(organizationId);
     return NextResponse.json({ organizationId, roles });
