@@ -5,7 +5,7 @@ import {
   type AuthorizationRoleGrant,
   type AuthorizationScope,
   type ExplicitPermissionDeny,
-} from "./authorization-policy-core";
+} from "./authorization-policy-core.ts";
 import type {
   RoleAssignmentGrantAuthorization,
   RoleAssignmentListAuthorization,
