@@ -125,6 +125,12 @@ jobs:
       - run: pnpm test:v04-session-revocation:integration
       - run: pnpm test:v04-session-revocation:http
       - run: pnpm test:v04-deny-policy:http
+      - name: Show DENY HTTP failure diagnostics
+        if: always()
+        run: |
+          if [[ -f "$NEXT_SERVER_LOG" ]]; then
+            grep -E '\\[DENY history\\]|\\[DENY audit\\]' "$NEXT_SERVER_LOG" || true
+          fi
 
   v04-pinned-replay:
     runs-on: ubuntu-latest
