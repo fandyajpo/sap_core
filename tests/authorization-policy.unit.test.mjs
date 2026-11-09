@@ -77,6 +77,15 @@ test("Strict scope prevents Organization-scoped permissions from authorizing Com
   }).allowed, false);
 });
 
+test("Organization-level Company permissions cannot be used against the Organization resource itself", () => {
+  const grants = [{ roleCode: "ORG_ADMIN", scope: "ORGANIZATION", scopeId: org }];
+  assert.equal(evaluateAuthorization({
+    permission: "company.manage",
+    target: { scope: "ORGANIZATION", organizationId: org },
+    grants,
+  }).allowed, false);
+});
+
 test("Explicit deny overrides an otherwise matching allow at the exact scope", () => {
   const grants = [{ roleCode: "COMPANY_ADMIN", scope: "COMPANY", scopeId: companyA }];
   const result = evaluateAuthorization({
@@ -110,6 +119,32 @@ test("Custom role permissions must be a subset of the creator's delegable set", 
   assert.equal(isCustomRolePermissionSubset(["organization.read"], ["organization.read", "roles.read"]), true);
   assert.equal(isCustomRolePermissionSubset(["organization.update"], ["organization.read"]), false);
   assert.deepEqual(getBuiltInRolePermissions("ORG_MEMBER"), ["organization.read", "organization.members.read"]);
+});
+
+test("Organization custom roles are accepted only with trusted payload and owning Organization", () => {
+  const grant = {
+    roleCode: "custom:org-reader",
+    roleKind: "ORGANIZATION_CUSTOM",
+    ownerOrganizationId: org,
+    scope: "ORGANIZATION",
+    scopeId: org,
+    customPermissions: ["organization.read"],
+  };
+  assert.equal(evaluateAuthorization({
+    permission: "organization.read",
+    target: { scope: "ORGANIZATION", organizationId: org },
+    grants: [grant],
+  }).allowed, true);
+  assert.equal(evaluateAuthorization({
+    permission: "organization.read",
+    target: { scope: "ORGANIZATION", organizationId: "99999999-9999-4999-8999-999999999999" },
+    grants: [grant],
+  }).allowed, false);
+  assert.equal(evaluateAuthorization({
+    permission: "plant.read",
+    target: { scope: "PLANT", organizationId: org, companyId: companyA, plantId: plantA },
+    grants: [{ ...grant, scope: "COMPANY" }],
+  }).allowed, false);
 });
 
 test("Malformed targets fail closed", () => {
