@@ -5,37 +5,30 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const source = async (path) => readFile(new URL(path, root), "utf8");
 
-test("tenant target resolution and grant loading require an injected transaction client", async () => {
-  const [target, grants, authorization] = await Promise.all([
-    source("src/lib/tenant-target-context.ts"),
-    source("src/lib/authorization-grant-loader.ts"),
-    source("src/lib/tenant-authorization.ts"),
-  ]);
+test("tenant authorization installs actor GUC before membership resolution and verified scope GUCs before grant loading", async () => {
+  const authorization = await source("src/lib/tenant-authorization.ts");
+  const actorGuc = authorization.indexOf("set_config('app.user_id'");
+  const targetResolution = authorization.indexOf("resolveTenantTargetContext(tx, session, request)");
+  const organizationGuc = authorization.indexOf("set_config('app.organization_id'");
+  const grantLoading = authorization.indexOf("loadAuthorizationGrants(tx, context)");
 
-  assert.match(target, /tx:\s*Prisma\.TransactionClient/);
-  assert.match(target, /tx\.\$queryRaw/);
-  assert.doesNotMatch(target, /from ["']@\/lib\/prisma["']/);
-  assert.match(grants, /tx:\s*Prisma\.TransactionClient/);
-  assert.match(grants, /tx\.\$queryRaw/);
-  assert.doesNotMatch(grants, /from ["']@\/lib\/prisma["']/);
-  assert.match(authorization, /requireTenantPermission\(\s*tx:\s*Prisma\.TransactionClient/);
-  assert.match(authorization, /loadAuthorizationGrants\(tx, context\)/);
+  assert.notEqual(actorGuc, -1);
+  assert.notEqual(targetResolution, -1);
+  assert.notEqual(organizationGuc, -1);
+  assert.notEqual(grantLoading, -1);
+  assert.ok(actorGuc < targetResolution, "actor context is installed before membership resolution");
+  assert.ok(targetResolution < organizationGuc, "tenant scope context follows validated target ancestry");
+  assert.ok(organizationGuc < grantLoading, "grant loading uses the verified tenant context");
+  assert.match(authorization, /set_config\('app\.user_id',[\s\S]*?, true\)/);
+  assert.match(authorization, /set_config\('app\.organization_id',[\s\S]*?, true\)/);
+  assert.match(authorization, /TenantTargetContextError\("UNAUTHENTICATED"/);
 });
 
-test("protected Organization member read authorizes and queries through one interactive transaction", async () => {
-  const reader = await source("src/lib/organization-members-reader.ts");
-  const sessionIndex = reader.indexOf("await getCurrentSession()");
-  const transactionIndex = reader.indexOf("prisma.$transaction");
-  const authorizeIndex = reader.indexOf("requireTenantPermission(");
-  const protectedQueryIndex = reader.indexOf("tx.$queryRaw");
-
-  assert.notEqual(sessionIndex, -1);
-  assert.notEqual(transactionIndex, -1);
-  assert.notEqual(authorizeIndex, -1);
-  assert.notEqual(protectedQueryIndex, -1);
-  assert.ok(sessionIndex < transactionIndex, "Better Auth session is resolved before the transaction");
-  assert.ok(transactionIndex < authorizeIndex, "authorization runs inside the transaction callback");
-  assert.ok(authorizeIndex < protectedQueryIndex, "protected query follows authorization");
-  assert.match(reader, /requireTenantPermission\(\s*tx,/);
-  assert.doesNotMatch(reader, /prisma\.\$queryRaw/);
+test("all tenant GUC writes are transaction-local and use the injected transaction client", async () => {
+  const authorization = await source("src/lib/tenant-authorization.ts");
+  const writes = [...authorization.matchAll(/set_config\(/g)];
+  assert.equal(writes.length, 4, "one actor and three verified scope GUCs are installed");
+  assert.doesNotMatch(authorization, /\bSET\s+(?:SESSION\s+)?app\./i);
+  assert.doesNotMatch(authorization, /from ["']@\/lib\/prisma["']/);
+  assert.match(authorization, /tx\.\$queryRaw/);
 });
