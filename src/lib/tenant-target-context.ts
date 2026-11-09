@@ -27,7 +27,13 @@ export async function resolveTenantTargetContext(
             AND om."status" = 'ACTIVE'
           LIMIT 1
         `;
-        return rows[0] ?? null;
+        const membership = rows[0] ?? null;
+        if (membership) {
+          // Bootstrap policy permits only the actor's own ACTIVE membership before
+          // this verified Organization context is installed.
+          await tx.$queryRaw`SELECT set_config('app.organization_id', ${membership.organizationId}, true)`;
+        }
+        return membership;
       },
       async findCompanyTarget(organizationId, companyId) {
         const rows = await tx.$queryRaw<Array<{ id: string; organizationId: string }>>`
@@ -37,7 +43,11 @@ export async function resolveTenantTargetContext(
             AND c."organizationId" = ${organizationId}::uuid
           LIMIT 1
         `;
-        return rows[0] ?? null;
+        const company = rows[0] ?? null;
+        if (company) {
+          await tx.$queryRaw`SELECT set_config('app.company_id', ${company.id}, true)`;
+        }
+        return company;
       },
       async findPlantTarget(organizationId, companyId, plantId) {
         const rows = await tx.$queryRaw<Array<{ id: string; organizationId: string; companyId: string }>>`
@@ -51,7 +61,11 @@ export async function resolveTenantTargetContext(
             AND p."companyId" = ${companyId}::uuid
           LIMIT 1
         `;
-        return rows[0] ?? null;
+        const plant = rows[0] ?? null;
+        if (plant) {
+          await tx.$queryRaw`SELECT set_config('app.plant_id', ${plant.id}, true)`;
+        }
+        return plant;
       },
     },
   });
