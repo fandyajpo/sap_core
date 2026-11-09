@@ -61,7 +61,7 @@ export async function loadAuthorizationGrants(
     throw new AuthorizationGrantLoadError("A Plant target requires a Plant identifier.");
   }
 
-  const rows = await prisma.$queryRaw<PersistedGrantRow[]>\`
+  const rows = await prisma.$queryRaw<PersistedGrantRow[]>`
     SELECT ra."id"::text AS "assignmentId", rd."id"::text AS "roleDefinitionId",
       rd."code" AS "roleCode", rd."kind"::text AS "roleKind",
       rd."scope"::text AS "roleScope", om."organizationId"::text AS "scopeId",
@@ -70,8 +70,8 @@ export async function loadAuthorizationGrants(
     FROM "core"."organization_role_assignment" ra
     JOIN "core"."organization_membership" om
       ON om."id" = ra."organizationMembershipId"
-     AND om."userId" = \${actorUserId}
-     AND om."organizationId" = \${context.organizationId}::uuid
+     AND om."userId" = ${actorUserId}
+     AND om."organizationId" = ${context.organizationId}::uuid
      AND om."status" = 'ACTIVE'
     JOIN "core"."role_definition" rd
       ON rd."id" = ra."roleDefinitionId"
@@ -96,9 +96,9 @@ export async function loadAuthorizationGrants(
     FROM "core"."company_role_assignment" ra
     JOIN "core"."company_membership" cm
       ON cm."id" = ra."companyMembershipId"
-     AND cm."userId" = \${actorUserId}
-     AND cm."organizationId" = \${context.organizationId}::uuid
-     AND cm."companyId" = \${context.companyId}::uuid
+     AND cm."userId" = ${actorUserId}
+     AND cm."organizationId" = ${context.organizationId}::uuid
+     AND cm."companyId" = ${context.companyId}::uuid
      AND cm."status" = 'ACTIVE'
     JOIN "core"."organization_membership" om
       ON om."id" = cm."organizationMembershipId"
@@ -114,7 +114,7 @@ export async function loadAuthorizationGrants(
      AND rd."permissions_locked_at" IS NOT NULL
     JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
     JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
-    WHERE \${context.companyId}::uuid IS NOT NULL
+    WHERE ${context.companyId}::uuid IS NOT NULL
       AND ra."revokedAt" IS NULL AND ra."is_break_glass" = FALSE
 
     UNION ALL
@@ -125,10 +125,10 @@ export async function loadAuthorizationGrants(
     FROM "core"."plant_role_assignment" ra
     JOIN "core"."plant_assignment" pa
       ON pa."id" = ra."plantAssignmentId"
-     AND pa."userId" = \${actorUserId}
-     AND pa."organizationId" = \${context.organizationId}::uuid
-     AND pa."companyId" = \${context.companyId}::uuid
-     AND pa."plantId" = \${context.plantId}::uuid
+     AND pa."userId" = ${actorUserId}
+     AND pa."organizationId" = ${context.organizationId}::uuid
+     AND pa."companyId" = ${context.companyId}::uuid
+     AND pa."plantId" = ${context.plantId}::uuid
      AND pa."status" = 'ACTIVE'
     JOIN "core"."company_membership" cm
       ON cm."id" = pa."companyMembershipId"
@@ -150,9 +150,9 @@ export async function loadAuthorizationGrants(
      AND rd."permissions_locked_at" IS NOT NULL
     JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
     JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
-    WHERE \${context.scope} = 'PLANT'
+    WHERE ${context.scope} = 'PLANT'
       AND ra."revokedAt" IS NULL AND ra."is_break_glass" = FALSE
-  \`;
+  `;
 
   const byAssignment = new Map<string, {
     roleCode: string;
@@ -207,7 +207,7 @@ export async function loadAuthorizationGrants(
       isBreakGlass: false,
     });
     if (grant.deny.length > 0) {
-      const key = \`\${grant.scope}:\${grant.scopeId}\`;
+      const key = `${grant.scope}:${grant.scopeId}`;
       const permissions = denyIndex.get(key) ?? new Set<AuthorizationPermission>();
       for (const permission of grant.deny) permissions.add(permission);
       denyIndex.set(key, permissions);
