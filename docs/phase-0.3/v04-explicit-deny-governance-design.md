@@ -1,11 +1,11 @@
 # V04 Explicit DENY Governance Design
 
-**Status:** `OWNER-APPROVED POLICY BASELINE — IMPLEMENTATION NOT APPROVED`  
+**Status:** `OWNER-APPROVED POLICY BASELINE — SOURCE IMPLEMENTATION AUTHORIZED; HOSTED ROLLOUT NOT APPROVED`  
 **Date:** 2026-11-09  
 **Base:** `main` after PR #70 merge (`79ea84571375b529a1f53a90617e41c8d30846e2`)  
 **Scope:** Tenant-administration authorization for Organization, Company and Plant. ERP operational permissions remain out of scope.
 
-> The owner has approved the seven governance recommendations in §10, including the initial 14-permission DENY allowlist with `audit.read` protected for the first iteration. This approval records policy only; it does not authorize schema changes, migrations, permission seeding, service/API implementation, RLS changes, hosted database access, or production rollout. Those require separate review and explicit approval.
+> The owner has approved the seven governance recommendations in §10, the audit decisions in §10.1, and source implementation within the isolated repository branch described in §10.2. Hosted database access/modification, RLS changes, deployment, and production rollout remain separately gated.
 
 ## 1. Why a separate governance decision is required
 
@@ -275,13 +275,33 @@ The owner explicitly approved both operational audit decisions on 2026-11-09. Th
 These decisions authorize documentation of the policy only. They do **not** authorize Prisma schema changes, migrations, backfills, permission seeding, service/API or UI implementation, RLS changes, hosted database access or modification, deployment, or production rollout. Each remains subject to separate review and explicit owner approval.
 
 
+### 10.2 Owner authorization for isolated source implementation
+
+On 2026-11-09, the owner explicitly instructed the project to proceed with DENY implementation after PR #71 was merged.
+
+Authorized work:
+- Dedicated membership-bound DENY policy and append-only audit persistence models.
+- Forward-only Prisma migration source.
+- Server-side owner-only create, revoke, and history service/API paths.
+- Integration of active, exact-scope membership DENY records into the transaction-bound authorization loader.
+- Unit, static-boundary, and disposable PostgreSQL validation.
+- Isolated feature branch and reviewable pull request.
+
+Still not authorized:
+- Applying the migration to any hosted database.
+- Hosted database inspection, credential use, grants, or role provisioning.
+- RLS policy changes.
+- Deployment or production rollout.
+- Purge/archive automation or any deletion of retained audit evidence.
+- Merging the implementation PR before review and successful CI.
+
+The approved `owner_only` reader policy and `3_years` retention baseline remain unchanged. Until a separately reviewed retention/archive mechanism is approved, the implementation must not delete historical audit events; retaining them longer is preferable to premature purge. This does not waive the requirement to design legal-hold-aware retention handling before production acceptance.
 ### Explicitly not approved
 
 This policy approval is not authorization to implement or deploy. The following remain gated:
 
-- schema/migration/backfill design;
-- service/API implementation and UI;
+- hosted database changes or production rollout;
 - RLS changes;
-- hosted database changes or production rollout.
+- purge/archive automation and deletion of historical audit evidence.
 
 Existing evaluator and loader support is not authorization to create persisted DENY records. Keep DENY write paths unavailable until the deferred details are resolved, an implementation plan is reviewed, and implementation is separately approved.
