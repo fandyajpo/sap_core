@@ -62,7 +62,7 @@ export interface AuthorizationDecisionInput {
 
 export interface AuthorizationDecision {
   allowed: boolean;
-  reason: "ALLOW" | "EXPLICIT_DENY" | "NO_MATCHING_GRANT" | "INVALID_TARGET";
+  reason: "ALLOW" | "EXPLICIT_DENY" | "NO_MATCHING_GRANT" | "INVALID_TARGET" | "INVALID_REQUEST";
   matchedRole?: string;
 }
 
@@ -187,7 +187,7 @@ function grantApplies(
 
 export function evaluateAuthorization(input: AuthorizationDecisionInput): AuthorizationDecision {
   if (!authorizationPermissions.includes(input.permission)) {
-    return { allowed: false, reason: "INVALID_TARGET" };
+    return { allowed: false, reason: "INVALID_REQUEST" };
   }
   if (!isValidTarget(input.target)) {
     return { allowed: false, reason: "INVALID_TARGET" };
