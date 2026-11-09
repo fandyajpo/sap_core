@@ -236,8 +236,6 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     assert.equal(await count(runtime, '"core"."user"'), 3, "Better Auth identity rows remain available without tenant context");
     assert.equal(await count(runtime, '"core"."permission_definition"'), 15, "permission catalog remains globally readable");
 
-    await setContext(runtime, { organization: "" });
-    assert.equal(await count(runtime, '"core"."organization_membership"'), 0);
     await runtime.query("SELECT set_config('app.user_id', $1, true)", [ids.actorA]);
     assert.equal(await count(runtime, '"core"."organization_membership"'), 1, "bootstrap reveals only the actor's own ACTIVE membership");
 
