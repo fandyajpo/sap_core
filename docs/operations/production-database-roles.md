@@ -187,8 +187,9 @@ Deployment rules:
 1. Set `DATABASE_URL` to the runtime role connection string for the application.
 2. Set `MIGRATION_DATABASE_URL` only in the trusted migration execution environment, using the migration-owner connection.
 3. Do not add the migration-owner secret to the Vercel application project's Production, Preview, or Development runtime environment variables. Run migrations from a separate trusted local/CI job.
-4. Before production migrations, require an explicit `MIGRATION_DATABASE_URL`; do not rely on the current fallback. Consider tightening `prisma.config.ts` so production migration commands fail closed when it is missing.
-5. If the provider supplies a pooled runtime URL and a direct migration URL, use the provider's documented forms for those separate purposes. Do not assume a connection string is pooled based only on its label.
+4. `prisma.config.ts` now requires `MIGRATION_DATABASE_URL` for Prisma CLI commands instead of falling back to `DATABASE_URL`. This is deliberately fail-closed; commands such as `prisma validate` and `prisma generate` also load the Prisma config, so provide the migration URL in trusted local/CI command environments when running them.
+5. For local development only, `.env.example` shows both variables pointing to the same local disposable database. Never copy that arrangement to production.
+6. If the provider supplies a pooled runtime URL and a direct migration URL, use the provider's documented forms for those separate purposes. Do not assume a connection string is pooled based only on its label.
 
 Vercel application variables to configure later:
 - `DATABASE_URL`: runtime role only.
