@@ -293,6 +293,7 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     assert.equal(await count(runtime, '"core"."plant_assignment"'), 1);
     assert.equal(await count(runtime, '"core"."company_role_assignment"'), 1);
     assert.equal(await count(runtime, '"core"."plant_role_assignment"'), 1);
+    assert.equal(await count(runtime, '"core"."role_definition_audit"'), 0, "Organization custom-role audit is not exposed at Company scope");
     assert.equal(await count(runtime, '"core"."break_glass_access_audit"'), 2, "Company scope sees Company and descendant Plant audit, not Organization audit");
 
     await runtime.query("SELECT set_config('app.plant_id', $1, true)", [ids.plantA1]);
