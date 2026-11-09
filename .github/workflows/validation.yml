@@ -95,6 +95,154 @@ jobs:
           exit 1
       - run: pnpm test:v03
 
+  v04-pinned-replay:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: sap_core
+          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_DB: sap_core_d7_test
+        ports:
+          - "55435:5432"
+          - "55434:5432"
+        options: >-
+          --health-cmd "pg_isready -U sap_core -d sap_core_d7_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55435/sap_core_d7_test?schema=public
+      D7_ALLOW_DISPOSABLE_DB: "1"
+      D8_ALLOW_DISPOSABLE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:validate
+      - run: pnpm db:generate
+      - name: Recover pinned migrations 1–8
+        run: |
+          set -euo pipefail
+          baseline="d27af783d3e9499a451331f720ec111e6b5e7049"
+          git fetch --no-tags origin "$baseline"
+          git cat-file -e "${baseline}^{commit}"
+          mkdir -p "$RUNNER_TEMP/v04-pinned"
+          git archive --format=tar "$baseline" prisma/migrations |
+            tar -xf - -C "$RUNNER_TEMP/v04-pinned"
+          mv prisma/migrations "$RUNNER_TEMP/v04-current-migrations"
+          mkdir -p prisma/migrations
+          cp -R "$RUNNER_TEMP/v04-pinned/prisma/migrations/." prisma/migrations/
+          test "$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "8"
+          test ! -e prisma/migrations/20261108130000_d8_role_definition_governance
+      - name: Deploy and verify exact eight-migration baseline
+        run: |
+          set -euo pipefail
+          pnpm db:migrate:deploy
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          try {
+            const { rows } = await client.query(
+              'SELECT "migration_name", "rolled_back_at" FROM public."_prisma_migrations" ORDER BY "started_at"',
+            );
+            assert.equal(rows.length, 8);
+            assert.ok(rows.every((row) => row.rolled_back_at === null));
+            assert.equal(rows[7].migration_name, "20261107130000_d7_typed_role_assignments");
+          } finally {
+            await client.end();
+          }
+          NODE
+      - name: Execute D14-A on migrations 1–8
+        run: pnpm test:d7
+      - name: Apply migration 9 as a staged upgrade
+        run: |
+          set -euo pipefail
+          cp -R "$RUNNER_TEMP/v04-current-migrations/20261108130000_d8_role_definition_governance" prisma/migrations/
+          pnpm db:migrate:deploy
+          pnpm db:status
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          try {
+            const { rows } = await client.query(
+              'SELECT "migration_name", "rolled_back_at" FROM public."_prisma_migrations" ORDER BY "started_at"',
+            );
+            assert.equal(rows.length, 9);
+            assert.ok(rows.every((row) => row.rolled_back_at === null));
+            assert.equal(rows[8].migration_name, "20261108130000_d8_role_definition_governance");
+          } finally {
+            await client.end();
+          }
+          NODE
+      - name: Create isolated D8 fresh database
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from "pg";
+          const client = new pg.Client({
+            connectionString: "postgresql://sap_core:sap_core_dev@127.0.0.1:55435/postgres",
+          });
+          await client.connect();
+          try {
+            await client.query('CREATE DATABASE "sap_core_d8_test"');
+          } finally {
+            await client.end();
+          }
+          NODE
+      - name: Deploy all nine migrations and execute D14-B
+        env:
+          DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55434/sap_core_d8_test?schema=public
+        run: |
+          pnpm db:migrate:deploy
+          pnpm db:status
+          pnpm test:d8
+
+  d1-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: sap_core
+          POSTGRES_PASSWORD: sap_core_dev
+          POSTGRES_DB: sap_core_d1_test
+        ports:
+          - "55436:5432"
+        options: >-
+          --health-cmd "pg_isready -U sap_core -d sap_core_d1_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sap_core:sap_core_dev@127.0.0.1:55436/sap_core_d1_test?schema=public
+      D1_ALLOW_DISPOSABLE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:validate
+      - run: pnpm db:generate
+      - run: pnpm db:migrate:deploy
+      - run: pnpm db:status
+      - run: pnpm test:d1
+
   d6-integration:
     runs-on: ubuntu-latest
     services:
