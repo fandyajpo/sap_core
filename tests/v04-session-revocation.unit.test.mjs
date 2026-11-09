@@ -44,3 +44,20 @@ test("session-bound adapter acquires the row lock inside the same interactive tr
   const work = adapter.indexOf("return work(session)");
   assert.ok(transaction >= 0 && transaction < lock && lock < work);
 });
+
+
+test("session lock propagates database errors before protected callback execution", async () => {
+  const lock = await source("src/lib/verified-session-lock.ts");
+  assert.match(lock, /const rows = await query\(/);
+  assert.doesNotMatch(lock, /\.catch\(/);
+
+  const adapter = await source("src/lib/scoped-access.ts");
+  const lockPosition = adapter.indexOf("await lockVerifiedSessionRow(session.query, identity)");
+  const callbackPosition = adapter.indexOf("return work(session)");
+  assert.ok(lockPosition >= 0 && callbackPosition > lockPosition);
+
+  const authorization = await source("src/lib/tenant-authorization.ts");
+  const authorizationLock = authorization.indexOf("await lockVerifiedSessionRow(");
+  const actorContext = authorization.indexOf("set_config('app.user_id'");
+  assert.ok(authorizationLock >= 0 && actorContext > authorizationLock);
+});

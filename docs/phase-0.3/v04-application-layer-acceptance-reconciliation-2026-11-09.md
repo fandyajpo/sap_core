@@ -1,9 +1,9 @@
 # V04 application-layer acceptance reconciliation — 2026-11-09
 
 **Status:** Findings reconciled; V04 overall remains **BLOCKED**.  
-**Reconciled main:** `b776451684c99f085ce5141b6e55324494d2c48d`.  
-**Latest relevant CI:** [Run #42589940309](https://github.com/fandyajpo/sap_core/actions/runs/42589940309), PR #59 head `fcc9260b9f5ac944a112f6ef0ca3e06ee8c44de6`, all eight jobs `success`.  
-**Scope:** Application-layer source findings F-01–F-05 and the bounded evidence now present on main.  
+**Reconciled main baseline:** `35e3686e0d22ba0362ae39b634a653de06066204`.  
+**Latest relevant CI:** [Run #42597914590](https://github.com/fandyajpo/sap_core/actions/runs/42597914590), PR #64 head `e161ee2cca296a0baf0ff88337bdd5be660f0402`, all eight jobs `success`.  
+**Scope:** Application-layer source findings F-01–F-05, merged main evidence, and the session-revocation adversarial evidence currently on PR #64 (pending merge).  
 **Database boundary:** Disposable PostgreSQL CI only. No hosted database was accessed, inspected, migrated, seeded or modified for this reconciliation.
 
 ## 1. Why this reconciliation exists
@@ -73,7 +73,7 @@ No hosted database connection or mutation was performed for PR #55–#59 or this
 
 The owner-approved transaction-bound session-row lock is implemented and merged in [PR #62](https://github.com/fandyajpo/sap_core/pull/62), merge `f8995b2f84a7e34f209e358d55a976a0e8a71be8`. The exact verified Better Auth session row is revalidated and locked with `FOR SHARE` before tenant GUCs and authorization queries; the lock is held through the protected transaction. CI run [#42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs.
 
-This is transaction-level serialization, not atomicity between the earlier cookie verification and the database transaction. If revocation wins before lock acquisition, the protected request denies; if the request obtains the lock first, the operation may complete before revocation. Remaining acceptance gaps are real Better Auth HTTP-cookie/sign-out request-first and revocation-first races with HTTP/database assertions, injected lock/query failure proving fail-closed behavior, and explicit pool-reuse isolation. The current request-first PostgreSQL test uses a bounded lock timeout followed by retry and is not a complete HTTP sign-out race.
+This is transaction-level serialization, not atomicity between the earlier cookie verification and the database transaction. If revocation wins before lock acquisition, the protected request denies; if the request obtains the lock first, the operation may complete before revocation. PR #64 adds a real Better Auth HTTP request-first schedule: the protected request acquires its session lock, blocks on membership lookup, and sign-out is observed waiting on the same session row; releasing the blocker lets the protected request complete and sign-out then deletes the session. It also covers sign-out-first/stale-cookie denial, injected termination of the backend waiting on the session lock (HTTP 500 while the session row remains), and session-lock release/reuse on the same pooled backend. CI run #42597914590 passed all eight jobs. These tests establish the semantics for the implemented API slice; they do not make earlier cookie verification and the later transaction literally atomic.
 
 ### 5.3 Scope of implemented operations
 
@@ -87,4 +87,4 @@ The current tested API slice covers Organization member reads, Company reads, Pl
 - F-04: legacy resolver removed.
 - F-05: server-only boundaries and static test implemented.
 
-**V04 overall remains BLOCKED.** This document reconciles implementation findings; it does not constitute owner acceptance of hosted residual risk, a production verification, or authorization to change hosted resources. V05–V10 and Phase 1 remain independently blocked. No schema, migration, database role, credential, hosted resource or policy was changed.
+**V04 repository/disposable-CI acceptance for the implemented API slice is PASS; V04 overall remains BLOCKED** pending hosted runtime-role/grant/deployment verification, hosted migration state and approved production smoke testing. This document does not constitute owner acceptance of hosted residual risk, a production verification, or authorization to change hosted resources. V05–V10 and Phase 1 remain independently blocked. No schema, migration, database role, credential, hosted resource or policy was changed.

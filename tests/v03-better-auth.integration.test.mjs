@@ -1072,6 +1072,23 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       );
       assert.equal(revokedSessions.length, 0, "sign-out must revoke the database session");
 
+      const staleCookieProtectedRead = await fetch(
+        `${authURL}/api/organizations/${organizationId}/members`,
+        { headers: { cookie } },
+      );
+      assert.equal(
+        staleCookieProtectedRead.status,
+        401,
+        "a real Better Auth sign-out must make subsequent protected HTTP requests unauthenticated",
+      );
+      const staleCookieBody = await staleCookieProtectedRead.json();
+      assert.equal(staleCookieBody.error, "Organization member access denied.");
+      const { rows: noSessionAfterStaleRequest } = await pool.query(
+        'SELECT "id" FROM "core"."session" WHERE "id" = $1',
+        [sessionId],
+      );
+      assert.equal(noSessionAfterStaleRequest.length, 0);
+
       const { rows: preservedAfterSignout } = await pool.query(
         `SELECT
            (SELECT COUNT(*) FROM "core"."user" WHERE "id" = $1) AS users,

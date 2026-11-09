@@ -3,7 +3,7 @@
 **Policy status:** `OWNER_APPROVED` for the tenant-administration baseline in this document.  
 **Decision date:** 2026-11-09 (conversation decision; no separate meeting record supplied).  
 **Scope:** Organization, Company and Plant administration only. This is not the ERP operational permission catalog.  
-**Implementation status:** Not implemented; V04 acceptance remains BLOCKED.
+**Implementation status:** Implemented and validated in disposable CI for the currently exposed tenant-administration API slice. Hosted runtime-role/deployment acceptance remains blocked; future API routes and ERP operational permissions are outside this implementation scope.
 
 ## 1. Owner decisions
 

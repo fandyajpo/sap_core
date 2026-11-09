@@ -53,7 +53,7 @@ async function insertSession(id, expiresAt = new Date(Date.now() + 60_000)) {
   );
 }
 
-test("FOR SHARE lock blocks Better Auth-compatible session-row deletion until protected transaction commits", async () => {
+test("request-first row lock makes session revocation wait and then complete without retry", async () => {
   await insertSession(sessionId);
   const protectedClient = await pool.connect();
   const revokeClient = await pool.connect();
@@ -63,20 +63,49 @@ test("FOR SHARE lock blocks Better Auth-compatible session-row deletion until pr
     assert.equal(locked.rowCount, 1);
 
     await revokeClient.query("BEGIN");
-    await revokeClient.query("SET LOCAL lock_timeout = '250ms'");
-    await assert.rejects(
-      revokeClient.query('DELETE FROM "core"."session" WHERE "id" = $1', [sessionId]),
-      (error) => error.code === "55P03",
-    );
-    await revokeClient.query("ROLLBACK");
-
+    const revokeBackend = await revokeClient.query("SELECT pg_backend_pid() AS pid");
+    const revokePid = revokeBackend.rows[0].pid;
+    const revokePromise = revokeClient.query('DELETE FROM "core"."session" WHERE "id" = $1', [sessionId]);
+    let waitingForLock = false;
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      // Inspect the exact backend executing the DELETE; it must be blocked by FOR SHARE.
+      const lockWait = await pool.query(
+        `SELECT wait_event_type, wait_event, state
+           FROM pg_stat_activity
+          WHERE pid = $1`,
+        [revokePid],
+      );
+      if (lockWait.rows[0]?.wait_event_type === "Lock") {
+        waitingForLock = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(waitingForLock, true, "revocation DELETE must be waiting on the protected session row lock");
     await protectedClient.query("COMMIT");
-    await revokeClient.query("BEGIN");
-    await revokeClient.query('DELETE FROM "core"."session" WHERE "id" = $1', [sessionId]);
+    await revokePromise;
     await revokeClient.query("COMMIT");
 
     const remaining = await pool.query('SELECT 1 FROM "core"."session" WHERE "id" = $1', [sessionId]);
     assert.equal(remaining.rowCount, 0);
+
+    // Reuse the same pooled backend after the protected transaction. The
+    // session-row lock must not survive commit and block a later revocation.
+    await insertSession(`session-reuse-${randomUUID()}`);
+    const reused = await pool.connect();
+    const backendBefore = await reused.query("SELECT pg_backend_pid() AS pid");
+    const reusableSessionId = (await reused.query(
+      'SELECT "id" FROM "core"."session" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 1',
+      [userId],
+    )).rows[0].id;
+    await reused.query("BEGIN");
+    const reuseLock = await reused.query(lockSql, [reusableSessionId, userId]);
+    assert.equal(reuseLock.rowCount, 1);
+    await reused.query("COMMIT");
+    const backendAfter = await reused.query("SELECT pg_backend_pid() AS pid");
+    assert.equal(backendAfter.rows[0].pid, backendBefore.rows[0].pid);
+    await reused.query('DELETE FROM "core"."session" WHERE "id" = $1', [reusableSessionId]);
+    reused.release();
 
     const rollbackId = `session-rollback-${randomUUID()}`;
     await insertSession(rollbackId);
