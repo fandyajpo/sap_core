@@ -230,7 +230,7 @@ async function requireOrganization(session: ScopedAccessSession, organizationId:
 
 async function lockRoleFamily(session: ScopedAccessSession, roleFamilyId: string): Promise<void> {
   await session.query(
-    `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
+    `WITH lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))) SELECT 1 AS locked FROM lock`,
     [roleFamilyId],
   );
 }
