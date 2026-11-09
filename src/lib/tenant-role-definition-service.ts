@@ -9,7 +9,7 @@ import {
   type ExplicitPermissionDeny,
 } from "@/lib/authorization-policy-core";
 import { prisma } from "@/lib/prisma";
-import { scopedAccess } from "@/lib/scoped-access";
+import { scopedAccessDatabase } from "@/lib/scoped-access";
 import {
   createRoleDefinitionService,
   RoleDefinitionError,
@@ -213,7 +213,7 @@ export async function createCustomRoleForCurrentUser(
   input: Omit<CustomRoleCreateInput, "actorUserId">,
 ): Promise<RoleDefinitionRecord> {
   const actorUserId = await getVerifiedActor();
-  const service = createRoleDefinitionService(scopedAccess, createAuthorization(actorUserId));
+  const service = createRoleDefinitionService(scopedAccessDatabase, createAuthorization(actorUserId));
   return service.createCustomRole({ ...input, actorUserId });
 }
 
@@ -221,7 +221,7 @@ export async function reviseCustomRoleForCurrentUser(
   input: Omit<CustomRoleReviseInput, "actorUserId">,
 ): Promise<RoleDefinitionRecord> {
   const actorUserId = await getVerifiedActor();
-  const service = createRoleDefinitionService(scopedAccess, createAuthorization(actorUserId));
+  const service = createRoleDefinitionService(scopedAccessDatabase, createAuthorization(actorUserId));
   return service.reviseCustomRole({ ...input, actorUserId });
 }
 
