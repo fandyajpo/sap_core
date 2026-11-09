@@ -28,6 +28,13 @@ CREATE TYPE "core"."PermissionGrantEffect" AS ENUM ('ALLOW', 'DENY');
 ALTER TABLE "core"."role_definition"
   ADD COLUMN "permissions_locked_at" TIMESTAMPTZ(6);
 
+ALTER TABLE "core"."role_definition"
+  ADD CONSTRAINT "role_definition_custom_organization_scope_check"
+  CHECK (
+    "kind" <> 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+    OR "scope" = 'ORGANIZATION'::"core"."RoleScope"
+  );
+
 CREATE UNIQUE INDEX "role_definition_system_scope_code_key"
   ON "core"."role_definition"("scope", "code")
   WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind";
