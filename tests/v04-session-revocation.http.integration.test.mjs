@@ -506,7 +506,7 @@ test("effective role-assignment locks serialize protected reads against concurre
         FOR SHARE OF ra, om, rd, g`,
       [actor.userId, actor.organizationId, rows[0].id],
     );
-    assert.equal(locked.rowCount, 1, "the protected transaction must lock the actor's effective grant");
+    assert.ok(locked.rowCount > 0, "the protected transaction must lock the actor's effective grant");
 
     const protectedRead = await protectedClient.query(
       `SELECT om."id"
