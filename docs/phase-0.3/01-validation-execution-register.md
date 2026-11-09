@@ -271,3 +271,10 @@ The original application-layer source audit remains a historical record of findi
 5. F-03 is bounded coverage, not a blanket proof of all application tenant isolation or hosted behavior.
 
 **Disposition:** F-01, F-02, F-04 and F-05 implementation findings are closed for the reviewed code paths; F-03 has bounded passing evidence for the implemented API slice. **V04 remains BLOCKED** pending the remaining hosted/production and owner-controlled acceptance decisions. V05–V10 and Phase 1 remain independently blocked. This reconciliation changes no schema, migration, policy, database role, credential, hosted resource or gate state.
+
+
+## V04 session-revocation race — proposal recorded, decision pending
+
+The Better Auth session is currently verified before the protected tenant transaction. The role-assignment adapter does not revalidate/lock that exact session row inside the protected transaction, leaving a bounded revocation time-of-check/time-of-use window. This remains an open acceptance risk under the approved P10 immediate server-enforced revocation policy.
+
+A transaction-bound session-row revalidation and `FOR SHARE` locking proposal is recorded in [V04 session revocation linearization proposal](v04-session-revocation-linearization-proposal-2026-11-09.md). The proposal defines serialization semantics and disposable-PostgreSQL adversarial tests. It is **NOT OWNER-APPROVED and NOT IMPLEMENTED**. No session logic, auth lifecycle, schema, migration, database or hosted resource was changed. Obtain explicit approval before implementation; V04 remains **BLOCKED**.
