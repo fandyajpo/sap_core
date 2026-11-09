@@ -360,7 +360,7 @@ export function createRoleDefinitionService(
             `Role Definition ${input.roleDefinitionId} does not exist.`,
           );
         }
-        if (source.ownerOrganizationId !== input.organizationId) {
+        if (source.kind === "ORGANIZATION_CUSTOM" && source.ownerOrganizationId !== input.organizationId) {
           throw new RoleDefinitionError(
             "ROLE_DEFINITION_NOT_FOUND",
             `Role Definition ${input.roleDefinitionId} does not exist in the requested Organization.`,
