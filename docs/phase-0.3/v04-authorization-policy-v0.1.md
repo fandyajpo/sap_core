@@ -105,6 +105,7 @@ The Company and Plant role names do not themselves create Company membership or 
 - An Organization administrator may administer Company/Plant structure and memberships only for descendants of that Organization because the matrix explicitly grants those child-administration permissions. This is a direct, narrow Organization-level administrative grant, not permission inheritance.
 - Company/Plant operational actions require the actor's active membership/assignment and role at the exact target scope. Organization role membership alone is insufficient for operational access.
 - Every child-administration operation must verify the target Company/Plant belongs to the actor's Organization and must not expose operational data or actions.
+- Organization-scoped `roles.assign` permits an Organization Owner/Admin to assign or revoke only the approved built-in Company/Plant tenant roles for descendants of that Organization, after validating the target user's active membership/assignment. It does not permit platform-role assignment, Company/Plant custom-role authoring, or operational access. At Company scope, `COMPANY_ADMIN` may assign/revoke eligible built-in Plant roles only within that Company; at Plant scope, `PLANT_MANAGER` may assign/revoke eligible built-in roles only within that Plant. All such grants remain subject to the actor's delegable authority and audit.
 
 ### Custom roles
 
