@@ -1,3 +1,4 @@
+import { isUuid } from "@/lib/http-validation";
 import { NextResponse } from "next/server";
 import { AuthorizationGrantLoadError } from "@/lib/authorization-grant-loader";
 import { TenantAuthorizationError } from "@/lib/tenant-authorization";
@@ -8,6 +9,9 @@ export const runtime = "nodejs";
 
 export async function GET(_request: Request, context: { params: Promise<{ organizationId: string; companyId: string }> }) {
   const { organizationId, companyId } = await context.params;
+  if (!isUuid(organizationId) || !isUuid(companyId)) {
+    return NextResponse.json({ error: "Valid Organization and Company IDs are required." }, { status: 400 });
+  }
   try {
     const company = await getCompany(organizationId, companyId);
     return NextResponse.json({ company });
