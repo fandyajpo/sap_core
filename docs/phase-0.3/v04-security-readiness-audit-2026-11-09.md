@@ -1,6 +1,6 @@
 # V04 Security Readiness Audit — 2026-11-09
 
-**Status:** <badge> not supported in Markdown; use plain text below.
+**Status:** Repository and disposable-CI acceptance PASS; hosted/production acceptance BLOCKED.
 
 **Repository and disposable-CI acceptance:** PASS  
 **Hosted/production acceptance:** BLOCKED pending separate approval and provider verification.  
