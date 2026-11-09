@@ -109,7 +109,7 @@ A future implementation migration is expected to:
 - Add `permission_definition` and `role_permission_grant` tables with RESTRICT foreign keys and indexes.
 - Add the partial unique index for SYSTEM role identity.
 - Seed the 15 approved permission definitions, eight built-in tenant roles and exact ALLOW matrix.
-- Add immutability protection for role-permission grant rows.
+- Add permission-set sealing and immutability protection for role-permission grant rows; update the D8 RoleDefinition immutability guard only to permit the one-way seal transition.
 - Avoid changes to membership/assignment lifecycle tables, Better Auth tables, or unrelated P05 relationship edges.
 
 Application changes are expected to:
