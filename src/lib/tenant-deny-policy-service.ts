@@ -416,10 +416,10 @@ export async function listTenantDenyPolicyHistory(organizationId: string) {
   let deniedRead = false;
 
   const result = await prisma.$transaction(async (tx) => {
-    let context: Awaited<ReturnType<typeof resolveTenantTargetContext>>;
-    try {
-      context = await resolveOwnerContext(tx, session, organizationId);
-    } catch (error) {
+    const context = await (async () => {
+      try {
+        return await resolveOwnerContext(tx, session, organizationId);
+      } catch (error) {
       // A verified, active Organization member who is not an ORG_OWNER is
       // allowed to produce one attributable denial event. Persist it in this
       // transaction before returning the 403, so it cannot be lost when the
@@ -464,9 +464,11 @@ export async function listTenantDenyPolicyHistory(organizationId: string) {
              'READER_NOT_AUTHORIZED', clock_timestamp())
         `;
       }
-      deniedRead = true;
-      return null;
-    }
+        deniedRead = true;
+        return null;
+      }
+    })();
+    if (!context) return null;
 
     const policies = await tx.$queryRaw<Array<Record<string, unknown>>>`
       SELECT p."id"::text AS "id", p."target_membership_id"::text AS "targetMembershipId",
