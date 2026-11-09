@@ -465,6 +465,57 @@ test("membership suspension waits for a protected tenant request that locked mem
   }
 });
 
+test("role-assignment revocation waits for a protected request that locked the effective grant first", async () => {
+  const actor = await createActor("role-revocation-request-first");
+  const { rows } = await pool.query(
+    `SELECT "id" FROM "core"."organization_role_assignment"
+      WHERE "organizationMembershipId" = $1 AND "revoked_at" IS NULL`,
+    [actor.membershipId],
+  );
+  assert.equal(rows.length, 1, "the actor must have exactly one active Organization role assignment");
+
+  const blocker = await pool.connect();
+  let blockerOpen = false;
+  let requestPromise;
+  let revokePromise;
+  try {
+    await blocker.query("BEGIN");
+    blockerOpen = true;
+    await blocker.query('LOCK TABLE "core"."role_permission_grant" IN ACCESS EXCLUSIVE MODE');
+
+    requestPromise = fetch(
+      `${authURL}/api/organizations/${actor.organizationId}/members`,
+      { headers: { cookie: actor.cookie } },
+    );
+    await waitForActivity("%role_permission_grant%", "protected request waiting after locking effective role assignment");
+
+    revokePromise = pool.query(
+      `UPDATE "core"."organization_role_assignment"
+          SET "revoked_at" = NOW()
+        WHERE "id" = $1 AND "revoked_at" IS NULL`,
+      [rows[0].id],
+    );
+    await waitForActivity('%UPDATE%organization_role_assignment%', "role-assignment revocation waiting behind protected request");
+
+    await blocker.query("COMMIT");
+    blockerOpen = false;
+    const [protectedResponse] = await Promise.all([requestPromise, revokePromise]);
+    const protectedBody = await protectedResponse.text();
+    assert.equal(protectedResponse.status, 200, protectedBody.slice(0, 500));
+
+    const afterRevocation = await fetch(
+      `${authURL}/api/organizations/${actor.organizationId}/members`,
+      { headers: { cookie: actor.cookie } },
+    );
+    assert.equal(afterRevocation.status, 403, (await afterRevocation.text()).slice(0, 500));
+  } finally {
+    if (blockerOpen) await blocker.query("ROLLBACK").catch(() => {});
+    blocker.release();
+    if (requestPromise) await requestPromise.catch(() => {});
+    if (revokePromise) await revokePromise.catch(() => {});
+  }
+});
+
 test("unauthenticated HTTP requests are rejected before role-assignment request validation", async () => {
   const members = await fetch(
     `${authURL}/api/organizations/${randomUUID()}/members`,
