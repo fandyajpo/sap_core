@@ -26,6 +26,7 @@ jobs:
       - run: pnpm db:generate
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm test:tenant-context
 
   v03-integration:
     runs-on: ubuntu-latest
