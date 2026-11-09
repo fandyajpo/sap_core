@@ -286,3 +286,173 @@ test("database connection failure while acquiring the session row lock fails the
     holder.release();
   }
 });
+
+
+test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-assignment actors", async () => {
+  const actor = await createActor("tenant-route-boundary");
+  const foreignOrganizationId = randomUUID();
+  await pool.query(
+    'INSERT INTO "core"."organization" ("id", "created_at", "updated_at") VALUES ($1, NOW(), NOW())',
+    [foreignOrganizationId],
+  );
+  organizationIds.push(foreignOrganizationId);
+
+  const requests = [
+    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/members`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/roles`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}/plants/${randomUUID()}`, {
+      headers: { cookie: actor.cookie },
+    }),
+    fetch(
+      `${authURL}/api/organizations/${foreignOrganizationId}/roles/assignments?scope=ORGANIZATION&parentId=${randomUUID()}&userId=${actor.userId}`,
+      { headers: { cookie: actor.cookie } },
+    ),
+  ];
+  const responses = await Promise.all(requests);
+  for (const response of responses) {
+    const body = await response.text();
+    assert.equal(response.status, 403, body.slice(0, 500));
+  }
+
+  const spoofedAssignment = await fetch(
+    `${authURL}/api/organizations/${actor.organizationId}/roles/assignments`,
+    {
+      method: "POST",
+      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      body: JSON.stringify({
+        scope: "ORGANIZATION",
+        parentId: actor.membershipId,
+        roleDefinitionId: ownerRoleId,
+        actorUserId: randomUUID(),
+        userId: randomUUID(),
+      }),
+    },
+  );
+  const spoofedBody = await spoofedAssignment.text();
+  assert.equal(spoofedAssignment.status, 400, spoofedBody.slice(0, 500));
+
+  const invalidOrganization = await fetch(`${authURL}/api/organizations/not-a-uuid/members`, {
+    headers: { cookie: actor.cookie },
+  });
+  assert.equal(invalidOrganization.status, 400);
+
+  const malformedJson = await fetch(
+    `${authURL}/api/organizations/${actor.organizationId}/roles/assignments`,
+    {
+      method: "POST",
+      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      body: "{",
+    },
+  );
+  assert.equal(malformedJson.status, 400);
+
+  const malformedRevision = await fetch(
+    `${authURL}/api/organizations/${actor.organizationId}/roles/${ownerRoleId}/revisions`,
+    {
+      method: "POST",
+      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      body: "{",
+    },
+  );
+  assert.equal(malformedRevision.status, 400);
+});
+
+
+test("membership suspension waits for a protected tenant request that locked membership first", async () => {
+  const actor = await createActor("membership-request-first");
+  const blocker = await pool.connect();
+  let blockerOpen = false;
+  let requestPromise;
+  let suspensionPromise;
+  try {
+    await blocker.query("BEGIN");
+    blockerOpen = true;
+    await blocker.query('LOCK TABLE "core"."role_permission_grant" IN ACCESS EXCLUSIVE MODE');
+
+    requestPromise = fetch(
+      `${authURL}/api/organizations/${actor.organizationId}/members`,
+      { headers: { cookie: actor.cookie } },
+    );
+    await waitForActivity("%role_permission_grant%", "protected request waiting after target membership lock");
+
+    suspensionPromise = pool.query(
+      `UPDATE "core"."organization_membership"
+          SET "status" = 'SUSPENDED'::"core"."OrganizationMembershipStatus",
+              "updated_at" = NOW()
+        WHERE "id" = $1`,
+      [actor.membershipId],
+    );
+    await waitForActivity('%UPDATE%organization_membership%', "membership suspension waiting behind protected request");
+
+    await blocker.query("COMMIT");
+    blockerOpen = false;
+    const [protectedResponse] = await Promise.all([requestPromise, suspensionPromise]);
+    const protectedBody = await protectedResponse.text();
+    assert.equal(protectedResponse.status, 200, protectedBody.slice(0, 500));
+
+    const { rows } = await pool.query(
+      'SELECT "status"::text AS "status" FROM "core"."organization_membership" WHERE "id" = $1',
+      [actor.membershipId],
+    );
+    assert.equal(rows[0].status, "SUSPENDED");
+  } finally {
+    if (blockerOpen) await blocker.query("ROLLBACK").catch(() => {});
+    blocker.release();
+    if (requestPromise) await requestPromise.catch(() => {});
+    if (suspensionPromise) await suspensionPromise.catch(() => {});
+  }
+});
+
+test("unauthenticated HTTP requests are rejected before role-assignment request validation", async () => {
+  const members = await fetch(
+    `${authURL}/api/organizations/${randomUUID()}/members`,
+  );
+  assert.equal(members.status, 401);
+
+  const assignmentsGet = await fetch(
+    `${authURL}/api/organizations/${randomUUID()}/roles/assignments?scope=ORGANIZATION&parentId=${randomUUID()}&userId=anonymous`,
+  );
+  assert.equal(assignmentsGet.status, 401);
+
+  const assignmentsPost = await fetch(
+    `${authURL}/api/organizations/${randomUUID()}/roles/assignments`,
+    {
+      method: "POST",
+      headers: { origin: authOrigin, "content-type": "application/json" },
+      body: "{",
+    },
+  );
+  assert.equal(assignmentsPost.status, 401);
+});
+
+test("suspended Organization membership is denied by protected HTTP readers", async () => {
+  const actor = await createActor("inactive-membership");
+  await pool.query(
+    `UPDATE "core"."organization_membership"
+        SET "status" = 'SUSPENDED'::"core"."OrganizationMembershipStatus",
+            "updated_at" = NOW()
+      WHERE "id" = $1`,
+    [actor.membershipId],
+  );
+
+  const [members, assignments] = await Promise.all([
+    fetch(
+      `${authURL}/api/organizations/${actor.organizationId}/members`,
+      { headers: { cookie: actor.cookie } },
+    ),
+    fetch(
+      `${authURL}/api/organizations/${actor.organizationId}/roles/assignments?scope=ORGANIZATION&parentId=${actor.membershipId}&userId=${actor.userId}`,
+      { headers: { cookie: actor.cookie } },
+    ),
+  ]);
+
+  assert.equal(members.status, 403, (await members.text()).slice(0, 500));
+  assert.equal(assignments.status, 403, (await assignments.text()).slice(0, 500));
+});

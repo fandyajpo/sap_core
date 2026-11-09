@@ -76,7 +76,8 @@ async function loadOrganizationGrantContext(
      LEFT JOIN "core"."permission_delegation_policy" dp
        ON dp."permission_definition_id" = pd."id"
      WHERE ra."revoked_at" IS NULL
-       AND ra."is_break_glass" = FALSE`,
+       AND ra."is_break_glass" = FALSE
+     FOR SHARE OF ra, om, rd, g`,
     [actorUserId, organizationId],
   );
 
@@ -149,7 +150,8 @@ function createAuthorization(sessionUserId: string) {
          WHERE "userId" = $1
            AND "organizationId" = $2::uuid
            AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-         LIMIT 1`,
+         LIMIT 1
+         FOR SHARE`,
         [sessionUserId, input.organizationId],
       );
       if (!memberships[0]) {

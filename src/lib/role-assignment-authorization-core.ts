@@ -125,11 +125,90 @@ async function resolveTarget(
   };
 }
 
+async function lockActorGrantRows(
+  session: ScopedAccessSession,
+  actorUserId: string,
+  target: TargetContext,
+): Promise<void> {
+  await session.query(
+    `SELECT ra."id"
+       FROM "core"."organization_role_assignment" ra
+       JOIN "core"."organization_membership" om
+         ON om."id" = ra."organizationMembershipId"
+        AND om."userId" = $1 AND om."organizationId" = $2::uuid
+        AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+       JOIN "core"."role_definition" rd
+         ON rd."id" = ra."roleDefinitionId" AND rd."scope" = ra."role_scope"
+        AND rd."scope" = 'ORGANIZATION'::"core"."RoleScope"
+        AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL
+       JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+      WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+      FOR SHARE OF ra, om, rd, g`,
+    [actorUserId, target.organizationId],
+  );
+
+  if (target.scope === "COMPANY" || target.scope === "PLANT") {
+    await session.query(
+      `SELECT ra."id"
+         FROM "core"."company_role_assignment" ra
+         JOIN "core"."company_membership" cm
+           ON cm."id" = ra."companyMembershipId"
+          AND cm."userId" = $1 AND cm."organizationId" = $2::uuid
+          AND cm."companyId" = $3::uuid
+          AND cm."status" = 'ACTIVE'::"core"."ScopedAccessStatus"
+         JOIN "core"."organization_membership" om
+           ON om."id" = cm."organizationMembershipId"
+          AND om."userId" = cm."userId" AND om."organizationId" = cm."organizationId"
+          AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+         JOIN "core"."role_definition" rd
+           ON rd."id" = ra."roleDefinitionId" AND rd."scope" = ra."role_scope"
+          AND rd."scope" = 'COMPANY'::"core"."RoleScope"
+          AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL
+         JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+        WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+        FOR SHARE OF ra, cm, om, rd, g`,
+      [actorUserId, target.organizationId, target.companyId],
+    );
+  }
+
+  if (target.scope === "PLANT") {
+    await session.query(
+      `SELECT ra."id"
+         FROM "core"."plant_role_assignment" ra
+         JOIN "core"."plant_assignment" pa
+           ON pa."id" = ra."plantAssignmentId"
+          AND pa."userId" = $1 AND pa."organizationId" = $2::uuid
+          AND pa."companyId" = $3::uuid AND pa."plantId" = $4::uuid
+          AND pa."status" = 'ACTIVE'::"core"."ScopedAccessStatus"
+         JOIN "core"."company_membership" cm
+           ON cm."id" = pa."companyMembershipId"
+          AND cm."userId" = pa."userId" AND cm."organizationId" = pa."organizationId"
+          AND cm."companyId" = pa."companyId"
+          AND cm."status" = 'ACTIVE'::"core"."ScopedAccessStatus"
+         JOIN "core"."organization_membership" om
+           ON om."id" = cm."organizationMembershipId"
+          AND om."userId" = cm."userId" AND om."organizationId" = cm."organizationId"
+          AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+         JOIN "core"."role_definition" rd
+           ON rd."id" = ra."roleDefinitionId" AND rd."scope" = ra."role_scope"
+          AND rd."scope" = 'PLANT'::"core"."RoleScope"
+          AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL
+         JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+        WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+        FOR SHARE OF ra, pa, cm, om, rd, g`,
+      [actorUserId, target.organizationId, target.companyId, target.plantId],
+    );
+  }
+}
+
 async function loadActorGrants(
   session: ScopedAccessSession,
   actorUserId: string,
   target: TargetContext,
 ): Promise<{ grants: AuthorizationRoleGrant[]; denies: ExplicitPermissionDeny[] }> {
+  await lockActorGrantRows(session, actorUserId, target);
   const rows = await session.query<PersistedGrantRow>(
     `SELECT ra."id"::text AS "assignmentId", rd."code" AS "roleCode",
        rd."kind"::text AS "roleKind", rd."scope"::text AS "roleScope",

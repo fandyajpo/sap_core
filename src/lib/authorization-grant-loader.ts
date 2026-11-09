@@ -42,6 +42,93 @@ const builtInRoles = new Set<string>([
   "PLANT_MANAGER", "PLANT_OPERATOR", "PLANT_VIEWER",
 ]);
 
+async function lockAuthorizationGrantRows(
+  tx: Prisma.TransactionClient,
+  context: TenantTargetContext,
+): Promise<void> {
+  await tx.$queryRaw`
+    SELECT ra."id"
+    FROM "core"."organization_role_assignment" ra
+    JOIN "core"."organization_membership" om
+      ON om."id" = ra."organizationMembershipId"
+     AND om."userId" = ${context.userId}
+     AND om."organizationId" = ${context.organizationId}::uuid
+     AND om."status" = 'ACTIVE'
+    JOIN "core"."role_definition" rd
+      ON rd."id" = ra."roleDefinitionId"
+     AND rd."scope" = ra."role_scope"
+     AND rd."scope" = 'ORGANIZATION'::"core"."RoleScope"
+     AND rd."disabled_at" IS NULL
+     AND rd."permissions_locked_at" IS NOT NULL
+    JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+    WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+    FOR SHARE OF ra, om, rd, g
+  `;
+
+  if (context.scope === "COMPANY" || context.scope === "PLANT") {
+    await tx.$queryRaw`
+      SELECT ra."id"
+      FROM "core"."company_role_assignment" ra
+      JOIN "core"."company_membership" cm
+        ON cm."id" = ra."companyMembershipId"
+       AND cm."userId" = ${context.userId}
+       AND cm."organizationId" = ${context.organizationId}::uuid
+       AND cm."companyId" = ${context.companyId}::uuid
+       AND cm."status" = 'ACTIVE'
+      JOIN "core"."organization_membership" om
+        ON om."id" = cm."organizationMembershipId"
+       AND om."userId" = cm."userId"
+       AND om."organizationId" = cm."organizationId"
+       AND om."status" = 'ACTIVE'
+      JOIN "core"."role_definition" rd
+        ON rd."id" = ra."roleDefinitionId"
+       AND rd."scope" = ra."role_scope"
+       AND rd."scope" = 'COMPANY'::"core"."RoleScope"
+       AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+       AND rd."disabled_at" IS NULL
+       AND rd."permissions_locked_at" IS NOT NULL
+      JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+      WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+      FOR SHARE OF ra, cm, om, rd, g
+    `;
+  }
+
+  if (context.scope === "PLANT") {
+    await tx.$queryRaw`
+      SELECT ra."id"
+      FROM "core"."plant_role_assignment" ra
+      JOIN "core"."plant_assignment" pa
+        ON pa."id" = ra."plantAssignmentId"
+       AND pa."userId" = ${context.userId}
+       AND pa."organizationId" = ${context.organizationId}::uuid
+       AND pa."companyId" = ${context.companyId}::uuid
+       AND pa."plantId" = ${context.plantId}::uuid
+       AND pa."status" = 'ACTIVE'
+      JOIN "core"."company_membership" cm
+        ON cm."id" = pa."companyMembershipId"
+       AND cm."userId" = pa."userId"
+       AND cm."organizationId" = pa."organizationId"
+       AND cm."companyId" = pa."companyId"
+       AND cm."status" = 'ACTIVE'
+      JOIN "core"."organization_membership" om
+        ON om."id" = cm."organizationMembershipId"
+       AND om."userId" = cm."userId"
+       AND om."organizationId" = cm."organizationId"
+       AND om."status" = 'ACTIVE'
+      JOIN "core"."role_definition" rd
+        ON rd."id" = ra."roleDefinitionId"
+       AND rd."scope" = ra."role_scope"
+       AND rd."scope" = 'PLANT'::"core"."RoleScope"
+       AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+       AND rd."disabled_at" IS NULL
+       AND rd."permissions_locked_at" IS NOT NULL
+      JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+      WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+      FOR SHARE OF ra, pa, cm, om, rd, g
+    `;
+  }
+}
+
 export async function loadAuthorizationGrants(
   tx: Prisma.TransactionClient,
   context: TenantTargetContext,
@@ -57,6 +144,7 @@ export async function loadAuthorizationGrants(
     throw new AuthorizationGrantLoadError("A Plant target requires a Plant identifier.");
   }
 
+  await lockAuthorizationGrantRows(tx, context);
   const rows = await tx.$queryRaw<PersistedGrantRow[]>`
     SELECT ra."id"::text AS "assignmentId", rd."id"::text AS "roleDefinitionId",
       rd."code" AS "roleCode", rd."kind"::text AS "roleKind",

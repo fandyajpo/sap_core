@@ -1,3 +1,4 @@
+import { isUuid } from "@/lib/http-validation";
 import { NextResponse } from "next/server";
 import { AuthorizationGrantLoadError } from "@/lib/authorization-grant-loader";
 import { TenantAuthorizationError } from "@/lib/tenant-authorization";
@@ -11,6 +12,9 @@ export async function GET(
   context: { params: Promise<{ organizationId: string }> },
 ) {
   const { organizationId } = await context.params;
+  if (!isUuid(organizationId)) {
+    return NextResponse.json({ error: "A valid Organization ID is required." }, { status: 400 });
+  }
 
   try {
     const members = await listOrganizationMembers(organizationId);

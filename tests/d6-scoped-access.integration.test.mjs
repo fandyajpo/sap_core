@@ -553,7 +553,6 @@ test("D6 Company Membership and Plant Assignment lifecycles", async (t) => {
     const [userC] = fixture.users.slice(2);
     const [companyA] = fixture.companies;
     const [plantA] = fixture.plants;
-    const [membershipC] = fixture.organizationMemberships;
   
     const first = await pool.connect();
     const second = await pool.connect();

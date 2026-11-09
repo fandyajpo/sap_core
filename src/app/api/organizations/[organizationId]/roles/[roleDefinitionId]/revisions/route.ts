@@ -1,3 +1,4 @@
+import { isUuid } from "@/lib/http-validation";
 import { NextResponse } from "next/server";
 import { RoleDefinitionError } from "@/lib/role-definition-service";
 import type { AuthorizationPermission } from "@/lib/authorization-policy-core";
@@ -15,6 +16,9 @@ export async function POST(
   context: { params: Promise<{ organizationId: string; roleDefinitionId: string }> },
 ) {
   const { organizationId, roleDefinitionId } = await context.params;
+  if (!isUuid(organizationId) || !isUuid(roleDefinitionId)) {
+    return NextResponse.json({ error: "Valid Organization and Role Definition IDs are required." }, { status: 400 });
+  }
   try {
     const body: unknown = await request.json();
     if (!isRecord(body)) {
@@ -39,6 +43,9 @@ export async function POST(
     });
     return NextResponse.json({ role });
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "A valid JSON request body is required." }, { status: 400 });
+    }
     if (error instanceof TenantTargetContextError) {
       const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "INVALID_SCOPE" ? 400 : 403;
       return NextResponse.json({ error: "Role access denied." }, { status });
