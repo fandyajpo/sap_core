@@ -112,7 +112,7 @@ test("database rejects non-allowlisted permissions and incompatible exact scopes
 test("database rejects mismatched membership identity and invalid Company/Plant ancestry", async () => {
   await assert.rejects(
     insertPolicy(pool, { userId: ids.actor }),
-    error => error.code === "23503",
+    error => error.code === "23514",
   );
   await assert.rejects(
     insertPolicy(pool, { scope: "PLANT", plantId: randomUUID() }),
