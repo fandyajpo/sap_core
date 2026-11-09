@@ -115,7 +115,7 @@ test("database rejects mismatched membership identity and invalid Company/Plant 
     error => error.code === "23514",
   );
   await assert.rejects(
-    insertPolicy(pool, { scope: "PLANT", plantId: randomUUID() }),
+    insertPolicy(pool, { permissionCode: "plant.manage", scope: "PLANT", plantId: randomUUID() }),
     error => error.code === "23503",
   );
 });
