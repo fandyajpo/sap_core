@@ -335,6 +335,16 @@ async function recordDeniedTenantDenyAttempt(
         organizationId,
       });
 
+      // Reassert the verified tenant boundary immediately before the audit
+      // read/write. The context resolver also installs this GUC, but making
+      // the audit writer's RLS dependency explicit avoids relying on that
+      // implementation detail.
+      await tx.$queryRaw`
+        SELECT set_config('app.organization_id', ${actor.organizationId}, true),
+          set_config('app.company_id', '', true),
+          set_config('app.plant_id', '', true)
+      `;
+
       // Serialize per Organization / event category so concurrent actors
       // cannot race past the tenant-wide append-only audit budget.
       const lockKey = `${actor.organizationId}:${eventType}`;
