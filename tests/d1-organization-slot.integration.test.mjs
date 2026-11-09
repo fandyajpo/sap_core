@@ -58,19 +58,24 @@ async function waitForLockWait(applicationName) {
   throw new Error(`Timed out waiting for PostgreSQL lock: ${applicationName}`);
 }
 
-async function assertSlotViolation(operation) {
+async function assertSlotViolation(statement, values) {
+  const client = await pool.connect();
   const savepoint = `d1_expected_failure_${randomUUID().replaceAll("-", "")}`;
-  await pool.query(`SAVEPOINT "${savepoint}"`);
-  let caught;
   try {
-    await operation();
-  } catch (error) {
-    caught = error;
+    await client.query(`SAVEPOINT "${savepoint}"`);
+    let caught;
+    try {
+      await client.query(statement, values);
+    } catch (error) {
+      caught = error;
+    }
+    await client.query(`ROLLBACK TO SAVEPOINT "${savepoint}"`);
+    await client.query(`RELEASE SAVEPOINT "${savepoint}"`);
+    assert.equal(caught?.code, "23505");
+    assert.equal(caught?.constraint, "organization_membership_user_slot_key");
+  } finally {
+    client.release();
   }
-  await pool.query(`ROLLBACK TO SAVEPOINT "${savepoint}"`);
-  await pool.query(`RELEASE SAVEPOINT "${savepoint}"`);
-  assert.equal(caught?.code, "23505");
-  assert.equal(caught?.constraint, "organization_membership_user_slot_key");
 }
 
 before(async () => {
@@ -154,12 +159,12 @@ test("D1 organization membership slot predicate and concurrent activation", asyn
       [membershipIds[0]],
     );
 
-    await assertSlotViolation(() => pool.query(
+    await assertSlotViolation(
       `UPDATE "core"."organization_membership"
        SET "status" = 'ACTIVE', "updated_at" = NOW()
        WHERE "id" = $1`,
       [membershipIds[1]],
-    ));
+    );
 
     await pool.query(
       `UPDATE "core"."organization_membership"
@@ -167,12 +172,12 @@ test("D1 organization membership slot predicate and concurrent activation", asyn
        WHERE "id" = $1`,
       [membershipIds[0]],
     );
-    await assertSlotViolation(() => pool.query(
+    await assertSlotViolation(
       `UPDATE "core"."organization_membership"
        SET "status" = 'ACTIVE', "updated_at" = NOW()
        WHERE "id" = $1`,
       [membershipIds[1]],
-    ));
+    );
 
     await pool.query(
       `UPDATE "core"."organization_membership"
