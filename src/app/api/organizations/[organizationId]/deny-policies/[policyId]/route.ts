@@ -1,0 +1,45 @@
+import { NextResponse } from "next/server";
+import {
+  revokeTenantDenyPolicy,
+  TenantDenyPolicyError,
+} from "@/lib/tenant-deny-policy-service";
+import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
+
+export const runtime = "nodejs";
+
+export async function PATCH(
+  request: Request,
+  context: { params: Promise<{ organizationId: string; policyId: string }> },
+) {
+  const { organizationId, policyId } = await context.params;
+  let body: { reason?: unknown };
+  try {
+    body = await request.json() as { reason?: unknown };
+  } catch {
+    return NextResponse.json({ error: "A valid JSON request body is required." }, { status: 400 });
+  }
+
+  try {
+    const result = await revokeTenantDenyPolicy(
+      organizationId,
+      policyId,
+      typeof body.reason === "string" ? body.reason : "",
+    );
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof TenantDenyPolicyError) {
+      const status =
+        error.code === "UNAUTHENTICATED" ? 401 :
+        error.code === "FORBIDDEN" ? 403 :
+        error.code === "NOT_FOUND" ? 404 :
+        error.code === "CONFLICT" ? 409 : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    if (error instanceof TenantTargetContextError) {
+      const status = error.code === "UNAUTHENTICATED" ? 401 :
+        error.code === "INVALID_SCOPE" ? 400 : 403;
+      return NextResponse.json({ error: "DENY policy access denied." }, { status });
+    }
+    return NextResponse.json({ error: "Unable to revoke DENY policy." }, { status: 500 });
+  }
+}
