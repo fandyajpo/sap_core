@@ -66,6 +66,17 @@ export interface AuthorizationDecision {
   matchedRole?: string;
 }
 
+const builtInRoleScopes: Record<BuiltInTenantRole, AuthorizationScope> = {
+  ORG_OWNER: "ORGANIZATION",
+  ORG_ADMIN: "ORGANIZATION",
+  ORG_MEMBER: "ORGANIZATION",
+  COMPANY_ADMIN: "COMPANY",
+  COMPANY_MEMBER: "COMPANY",
+  PLANT_MANAGER: "PLANT",
+  PLANT_OPERATOR: "PLANT",
+  PLANT_VIEWER: "PLANT",
+};
+
 const rolePermissions: Record<BuiltInTenantRole, readonly AuthorizationPermission[]> = {
   ORG_OWNER: [
     "organization.read", "organization.update", "organization.members.read", "organization.members.manage",
@@ -136,7 +147,10 @@ function grantApplies(
 ): boolean {
   if (grant.isBreakGlass) return false;
 
-  const builtInPermissions = (rolePermissions as Record<string, readonly AuthorizationPermission[]>)[grant.roleCode];
+  const isBuiltInRole = Object.hasOwn(rolePermissions, grant.roleCode);
+  const builtInRole = isBuiltInRole ? grant.roleCode as BuiltInTenantRole : null;
+  if (builtInRole && builtInRoleScopes[builtInRole] !== grant.scope) return false;
+  const builtInPermissions = builtInRole ? rolePermissions[builtInRole] : undefined;
   let rolePermissionsForGrant = builtInPermissions;
   if (!builtInPermissions) {
     if (
