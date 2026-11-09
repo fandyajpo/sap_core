@@ -246,8 +246,14 @@ CREATE POLICY "role_permission_grant_unsealed_custom_insert"
 CREATE POLICY "role_definition_audit_tenant_context"
   ON "core"."role_definition_audit"
   FOR ALL
-  USING ("owner_organization_id"::text = NULLIF(current_setting('app.organization_id', true), ''))
-  WITH CHECK ("owner_organization_id"::text = NULLIF(current_setting('app.organization_id', true), ''));
+  USING (
+    "owner_organization_id"::text = NULLIF(current_setting('app.organization_id', true), '')
+    AND NULLIF(current_setting('app.company_id', true), '') IS NULL
+  )
+  WITH CHECK (
+    "owner_organization_id"::text = NULLIF(current_setting('app.organization_id', true), '')
+    AND NULLIF(current_setting('app.company_id', true), '') IS NULL
+  );
 
 -- Break-glass remains disabled by policy v0.1. Historical audit rows are
 -- scoped by their persisted Organization/Company/Plant parent, never by a
