@@ -26,6 +26,7 @@ export async function resolveTenantTargetContext(
             AND om."organizationId" = ${organizationId}::uuid
             AND om."status" = 'ACTIVE'
           LIMIT 1
+          FOR SHARE OF om
         `;
         const membership = rows[0] ?? null;
         if (membership) {
@@ -42,6 +43,7 @@ export async function resolveTenantTargetContext(
           WHERE c."id" = ${companyId}::uuid
             AND c."organizationId" = ${organizationId}::uuid
           LIMIT 1
+          FOR SHARE OF c
         `;
         const company = rows[0] ?? null;
         if (company) {
@@ -60,6 +62,7 @@ export async function resolveTenantTargetContext(
             AND p."organizationId" = ${organizationId}::uuid
             AND p."companyId" = ${companyId}::uuid
           LIMIT 1
+          FOR SHARE OF p, c
         `;
         const plant = rows[0] ?? null;
         if (plant) {
