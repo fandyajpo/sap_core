@@ -151,6 +151,30 @@ jobs:
               throw Object.assign(new Error("missing secret"), { code: "MISSING_DATABASE_URL" });
             }
 
+            // GitHub-hosted runners cannot reach a developer machine's localhost.
+            // Validate only the URL shape; never log or retain its components.
+            let databaseUrl;
+            try {
+              databaseUrl = new URL(process.env.DATABASE_URL);
+            } catch {
+              throw Object.assign(new Error("invalid database URL"), { code: "INVALID_DATABASE_URL" });
+            }
+            if (!["postgres:", "postgresql:"].includes(databaseUrl.protocol)) {
+              throw Object.assign(new Error("unsupported database URL protocol"), { code: "INVALID_DATABASE_URL" });
+            }
+            const databaseHost = databaseUrl.hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+            const isLoopbackIpv4 = /^127\\./.test(databaseHost);
+            const isLocalHost = databaseHost === "localhost" ||
+              databaseHost.endsWith(".localhost") ||
+              databaseHost === "::1" ||
+              databaseHost === "0.0.0.0" ||
+              isLoopbackIpv4;
+            if (isLocalHost) {
+              throw Object.assign(new Error("local database URL cannot be reached by GitHub-hosted runner"), {
+                code: "LOCAL_DATABASE_URL_NOT_ACCESSIBLE_FROM_GITHUB_ACTIONS",
+              });
+            }
+
             const connectPromise = client.connect();
             socketListenerAttached = Boolean(client.connection?.on);
             client.connection?.on("error", captureConnectionError);
