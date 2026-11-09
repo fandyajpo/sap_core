@@ -1,8 +1,9 @@
 # V04 session revocation and protected-transaction linearization proposal
 
-**Status:** **OWNER-APPROVED; IMPLEMENTATION MERGED (PR #62); ACCEPTANCE TEST GAPS REMAIN**.  
-**Audited main:** `f8995b2f84a7e34f209e358d55a976a0e8a71be8` (merge commit for PR #62).  
-**CI:** [Run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667), all eight jobs passed.  
+**Status:** **OWNER-APPROVED; IMPLEMENTATION MERGED (PR #62); SESSION-REVOCATION TEST ACCEPTANCE PASS IN PR #64**.  
+**Implementation main:** `f8995b2f84a7e34f209e358d55a976a0e8a71be8`.  
+**Implementation CI:** [Run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667), all eight jobs passed.  
+**Adversarial test CI:** [Run #42597366143](https://github.com/fandyajpo/sap_core/actions/runs/42597366143), PR #64 head `03f1086293e7635aac6a8f1afb8629333144f8f9`, all eight jobs passed; PR #64 is pending merge.  
 **Better Auth version:** `1.7.17`; Prisma `7.10.1`.  
 **Scope:** Close the time-of-check/time-of-use gap between Better Auth session verification and the transaction that performs a protected tenant operation.  
 **Database boundary:** Source/schema review only. No database was connected to or modified.
@@ -101,13 +102,19 @@ Tests must assert both HTTP status and database state. Use bounded timeouts for 
 - The shared lock is acquired before tenant GUCs and membership/grant queries, and held by the protected transaction. The lock is also wired into role-assignment and custom-role transaction adapters.
 - CI run [#42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs. PostgreSQL integration coverage includes row-lock serialization, revocation-first denial, expiry/mismatch denial, and rollback release.
 
-**Still open:**
+**Verified by PR #64 disposable-CI evidence:**
 
-- End-to-end Better Auth HTTP-cookie/sign-out request-first and revocation-first interleavings, asserting both HTTP outcomes and database state. The current request-first PostgreSQL test uses a bounded lock timeout and a later retry; it does not prove a real HTTP sign-out waits and completes automatically.
-- Injected database/lock/query failure proving the protected operation fails closed and no tenant/protected query proceeds.
-- Explicit pool-reuse test for session-lock and tenant context isolation.
+- Real Better Auth HTTP request-first schedule: a protected request acquires the exact session row lock, blocks on membership lookup, and sign-out is observed waiting on the same session row. After releasing the membership blocker, the protected request completes (HTTP 200), sign-out completes (HTTP 200), and the session row is absent.
+- Sign-out-first ordering: Better Auth sign-out deletes the session; a later protected request using the stale cookie returns HTTP 401.
+- Injected database failure: terminate the backend while the session-lock query is waiting on a conflicting row update; the protected endpoint returns HTTP 500 and the valid session row remains.
+- Session-lock pool reuse: after commit, the same physical backend is reused and can revoke a session row; rollback releases the row lock.
+- [CI run #42597366143](https://github.com/fandyajpo/sap_core/actions/runs/42597366143) passed all eight jobs.
+
+**Remaining boundary / separate policy question:**
+
 - Determine whether user disablement is represented in `core.user`; P10 account-disablement semantics are broader than session-row revocation and need a separate verified check if an account status/control exists.
 - Continue to keep protected transactions bounded, with no network calls or long-running external work, and preserve lock ordering before membership/assignment locks.
+- This evidence covers the implemented protected API slice only; future tenant routes require their own authorization and adversarial tests.
 
 ## 8. Non-goals and safety boundaries
 
@@ -122,4 +129,4 @@ Tests must assert both HTTP status and database state. Use bounded timeouts for 
 
 Owner approval for the transaction-bound session-row revalidation/locking contract, its serialization semantics, the protected-route inventory, and lock-duration/transaction-boundary constraints was explicitly granted on 2026-11-09. The implementation was merged in PR #62 at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; CI run [#42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs.
 
-The implementation milestone is complete, but the session-revocation acceptance item remains open pending real Better Auth HTTP request-first/revocation-first interleavings, injected fail-closed database errors, and explicit pool-reuse isolation. Do not describe the complete acceptance item as closed until those tests pass and their HTTP/database assertions are recorded. V04 remains **BLOCKED**.
+The implementation and session-revocation test acceptance milestones are complete for the implemented API slice: PR #62 provides the transaction-bound lock and PR #64 provides passing adversarial HTTP/database/pool evidence (CI #42597366143, eight of eight jobs). PR #64 remains pending merge, so the evidence is currently on its PR head rather than main. V04 overall remains **BLOCKED** by the separately gated hosted runtime-role, grants, deployment-secret, migration and production smoke-test acceptance.
