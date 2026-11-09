@@ -363,3 +363,49 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
   );
   assert.equal(malformedRevision.status, 400);
 });
+
+
+test("membership suspension waits for a protected tenant request that locked membership first", async () => {
+  const actor = await createActor("membership-request-first");
+  const blocker = await pool.connect();
+  let blockerOpen = false;
+  let requestPromise;
+  let suspensionPromise;
+  try {
+    await blocker.query("BEGIN");
+    blockerOpen = true;
+    await blocker.query('LOCK TABLE "core"."role_permission_grant" IN ACCESS EXCLUSIVE MODE');
+
+    requestPromise = fetch(
+      `${authURL}/api/organizations/${actor.organizationId}/members`,
+      { headers: { cookie: actor.cookie } },
+    );
+    await waitForActivity("%role_permission_grant%", "protected request waiting after target membership lock");
+
+    suspensionPromise = pool.query(
+      `UPDATE "core"."organization_membership"
+          SET "status" = 'SUSPENDED'::"core"."OrganizationMembershipStatus",
+              "updated_at" = NOW()
+        WHERE "id" = $1`,
+      [actor.membershipId],
+    );
+    await waitForActivity('%UPDATE%organization_membership%', "membership suspension waiting behind protected request");
+
+    await blocker.query("COMMIT");
+    blockerOpen = false;
+    const [protectedResponse] = await Promise.all([requestPromise, suspensionPromise]);
+    const protectedBody = await protectedResponse.text();
+    assert.equal(protectedResponse.status, 200, protectedBody.slice(0, 500));
+
+    const { rows } = await pool.query(
+      'SELECT "status"::text AS "status" FROM "core"."organization_membership" WHERE "id" = $1',
+      [actor.membershipId],
+    );
+    assert.equal(rows[0].status, "SUSPENDED");
+  } finally {
+    if (blockerOpen) await blocker.query("ROLLBACK").catch(() => {});
+    blocker.release();
+    if (requestPromise) await requestPromise.catch(() => {});
+    if (suspensionPromise) await suspensionPromise.catch(() => {});
+  }
+});
