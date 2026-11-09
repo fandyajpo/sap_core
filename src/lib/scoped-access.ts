@@ -34,7 +34,9 @@ function createSession(client: unknown): ScopedAccessSession {
  */
 export function createSessionBoundScopedAccessDatabase(identity: VerifiedSessionIdentity): ScopedAccessDatabase {
   return {
-    ...createSession(prisma),
+    query: async <Row extends object>(_statement: string, _values: unknown[] = []): Promise<Row[]> => {
+      throw new Error("Session-bound scoped access queries must run inside transaction().");
+    },
     transaction: <T>(work: (session: ScopedAccessSession) => Promise<T>) =>
       prisma.$transaction(async (transaction) => {
         const session = createSession(transaction);
