@@ -96,3 +96,27 @@ Consequences for this project:
 - A read-only catalog inspection may confirm the current effective role flags and migration state, but cannot create privilege separation that the provider does not support.
 
 **Hosted acceptance remains BLOCKED** pending read-only verification of the effective hosted credential, deployment configuration review, migration-state verification, and production smoke tests. The provider limitation is now an accepted architectural constraint, not an unresolved provider-selection decision. No hosted connection, role change, migration, deployment secret update, or production smoke test is authorized by this audit update.
+
+
+## Explicit DENY implementation and CI reconciliation — 2026-11-10
+
+[PR #72](https://github.com/fandyajpo/sap_core/pull/72), **feat(v04): implement membership-bound explicit DENY policies**, was squash-merged into `main` as `e6bbe5671014a2f4627719e13b997e82b5d05472`.
+
+The implementation follows the owner-approved governance baseline in PRs #70 and #71:
+- DENY applies to one exact Organization membership and one exact Organization/Company/Plant scope; it does not transfer to a replacement membership or inherit into sibling/child scopes.
+- Only an active `ORG_OWNER` may create, revoke, and read DENY history in the owner's Organization.
+- The first iteration permits only the approved 14 permission codes; `audit.read` remains protected and ineligible.
+- Policy and audit history are append-only except for the single attributable policy revocation transition. The approved three-year retention policy is not an authorization to purge; no purge/archive automation was implemented.
+- DENY is evaluated against the actor's exact active membership and exact target scope and overrides a matching ALLOW.
+
+The PR adds the dedicated policy/audit persistence model and forward migration `20261109160000_v04_explicit_deny_policy`, owner-only service/API paths, authorization-loader integration, and unit, disposable-PostgreSQL, and real HTTP integration coverage. Denied audit logging was hardened to avoid anonymous or unrelated-tenant audit injection and to cap repeated denial events at 10 per actor and 50 per Organization per event type within a rolling five-minute window. The advisory-lock queries were corrected to return a Prisma-readable integer rather than PostgreSQL `void`.
+
+### CI evidence
+
+PR-head commit `6a470ec96f22f0a60eb25b483231ab1985ae2650` passed Technical validation run [#42719381938](https://github.com/fandyajpo/sap_core/actions/runs/42719381938) (run number 342): all nine jobs succeeded — `static`, `v03-integration`, `v04-pinned-replay`, `v04-deny-integration`, `v04-rls-integration`, `d1-integration`, `d6-integration`, `d7-integration`, and `d8-integration`. The V03 HTTP job also ran `test:v04-deny-policy:http`; the dedicated DENY job ran the disposable PostgreSQL DENY integration suite. The pinned replay applied migration 14 in its disposable validation path and checked the migration history and DENY tables.
+
+### Evidence boundary and remaining gate
+
+This establishes repository implementation and the listed disposable CI behavior only. It does not establish hosted migration state, hosted RLS protection, deployment configuration, production smoke behavior, or legal compliance with the retention policy. The previously observed Prisma Postgres credential had `rolsuper = true`; do not represent RLS as protection against arbitrary SQL executed with that credential. No hosted database, credentials, grants, RLS policy, deployment, or production resource was accessed or changed for PR #72.
+
+**Disposition:** Explicit DENY source implementation and PR CI = PASS. V04 production acceptance remains **BLOCKED** pending separately authorized hosted read-only verification, deployment review, hosted migration-state verification, production smoke testing, and explicit owner acceptance. V05–V10 and Phase 1 remain independently BLOCKED. No gate promotion follows from PR #72.

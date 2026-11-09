@@ -289,3 +289,14 @@ V04 remains **BLOCKED**. No hosted database, credentials, schema, migration, dat
 Better Auth `1.7.17` session shape, sign-out deletion behavior against the same session row, and the mapped Prisma table/column names were inspected for the implementation. PostgreSQL tests cover revoked-before-lock denial, expiry and session/user mismatch denial, row-lock serialization, rollback lock release, and a request-first lock-timeout/retry schedule. The latter is not equivalent to a real HTTP sign-out race.
 
 **Still NOT RUN / incomplete:** end-to-end Better Auth HTTP request-first and revocation-first interleavings with cookie handling and HTTP/database assertions; injected database/lock failure proving fail-closed behavior before protected work; and explicit pool-reuse isolation for the session-lock path. Keep the session-revocation acceptance item open until these are evidenced. V04 remains `BLOCKED`; no gate promotion follows from PR #62 or this documentation reconciliation. No hosted database was accessed or modified.
+
+
+## PR #72 explicit DENY implementation evidence — 2026-11-10
+
+[PR #72](https://github.com/fandyajpo/sap_core/pull/72) was squash-merged to `main` as `e6bbe5671014a2f4627719e13b997e82b5d05472`. Its PR-head Technical validation run [#42719381938](https://github.com/fandyajpo/sap_core/actions/runs/42719381938), commit `6a470ec96f22f0a60eb25b483231ab1985ae2650`, completed with all 9/9 jobs successful: static, V03 integration, V04 pinned replay, V04 DENY integration, V04 RLS integration, D1, D6, D7, and D8. The V03 HTTP job also executed the DENY HTTP integration suite.
+
+The implementation adds membership-bound exact-scope DENY policy persistence and owner-only administration/history; integrates DENY into the transaction-bound authorization loader; adds append-only audit evidence with a one-way attributable revocation transition; and adds unit, disposable PostgreSQL, and HTTP tests. The audit-denial path excludes anonymous and non-member actors and rate-limits repeated events (10 per actor and 50 per Organization per event type per rolling five minutes). Advisory locks return an integer result supported by Prisma raw-query decoding.
+
+The pinned replay job applied migration 14 (`20261109160000_v04_explicit_deny_policy`) in disposable CI and verified the expected migration history and policy/audit tables. This is not hosted migration evidence.
+
+**Result:** DENY implementation and PR-head disposable CI = PASS. Hosted/production V04 acceptance remains **BLOCKED**: the hosted Prisma Postgres credential was previously observed as a superuser, so RLS must not be represented as protection against arbitrary SQL under that credential. Hosted database access, migration, role/grant changes, deployment, and production smoke tests remain separately gated. No hosted resource was touched by PR #72.
