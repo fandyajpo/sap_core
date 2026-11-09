@@ -4,9 +4,9 @@
 
 **Repository and disposable-CI acceptance:** PASS  
 **Hosted/production acceptance:** BLOCKED pending separate approval and provider verification.  
-**Audited main baseline:** `35e3686e0d22ba0362ae39b634a653de06066204` (after PR #63).  
+**Audited main baseline:** `31aa3f96c12914046c85d380d40b17458514c616` (after PR #64).  
 **Session implementation:** PR #62 merged at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; [CI run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667), all 8 jobs passed.  
-**Adversarial session tests:** PR #64 head `e161ee2cca296a0baf0ff88337bdd5be660f0402`; [CI run #42597914590](https://github.com/fandyajpo/sap_core/actions/runs/42597914590), all 8 jobs passed. PR #64 is pending merge.  
+**Adversarial session tests:** [PR #64](https://github.com/fandyajpo/sap_core/pull/64) merged at `31aa3f96c12914046c85d380d40b17458514c616`; [CI run #42598741970](https://github.com/fandyajpo/sap_core/actions/runs/42598741970) passed all eight jobs on final PR head `0d52fcb8a77215d2150e155e1543b7b550b56024`.  
 **Database boundary:** Disposable PostgreSQL CI was used. No hosted database was connected to, inspected, migrated, seeded, or modified.
 
 ## Executive summary
@@ -78,7 +78,7 @@ The repository and disposable CI boundary are verified. The owner-approved permi
 
 The owner-approved implementation is merged at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; [PR #62 CI run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs. The session lock revalidates the exact Better Auth session ID/user ID and database expiry, then holds `FOR SHARE` before tenant GUCs and protected authorization/work. This covers Organization member reads, Company/Plant reads, custom-role operations and role-assignment GET/POST.
 
-[PR #64](https://github.com/fandyajpo/sap_core/pull/64) adds real Better Auth HTTP request-first/sign-out ordering, sign-out-first denial and stale-cookie rejection, injected backend termination during session-lock acquisition (HTTP 500; session remains valid), and PostgreSQL session-lock pool reuse. [CI run #42597914590](https://github.com/fandyajpo/sap_core/actions/runs/42597914590) passed all eight jobs on PR #64 head `e161ee2cca296a0baf0ff88337bdd5be660f0402`. The evidence is on the PR branch pending merge; no claim is made that PR #64 is already on main.
+[PR #64](https://github.com/fandyajpo/sap_core/pull/64) adds real Better Auth HTTP request-first/sign-out ordering, sign-out-first denial and stale-cookie rejection, injected backend termination during session-lock acquisition (HTTP 500; session remains valid), and PostgreSQL session-lock pool reuse. [CI run #42597914590](https://github.com/fandyajpo/sap_core/actions/runs/42597914590) passed all eight jobs on PR #64 head `e161ee2cca296a0baf0ff88337bdd5be660f0402`. PR #64 is merged to `main` at `31aa3f96c12914046c85d380d40b17458514c616`; CI run #42598741970 passed all eight jobs on final PR head `0d52fcb8a77215d2150e155e1543b7b550b56024`.
 
 Repository/disposable-CI session-revocation acceptance for the implemented API slice is PASS. V04 overall remains BLOCKED because hosted runtime-role provisioning, grants, deployment secrets, hosted migration and production smoke test remain NOT VERIFIED. No hosted database was accessed or modified.
 
@@ -92,7 +92,7 @@ Consequences for this project:
 - The existing `DATABASE_URL` / `MIGRATION_DATABASE_URL` split remains useful for workload routing (pooled runtime vs direct migrations), but does **not** establish least-privilege separation if both URLs use Prisma Postgres-generated credentials.
 - Do not claim a restricted PostgreSQL runtime role can be provisioned using ordinary Prisma Postgres-generated credentials unless Prisma documents or provides a supported mechanism for it.
 - The previously observed hosted credential with `rolsuper = true` remains a blocker to treating RLS as an effective defense against arbitrary SQL executed with that credential.
-- Before hosted acceptance, the owner must choose and document a supported architecture: (a) retain Prisma Postgres and explicitly accept application-layer authorization as the primary boundary, with a documented residual risk that database credentials have full database access and RLS is not a security boundary against that credential; or (b) move the security-critical workload to a PostgreSQL provider that supports a genuinely restricted runtime role and separate migration owner.
+- **Owner architecture decision (2026-11-09): retain Prisma Postgres.** Application-layer authorization is the primary and authoritative tenant security boundary. Prisma Postgres pooled/direct connection URLs are operationally separated, not privilege-separated. The owner accepts this provider constraint for the project; the residual risk must remain explicit: a compromised application or leaked Prisma Postgres credential can exercise the credential's full database access, and RLS must not be represented as a defense against arbitrary SQL executed with that credential. This decision does not waive endpoint authorization, server-only data access, session revocation, input validation, auditability, or production verification requirements.
 - A read-only catalog inspection may confirm the current effective role flags and migration state, but cannot create privilege separation that the provider does not support.
 
-**Hosted acceptance remains BLOCKED** until this provider constraint is resolved by an explicit owner decision and the resulting architecture is verified. No hosted connection, role change, migration, deployment secret update, or production smoke test is authorized by this audit update.
+**Hosted acceptance remains BLOCKED** pending read-only verification of the effective hosted credential, deployment configuration review, migration-state verification, and production smoke tests. The provider limitation is now an accepted architectural constraint, not an unresolved provider-selection decision. No hosted connection, role change, migration, deployment secret update, or production smoke test is authorized by this audit update.
