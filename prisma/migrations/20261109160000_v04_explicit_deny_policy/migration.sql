@@ -87,7 +87,7 @@ CREATE INDEX "tenant_deny_policy_active_lookup_idx"
 -- Validate the target membership lifecycle and approved permission/scope
 -- compatibility at the persistence boundary as well as in the service.
 CREATE FUNCTION "core"."validate_tenant_deny_policy_insert"()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $deny$
 DECLARE
   target_status "core"."OrganizationMembershipStatus";
   permission_code TEXT;
@@ -140,7 +140,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$;
+$deny$;
 
 CREATE TRIGGER "tenant_deny_policy_insert_guard"
   BEFORE INSERT ON "core"."tenant_deny_policy"
