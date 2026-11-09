@@ -318,6 +318,34 @@ jobs:
             await client.end();
           }
           NODE
+      - name: Apply migration 14 explicit DENY policy
+        run: |
+          set -euo pipefail
+          cp -R "$RUNNER_TEMP/v04-current-migrations/20261109160000_v04_explicit_deny_policy" prisma/migrations/
+          pnpm db:migrate:deploy
+          pnpm db:status
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          try {
+            const { rows } = await client.query(
+              'SELECT "migration_name", "rolled_back_at" FROM public."_prisma_migrations" ORDER BY "started_at"',
+            );
+            assert.equal(rows.length, 14);
+            assert.ok(rows.every((row) => row.rolled_back_at === null));
+            assert.equal(rows[13].migration_name, "20261109160000_v04_explicit_deny_policy");
+            const { rows: policyTables } = await client.query(
+              "SELECT table_name FROM information_schema.tables WHERE table_schema = 'core' AND table_name IN ('tenant_deny_policy', 'tenant_deny_audit_event') ORDER BY table_name",
+            );
+            assert.deepEqual(policyTables.map((row) => row.table_name), [
+              "tenant_deny_audit_event", "tenant_deny_policy",
+            ]);
+          } finally {
+            await client.end();
+          }
+          NODE
       - name: Create isolated D8 fresh database
         run: |
           node --input-type=module <<'NODE'
@@ -333,7 +361,7 @@ jobs:
             await client.end();
           }
           NODE
-      - name: Deploy all twelve migrations and execute D14-B
+      - name: Deploy all current migrations and execute D14-B
         env:
           CI_DATABASE_PORT: "55435"
           CI_DATABASE_NAME: sap_core_d8_test
