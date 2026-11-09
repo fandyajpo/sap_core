@@ -1,92 +1,72 @@
 # V04 Security Readiness Audit — 2026-11-09
 
-**Status:** V04 remains **BLOCKED**; no RLS or hosted-database implementation is authorized by this audit.  
-**Audited ref:** `main` at `3fbe050f618795941ea24044dd09620c4b90f025` (after PR #36).  
-**Method:** Read-only GitHub source inspection of the Prisma schema, authorization modules, protected API route, existing V04 audit/design documents, and GitHub Actions workflow.  
-**Database access:** No local or hosted PostgreSQL connection was opened. No migrations, seeds, schema changes, database-role changes, RLS policies, or tenant GUCs were executed or created.
+**Status:** <badge> not supported in Markdown; use plain text below.
+
+**Repository and disposable-CI acceptance:** PASS  
+**Hosted/production acceptance:** BLOCKED pending separate approval and provider verification.  
+**Audited ref:** `main` at `3fae765a396d0aa62e62c700f526f4020c88d227`.  
+**CI evidence:** GitHub Actions run `42571552875` — all 8 jobs succeeded on the exact PR head before squash merge.  
+**Database boundary:** Disposable PostgreSQL CI was used. No hosted database was connected to, inspected, migrated, seeded, or modified.
 
 ## Executive summary
 
-The repository has a meaningful first authorization slice, but it is not yet a complete tenant-isolation boundary.
+The V04 repository implementation now has a transaction-bound application authorization path, tenant RLS on the approved Core tables, a separate migration/runtime connection contract, and disposable-PostgreSQL evidence.
 
-- Better Auth supplies the server-side actor identity.
-- The target resolver verifies active Organization membership and Company/Plant ancestry.
-- Persisted, sealed role-permission snapshots are loaded and evaluated by the v0.1 policy core.
-- One protected application endpoint exists: `GET /api/organizations/[organizationId]/members`.
-- The protected request is **not transaction-bound end to end**. Target resolution, grant loading, and the final member query use the global Prisma client independently.
-- No RLS policy, tenant GUC, or non-owner runtime-role enforcement is present in the inspected source/migrations.
-- No Company or Plant protected API routes were found in the current application API tree.
-- The production delegable-permission provider for custom-role creation/revision is still documented as not wired.
+Implemented evidence:
 
-These findings mean the current implementation provides a useful application-level authorization proof, not complete V04 acceptance. Keep V04 **BLOCKED**.
+- Better Auth actor identity is resolved server-side before the tenant transaction.
+- Protected authorization, target resolution, persisted grant loading, and protected data reads use one interactive Prisma transaction.
+- Transaction-local GUCs are set only after the relevant actor membership and target ancestry have been validated.
+- RLS is enabled on 13 approved tenant, membership, assignment, role, and audit tables.
+- CI verifies a non-superuser, non-owner runtime role without `BYPASSRLS`; the migration/owner connection is separate.
+- Company and Plant protected read endpoints exercise exact-scope authorization and sibling-scope denial.
+- Organization role listing and custom-role create/revision routes use the verified session and transaction-bound provider.
+- Permission delegation is fail-closed: all rows in `core.permission_delegation_policy` are seeded non-delegable. The positive custom-role test temporarily applies an approval in disposable CI and restores it.
+
+The repository and disposable CI boundary are verified. Production remains blocked because the owner has not yet approved the exact delegable-permission classification, and hosted-provider role capabilities and deployed privileges have not been verified.
 
 ## Findings
 
-| ID | Area | Evidence from current source | Assessment |
+| ID | Area | Current evidence | Assessment |
 |---|---|---|---|
-| V04-A01 | Authentication | `src/lib/auth-session.ts`; `src/lib/tenant-target-context.ts` | Actor identity is derived from the server-side Better Auth session, not accepted from request payload. |
-| V04-A02 | Tenant target validation | `src/lib/tenant-target-context-core.ts`; `src/lib/tenant-target-context.ts` | Active Organization membership and Organization → Company → Plant ancestry are checked server-side. Target resolution is not itself a permission grant. |
-| V04-A03 | Persisted grants | `src/lib/authorization-grant-loader.ts`; `prisma/schema.prisma` | Grant loader reads active typed assignments and sealed/enabled role definitions with persisted permission effects. It uses the global Prisma singleton. |
-| V04-A04 | Policy evaluation | `src/lib/authorization-policy-core.ts` | Pure evaluator applies exact-scope grants, explicit child-administration rules, deny-overrides at target scope, and fail-closed handling for invalid identifiers. |
-| V04-A05 | Protected operation | `src/lib/organization-members-reader.ts`; `src/app/api/organizations/[organizationId]/members/route.ts` | Organization member read checks `organization.members.read` before querying member data. This is the only protected API route found in the current API tree. |
-| V04-A06 | Transaction boundary | `src/lib/tenant-target-context.ts`; `src/lib/authorization-grant-loader.ts`; `src/lib/tenant-authorization.ts`; `src/lib/organization-members-reader.ts` | **Gap:** resolver, grant loader, and protected read use independent global Prisma calls. They may use different pooled connections and are not one atomic authorization-and-data operation. |
-| V04-A07 | RLS | Current migration SQL and server-side source inventory; prior `v04-rls-and-pool-isolation-inventory.md` | **Missing:** no `ENABLE/FORCE ROW LEVEL SECURITY`, `CREATE POLICY`, transaction-local tenant GUC setup, or `current_setting` policy checks found. |
-| V04-A08 | Runtime database role | `src/lib/prisma.ts`; prior RLS design proposal | **Unproven:** runtime Prisma connection is configured from `DATABASE_URL`; repository source does not establish that its role is non-owner and lacks `BYPASSRLS`. Hosted role privileges were not inspected. |
-| V04-A09 | Company/Plant application coverage | Current `src/app/api` tree | **Missing:** no Company or Plant protected route was found. Their policy and data-access paths need explicit positive and negative integration coverage. |
-| V04-A10 | Custom-role delegation | `src/lib/role-definition-service.ts`; prior `v04-application-authorization-audit.md` | **Incomplete:** service contracts require trusted authorization/delegable-permission callbacks; production delegable-permission provider is not yet wired according to the existing audit. |
-| V04-A11 | Pool isolation evidence | Current CI workflow and prior RLS inventory/proposal | **Missing:** no same-backend PID, commit/rollback GUC cleanup, reused-connection A/B, constrained-pool concurrency, or runtime-role direct-SQL RLS tests exist yet. |
+| V04-A01 | Authentication | `src/lib/auth-session.ts`; Better Auth session used by server-only operations | PASS — actor comes from the verified session, not request payload. |
+| V04-A02 | Tenant target validation | `src/lib/tenant-target-context-core.ts`; `src/lib/tenant-target-context.ts` | PASS — active Organization membership and Company/Plant ancestry are validated server-side. |
+| V04-A03 | Persisted grants | `src/lib/authorization-grant-loader.ts`; `src/lib/tenant-authorization.ts` | PASS — active typed assignments and sealed/enabled role snapshots are loaded in the protected transaction. |
+| V04-A04 | Policy evaluation | `src/lib/authorization-policy-core.ts` | PASS — exact-scope grants, explicit child-administration, target-scope DENY precedence, and fail-closed identifiers. |
+| V04-A05 | Protected operations | Organization members GET; Company GET; Plant GET; Organization roles GET/POST and revision POST | PASS for the implemented API slice. This does not imply unimplemented mutation or ERP routes are protected. |
+| V04-A06 | Transaction boundary | `src/lib/tenant-authorization.ts`; `src/lib/tenant-target-context.ts`; tenant readers | PASS — actor, target context, grants, evaluation, and protected query share one interactive transaction. |
+| V04-A07 | RLS | `20261109130000_v04_tenant_rls`; `tests/v04-rls.integration.test.mjs` | PASS in disposable PostgreSQL — 13 approved tables have RLS enabled and direct SQL is tested under the runtime role. |
+| V04-A08 | Runtime database role | `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `prisma.config.ts`, CI runtime-role fixture | PASS in CI only — runtime role is non-superuser, non-owner, and lacks `BYPASSRLS`. Hosted role privileges remain unverified. |
+| V04-A09 | Company/Plant application coverage | `GET /api/organizations/[organizationId]/companies/[companyId]`; nested Plant GET | PASS — positive exact-scope and sibling-scope negative HTTP tests. |
+| V04-A10 | Custom-role delegation | `src/lib/tenant-role-definition-service.ts`; `core.permission_delegation_policy` | IMPLEMENTED, POLICY-GATED — provider is wired; all delegable flags remain false until the owner approves the exact permission set. |
+| V04-A11 | Pool isolation evidence | `tests/v04-tenant-guc.integration.test.mjs`; `tests/v04-rls.integration.test.mjs` | PASS in disposable CI — backend PID stability, commit/rollback/exception cleanup, concurrent A/B transactions, missing/malformed GUCs, and direct SQL. |
 
-## Approved policy constraints to preserve
-
-The existing owner-approved v0.1 policy remains the governing application policy:
+## Preserved policy constraints
 
 1. No automatic Organization → Company → Plant operational permission inheritance.
-2. Organization-scoped child-administration grants are limited to the approved administrative operations and require verified target ancestry.
-3. Company/Plant operational access requires the active typed membership/assignment and a role at the exact target scope.
+2. Organization child-administration is limited to approved administrative operations and requires verified ancestry.
+3. Company/Plant operational access requires active typed membership/assignment and an exact-scope role.
 4. Applicable target-scope DENY overrides ALLOW.
 5. Custom roles are Organization-scoped and ALLOW-only; permissions must be within the creator's trusted delegable subset.
 6. Tenant APIs cannot assign Platform Admin or platform-trust roles.
-7. Break-glass remains unavailable under the current baseline.
+7. Break-glass remains unavailable.
 8. Tenant-administration permissions do not authorize ERP operational modules.
 
-This audit does not expand or reinterpret those approvals.
+## Implementation sequence and evidence
 
-## Recommended implementation sequence
+| Gate | Result | Evidence |
+|---|---|---|
+| Transaction-bound authorization | PASS | PR #38 / #39; same-transaction readers and tenant GUC tests. |
+| Tenant GUC and pool isolation | PASS | `tests/v04-tenant-guc.integration.test.mjs`. |
+| RLS and runtime-role enforcement | PASS in disposable CI | PR #40; 13-table direct-SQL suite; runtime role checks. |
+| Company/Plant protected reads | PASS | PR #41; HTTP positive and sibling-scope negative cases. |
+| Custom-role provider and API | PASS in disposable CI; policy classification pending | PR #42; create/revise, actor spoofing, and role-list tests. |
+| Hosted production verification | NOT RUN | Requires separate explicit approval; no hosted connection or change was made. |
 
-### Gate 1 — Approve the transaction-bound execution contract
+## Remaining acceptance gates
 
-Review `v04-rls-transaction-boundary-design-proposal.md` and explicitly decide the proposed transaction contract, context keys/order, role separation, table classification, and fail-closed semantics. The proposal is not owner-approved merely because it is merged documentation.
+1. **Permission delegation policy:** approve the exact permission codes that may be delegated. Until then, all `permission_delegation_policy.is_delegable` values remain false and custom-role create/revision fails closed for non-empty permission sets.
+2. **Hosted database:** separately approve provider-specific runtime-role provisioning, grants, deployment secret configuration, hosted migration, and a production smoke test. The disposable CI role does not prove hosted provider capabilities.
+3. **Scope discipline:** the current API proof covers Organization member read, Company read, Plant read, and Organization role list/create/revision. Future membership/assignment mutation and ERP routes require their own exact-scope authorization and tests.
 
-### Gate 2 — Implement transaction-bound application authorization
-
-After approval, refactor the protected operation so the server-derived actor, target resolution, grant loading, policy evaluation, and protected query all use one interactive Prisma transaction client. Remove global-Prisma fallbacks from that transaction path. Add transaction-bound repository interfaces and positive/negative tests.
-
-This application refactor can be reviewed separately from RLS policy activation if the owner wants a staged rollout.
-
-### Gate 3 — Complete Company and Plant operation coverage
-
-Add only explicitly approved administrative operations. Each must validate parent ancestry, active typed membership/assignment, exact-scope permission, and target ownership. Add cross-tenant and sibling-scope negative tests.
-
-### Gate 4 — Approve database role and RLS policy details
-
-Before implementation, approve the runtime/migration role split, per-table policy matrix, Better Auth identity-table treatment, bootstrap rules, and direct-SQL behavior. Confirm the actual hosted provider supports the intended role/network controls without connecting to or changing the hosted database during this design step.
-
-### Gate 5 — Implement and test RLS on disposable PostgreSQL
-
-Only after explicit approval, add forward-only migrations and test with a non-owner, non-superuser, non-`BYPASSRLS` runtime-equivalent role. Required tests include same-connection PID, transaction-local GUC cleanup after commit and rollback, connection reuse between tenant A/B, concurrent requests, missing/malformed context, and direct SQL.
-
-### Gate 6 — Re-audit acceptance evidence
-
-Do not mark V04 complete until application authorization, tenant-context propagation, protected-operation rejection, RLS enforcement, pooled-connection isolation, and end-to-end tenant isolation are all proven. Hosted/production evidence remains a separate gated activity requiring explicit approval.
-
-## Scope and safety boundary
-
-This audit is documentation only. It does not authorize:
-- RLS SQL or policy creation;
-- database role creation or grants;
-- tenant GUC setup in application code;
-- Prisma schema or migration changes;
-- local or hosted database access, migration, seed, cleanup, or deployment;
-- changes to Better Auth deletion/session lifecycle.
-
-**Final decision: V04 remains BLOCKED. The next engineering increment should be the owner-approved transaction-bound application authorization contract, not immediate RLS activation.**
+**Conclusion:** Repository implementation and disposable-CI acceptance are PASS. V04 production acceptance remains BLOCKED by the two owner-controlled gates above.
