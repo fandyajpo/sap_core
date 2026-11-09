@@ -2,8 +2,12 @@ name: Technical validation
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
+
+# Avoid spending minutes on superseded commits when several pushes land quickly.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -23,6 +27,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
@@ -65,6 +70,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: pnpm
       - name: Configure disposable test credentials
         run: |
           set -euo pipefail
@@ -143,6 +149,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: pnpm
       - name: Configure disposable DATABASE_URL
         run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
@@ -272,6 +279,34 @@ jobs:
             await client.end();
           }
           NODE
+      - name: Apply migration 13 owner-approved delegation allowlist
+        run: |
+          set -euo pipefail
+          cp -R "$RUNNER_TEMP/v04-current-migrations/20261109150000_v04_owner_approved_delegation_allowlist" prisma/migrations/
+          pnpm db:migrate:deploy
+          pnpm db:status
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          try {
+            const { rows } = await client.query(
+              'SELECT "migration_name", "rolled_back_at" FROM public."_prisma_migrations" ORDER BY "started_at"',
+            );
+            assert.equal(rows.length, 13);
+            assert.ok(rows.every((row) => row.rolled_back_at === null));
+            assert.equal(rows[12].migration_name, "20261109150000_v04_owner_approved_delegation_allowlist");
+            const { rows: delegable } = await client.query(
+              'SELECT pd."code" FROM "core"."permission_delegation_policy" dp JOIN "core"."permission_definition" pd ON pd."id" = dp."permission_definition_id" WHERE dp."is_delegable" = TRUE ORDER BY pd."code"',
+            );
+            assert.deepEqual(delegable.map((row) => row.code), [
+              "company.read", "organization.read", "plant.read", "roles.read",
+            ]);
+          } finally {
+            await client.end();
+          }
+          NODE
       - name: Create isolated D8 fresh database
         run: |
           node --input-type=module <<'NODE'
@@ -327,6 +362,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: pnpm
       - name: Configure disposable DATABASE_URL
         run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
@@ -366,6 +402,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: pnpm
       - name: Configure disposable DATABASE_URL
         run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
@@ -406,6 +443,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: pnpm
       - name: Configure disposable DATABASE_URL
         run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
@@ -446,6 +484,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: pnpm
       - name: Configure disposable DATABASE_URL
         run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
@@ -485,6 +524,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: pnpm
       - name: Configure separate migration-owner and runtime URLs
         run: |
           set -euo pipefail

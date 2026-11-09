@@ -40,8 +40,8 @@ The first Organization member-read path has been extended into a transaction-bou
 2. Tenant IDs are selectors only; ancestry and active typed membership/assignment are validated server-side.
 3. Authentication and membership do not imply permission.
 4. Organization child-administration grants do not create Company/Plant operational inheritance.
-5. Custom roles remain Organization-only and ALLOW-only. Requested permissions must be within the creator's effective, owner-approved delegable set.
-6. All delegation policy rows default to false. The runtime role cannot modify the policy table.
+5. Custom roles remain Organization-only and ALLOW-only. Requested permissions must be within the creator's effective set and the owner-approved delegable allowlist (`organization.read`, `company.read`, `plant.read`, `roles.read`).
+6. Only the four owner-approved read permissions are delegable. All other delegation policy rows remain false. The runtime role cannot modify the policy table.
 7. RLS is defense-in-depth and does not replace the application permission evaluator.
 8. Better Auth identity tables remain outside initial tenant RLS so sign-in/session/account flows can run without tenant GUCs.
 9. The implemented API slice does not establish protection for future mutation or ERP routes; each new route must use the same transaction boundary and exact-scope checks.

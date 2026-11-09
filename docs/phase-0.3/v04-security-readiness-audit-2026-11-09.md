@@ -21,9 +21,9 @@ Implemented evidence:
 - CI verifies a non-superuser, non-owner runtime role without `BYPASSRLS`; the migration/owner connection is separate.
 - Company and Plant protected read endpoints exercise exact-scope authorization and sibling-scope denial.
 - Organization role listing and custom-role create/revision routes use the verified session and transaction-bound provider.
-- Permission delegation is fail-closed: all rows in `core.permission_delegation_policy` are seeded non-delegable. The positive custom-role test temporarily applies an approval in disposable CI and restores it.
+- Permission delegation is owner-approved for exactly four read-only permissions: `organization.read`, `company.read`, `plant.read`, and `roles.read`. The forward migration records the approval provenance; all other permissions remain non-delegable.
 
-The repository and disposable CI boundary are verified. Production remains blocked because the owner has not yet approved the exact delegable-permission classification, and hosted-provider role capabilities and deployed privileges have not been verified.
+The repository and disposable CI boundary are verified. The owner-approved permission classification is now applied by a forward migration and is covered by disposable CI. Production remains blocked because hosted-provider role capabilities and deployed privileges have not been verified.
 
 ## Findings
 
@@ -38,7 +38,7 @@ The repository and disposable CI boundary are verified. Production remains block
 | V04-A07 | RLS | `20261109130000_v04_tenant_rls`; `tests/v04-rls.integration.test.mjs` | PASS in disposable PostgreSQL — 13 approved tables have RLS enabled and direct SQL is tested under the runtime role. |
 | V04-A08 | Runtime database role | `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `prisma.config.ts`, CI runtime-role fixture | PASS in CI only — runtime role is non-superuser, non-owner, and lacks `BYPASSRLS`. Hosted role privileges remain unverified. |
 | V04-A09 | Company/Plant application coverage | `GET /api/organizations/[organizationId]/companies/[companyId]`; nested Plant GET | PASS — positive exact-scope and sibling-scope negative HTTP tests. |
-| V04-A10 | Custom-role delegation | `src/lib/tenant-role-definition-service.ts`; `core.permission_delegation_policy` | IMPLEMENTED, POLICY-GATED — provider is wired; all delegable flags remain false until the owner approves the exact permission set. |
+| V04-A10 | Custom-role delegation | `src/lib/tenant-role-definition-service.ts`; `core.permission_delegation_policy` | PASS — owner-approved read-only allowlist is applied; all other permission codes remain non-delegable. |
 | V04-A11 | Pool isolation evidence | `tests/v04-tenant-guc.integration.test.mjs`; `tests/v04-rls.integration.test.mjs` | PASS in disposable CI — backend PID stability, commit/rollback/exception cleanup, concurrent A/B transactions, missing/malformed GUCs, and direct SQL. |
 
 ## Preserved policy constraints
@@ -65,8 +65,7 @@ The repository and disposable CI boundary are verified. Production remains block
 
 ## Remaining acceptance gates
 
-1. **Permission delegation policy:** approve the exact permission codes that may be delegated. Until then, all `permission_delegation_policy.is_delegable` values remain false and custom-role create/revision fails closed for non-empty permission sets.
-2. **Hosted database:** separately approve provider-specific runtime-role provisioning, grants, deployment secret configuration, hosted migration, and a production smoke test. The disposable CI role does not prove hosted provider capabilities.
+1. **Hosted database:** separately approve provider-specific runtime-role provisioning, grants, deployment secret configuration, hosted migration, and a production smoke test. The disposable CI role does not prove hosted provider capabilities.
 3. **Scope discipline:** the current API proof covers Organization member read, Company read, Plant read, and Organization role list/create/revision. Future membership/assignment mutation and ERP routes require their own exact-scope authorization and tests.
 
 **Conclusion:** Repository implementation and disposable-CI acceptance are PASS. V04 production acceptance remains BLOCKED by the two owner-controlled gates above.
