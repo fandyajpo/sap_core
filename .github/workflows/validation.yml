@@ -29,6 +29,7 @@ jobs:
       - run: pnpm test:tenant-context
       - run: pnpm test:tenant-target-context
       - run: pnpm test:authorization-policy
+      - run: pnpm test:organization-members-reader
 
   v03-integration:
     runs-on: ubuntu-latest
