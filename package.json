@@ -30,7 +30,8 @@
     "test:v04-transaction-boundary": "node --test tests/v04-transaction-boundary.unit.test.mjs",
     "test:v04-tenant-guc": "node --test tests/v04-tenant-guc.integration.test.mjs",
     "test:v04-rls": "node --test tests/v04-rls.integration.test.mjs",
-    "test:v04-server-boundary": "node --test tests/v04-server-boundary.unit.test.mjs"
+    "test:v04-server-boundary": "node --test tests/v04-server-boundary.unit.test.mjs",
+    "test:v04-role-assignment": "node --test tests/v04-role-assignment-authorization.unit.test.mjs"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "1.7.17",

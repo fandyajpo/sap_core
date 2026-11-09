@@ -140,10 +140,12 @@ async function getSystemRoleId(code) {
 }
 
 const roleAssignments = createRoleAssignmentService(database, {
-  async authorizeGrant() {
+  async authorizeGrant(input, session) {
+    assert.equal(typeof session.query, "function");
     return true;
   },
-  async authorizeBreakGlassUse() {
+  async authorizeList(input, session) {
+    assert.equal(typeof session.query, "function");
     return true;
   },
 });
@@ -588,6 +590,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     });
     assert.deepEqual(
       (await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectAId,
         scope: "ORGANIZATION",
         parentId: fixture.membershipAId,
@@ -596,6 +599,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     );
     assert.deepEqual(
       (await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectAId,
         scope: "COMPANY",
         parentId: fixture.companyMembershipAId,
@@ -604,6 +608,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     );
     assert.deepEqual(
       (await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectAId,
         scope: "PLANT",
         parentId: fixture.plantAssignmentAId,
@@ -619,6 +624,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     );
     assert.deepEqual(
       (await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectAId,
         scope: "ORGANIZATION",
         parentId: fixture.membershipAId,
@@ -628,6 +634,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     );
     assert.deepEqual(
       (await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectAId,
         scope: "COMPANY",
         parentId: fixture.companyMembershipAId,
@@ -636,6 +643,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     );
     assert.deepEqual(
       (await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectAId,
         scope: "PLANT",
         parentId: fixture.plantAssignmentAId,
@@ -649,6 +657,7 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     );
     assert.deepEqual(
       (await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectAId,
         scope: "ORGANIZATION",
         parentId: fixture.membershipAId,

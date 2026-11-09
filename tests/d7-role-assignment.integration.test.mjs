@@ -53,7 +53,7 @@ let client;
 let transactionOpen = false;
 let savepointCounter = 0;
 let allowGrant = true;
-let allowBreakGlassUse = true;
+let allowList = true;
 
 function createSession(databaseClient) {
   return {
@@ -84,11 +84,13 @@ const database = {
 };
 
 const roleAssignments = createRoleAssignmentService(database, {
-  async authorizeGrant() {
+  async authorizeGrant(input, session) {
+    assert.equal(typeof session.query, "function", "grant authorization must receive the active transaction session");
     return allowGrant;
   },
-  async authorizeBreakGlassUse() {
-    return allowBreakGlassUse;
+  async authorizeList(input, session) {
+    assert.equal(typeof session.query, "function", "list authorization must receive the active transaction session");
+    return allowList;
   },
 });
 
@@ -220,7 +222,6 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
   let organizationRole;
   let companyRole;
   let plantRole;
-  let breakGlassRole;
 
   await t.test("ordinary grants attach only to matching typed parents", async () => {
     organizationRole = await roleAssignments.grantRoleAssignment({
@@ -235,6 +236,7 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
 
     assert.deepEqual(
       await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectId,
         scope: "COMPANY",
         parentId: fixture.companyMembershipId,
@@ -244,6 +246,7 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
     );
     assert.deepEqual(
       await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectId,
         scope: "PLANT",
         parentId: fixture.plantAssignmentId,
@@ -260,6 +263,7 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
     });
     assert.deepEqual(
       await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectId,
         scope: "PLANT",
         parentId: fixture.plantAssignmentId,
@@ -276,6 +280,7 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
 
     assert.deepEqual(
       (await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectId,
         scope: "COMPANY",
         parentId: fixture.companyMembershipId,
@@ -284,6 +289,7 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
     );
     assert.deepEqual(
       (await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectId,
         scope: "PLANT",
         parentId: fixture.plantAssignmentId,
@@ -292,6 +298,7 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
     );
     assert.deepEqual(
       await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.actorId,
         scope: "ORGANIZATION",
         parentId: fixture.organizationMembershipId,
@@ -401,17 +408,18 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
     allowGrant = true;
   });
 
-  await t.test("break-glass grants and use require a human actor, reason, authorization, and append-only audit", async () => {
+  await t.test("break-glass grants and use remain disabled by the approved V04 policy", async () => {
     await assertDomainError(
       roleAssignments.grantRoleAssignment({
         scope: "COMPANY",
         parentId: fixture.companyMembershipId,
         roleDefinitionId: fixture.roleDefinitions.COMPANY,
         actorUserId: fixture.actorId,
-        breakGlass: { reason: "   " },
+        breakGlass: { reason: "Urgent scoped incident investigation" },
       }),
-      "INVALID_INPUT",
+      "BREAK_GLASS_ACCESS_DENIED",
     );
+    assert.equal(roleAssignments.recordBreakGlassUse, undefined, "no break-glass use API may be exposed");
 
     await assertDatabaseRejects(() => client.query(
       `INSERT INTO "core"."company_role_assignment"
@@ -419,88 +427,20 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
        VALUES ($1, $2, $3, 'COMPANY'::"core"."RoleScope", TRUE)`,
       [randomUUID(), fixture.companyMembershipId, fixture.roleDefinitions.COMPANY],
     ));
+  });
 
-    breakGlassRole = await roleAssignments.grantRoleAssignment({
-      scope: "COMPANY",
-      parentId: fixture.companyMembershipId,
-      roleDefinitionId: fixture.roleDefinitions.COMPANY,
-      actorUserId: fixture.actorId,
-      breakGlass: { reason: "Urgent scoped incident investigation" },
-    });
-    assert.equal(breakGlassRole.isBreakGlass, true);
-    assert.equal(breakGlassRole.grantActorUserId, fixture.actorId);
-    assert.equal(breakGlassRole.breakGlassReason, "Urgent scoped incident investigation");
-    assert.deepEqual(
-      (await roleAssignments.listEffectiveRoleAssignments({
+  await t.test("effective role reads require an authorization decision", async () => {
+    allowList = false;
+    await assertDomainError(
+      roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectId,
         scope: "COMPANY",
         parentId: fixture.companyMembershipId,
-      })).map((assignment) => assignment.id),
-      [companyRole.id],
-      "break-glass grants do not silently enter ordinary role resolution",
-    );
-
-    await assertDomainError(
-      roleAssignments.recordBreakGlassUse({
-        scope: "COMPANY",
-        scopeParentId: fixture.companyMembershipId,
-        roleAssignmentId: breakGlassRole.id,
-        actorUserId: fixture.actorId,
-        reason: "   ",
       }),
-      "INVALID_INPUT",
+      "AUTHORIZATION_DENIED",
     );
-    const { rows: beforeDeniedAudit } = await client.query(
-      `SELECT COUNT(*)::int AS count FROM "core"."break_glass_access_audit"`,
-    );
-    allowBreakGlassUse = false;
-    await assertDomainError(
-      roleAssignments.recordBreakGlassUse({
-        scope: "COMPANY",
-        scopeParentId: fixture.companyMembershipId,
-        roleAssignmentId: breakGlassRole.id,
-        actorUserId: fixture.actorId,
-        reason: "Urgent scoped incident investigation",
-      }),
-      "BREAK_GLASS_ACCESS_DENIED",
-    );
-    allowBreakGlassUse = true;
-    const { rows: afterDeniedAudit } = await client.query(
-      `SELECT COUNT(*)::int AS count FROM "core"."break_glass_access_audit"`,
-    );
-    assert.equal(afterDeniedAudit[0].count, beforeDeniedAudit[0].count);
-
-    const audit = await roleAssignments.recordBreakGlassUse({
-      scope: "COMPANY",
-      scopeParentId: fixture.companyMembershipId,
-      roleAssignmentId: breakGlassRole.id,
-      actorUserId: fixture.actorId,
-      reason: "Urgent scoped incident investigation",
-    });
-    assert.equal(audit.actorUserId, fixture.actorId);
-    assert.equal(audit.roleAssignmentId, breakGlassRole.id);
-    assert.equal(audit.scope, "COMPANY");
-    assert.equal(audit.scopeParentId, fixture.companyMembershipId);
-    assert.equal(audit.reason, "Urgent scoped incident investigation");
-
-    await assertDatabaseRejects(() => client.query(
-      `UPDATE "core"."break_glass_access_audit" SET "reason" = 'rewritten' WHERE "id" = $1`,
-      [audit.id],
-    ));
-    await assertDatabaseRejects(() => client.query(
-      `DELETE FROM "core"."break_glass_access_audit" WHERE "id" = $1`,
-      [audit.id],
-    ));
-    await assertDomainError(
-      roleAssignments.recordBreakGlassUse({
-        scope: "PLANT",
-        scopeParentId: fixture.plantAssignmentId,
-        roleAssignmentId: breakGlassRole.id,
-        actorUserId: fixture.actorId,
-        reason: "Wrong-scope use",
-      }),
-      "ROLE_ASSIGNMENT_NOT_ACTIVE",
-    );
+    allowList = true;
   });
 
   await t.test("active parents and D14 history restrictions remain authoritative", async () => {
@@ -510,21 +450,12 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
     );
     assert.deepEqual(
       await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectId,
         scope: "ORGANIZATION",
         parentId: fixture.organizationMembershipId,
       }),
       [],
-    );
-    await assertDomainError(
-      roleAssignments.recordBreakGlassUse({
-        scope: "COMPANY",
-        scopeParentId: fixture.companyMembershipId,
-        roleAssignmentId: breakGlassRole.id,
-        actorUserId: fixture.actorId,
-        reason: "Parent membership is suspended",
-      }),
-      "ROLE_ASSIGNMENT_NOT_ACTIVE",
     );
     await client.query(
       `UPDATE "core"."organization_membership" SET "status" = 'ACTIVE' WHERE "id" = $1`,
@@ -562,6 +493,7 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
     );
     assert.deepEqual(
       await roleAssignments.listEffectiveRoleAssignments({
+        actorUserId: fixture.actorId,
         userId: fixture.subjectId,
         scope: "COMPANY",
         parentId: fixture.companyMembershipId,
