@@ -481,13 +481,15 @@ test("role-assignment revocation waits for a protected request that locked the e
   try {
     await blocker.query("BEGIN");
     blockerOpen = true;
-    await blocker.query('LOCK TABLE "core"."role_permission_grant" IN ACCESS EXCLUSIVE MODE');
+    // Block only the final protected member query. Authorization has already
+    // loaded and locked the effective role-assignment and permission rows.
+    await blocker.query('LOCK TABLE "core"."user" IN ACCESS EXCLUSIVE MODE');
 
     requestPromise = fetch(
       `${authURL}/api/organizations/${actor.organizationId}/members`,
       { headers: { cookie: actor.cookie } },
     );
-    await waitForActivity("%role_permission_grant%", "protected request waiting after locking effective role assignment");
+    await waitForActivity('%JOIN "core"."user" u%', "protected member query waiting after effective grant locks");
 
     revokePromise = pool.query(
       `UPDATE "core"."organization_role_assignment"
