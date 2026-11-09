@@ -273,6 +273,7 @@ jobs:
               try { await client.query("ROLLBACK"); } catch {}
             }
             // Never print error.message, stack, connection config, or the client object.
+            // pg/node may wrap the useful code in cause or AggregateError.errors.
             const safeNetworkCodes = new Set([
               "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH",
               "ENETUNREACH", "EAI_AGAIN", "ENOTFOUND", "ERR_INVALID_URL",
@@ -280,18 +281,42 @@ jobs:
               "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "SELF_SIGNED_CERT_IN_CHAIN",
               "28P01", "3D000", "42501",
             ]);
-            const candidateCode = typeof error?.code === "string" ? error.code : null;
-            const candidateCauseCode = typeof error?.cause?.code === "string" ? error.cause.code : null;
+            const isSafeCode = value =>
+              typeof value === "string" &&
+              (safeNetworkCodes.has(value) || /^[0-9A-Z]{5}$/.test(value) ||
+                /^[A-Z][A-Z0-9_]{1,63}$/.test(value));
+            const errorChain = [];
+            const pending = [{ value: error, depth: 0 }];
+            const seen = new Set();
+            while (pending.length > 0 && errorChain.length < 8) {
+              const { value, depth } = pending.shift();
+              if (!value || (typeof value !== "object" && typeof value !== "function") || seen.has(value)) continue;
+              seen.add(value);
+              const item = {};
+              if (isSafeCode(value.code)) item.code = value.code;
+              if (typeof value.name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(value.name)) {
+                item.name = value.name;
+              }
+              if (["connect", "getaddrinfo"].includes(value.syscall)) item.syscall = value.syscall;
+              if (Object.keys(item).length > 0) errorChain.push(item);
+              if (depth < 3) {
+                if (value.cause) pending.push({ value: value.cause, depth: depth + 1 });
+                if (Array.isArray(value.errors)) {
+                  for (const nested of value.errors.slice(0, 6)) {
+                    pending.push({ value: nested, depth: depth + 1 });
+                  }
+                }
+              }
+            }
+            const candidateCode = isSafeCode(error?.code) ? error.code : null;
+            const candidateCauseCode = isSafeCode(error?.cause?.code) ? error.cause.code : null;
             console.error(JSON.stringify({
               status: "FAIL",
               stage,
               error_name: typeof error?.name === "string" ? error.name : "Error",
-              code: candidateCode && safeNetworkCodes.has(candidateCode)
-                ? candidateCode
-                : "VERIFICATION_FAILED",
-              cause_code: candidateCauseCode && safeNetworkCodes.has(candidateCauseCode)
-                ? candidateCauseCode
-                : undefined,
+              code: candidateCode || "VERIFICATION_FAILED",
+              cause_code: candidateCauseCode || undefined,
+              error_chain: errorChain.length > 0 ? errorChain : undefined,
               syscall: ["connect", "getaddrinfo"].includes(error?.syscall) ? error.syscall : undefined,
               detail: "Connection strings, hostnames, server messages, stacks, and credentials are intentionally suppressed.",
             }));
