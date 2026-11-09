@@ -151,9 +151,10 @@ function grantApplies(
   const isBuiltInRole = Object.hasOwn(rolePermissions, grant.roleCode);
   const builtInRole = isBuiltInRole ? grant.roleCode as BuiltInTenantRole : null;
   if (builtInRole && builtInRoleScopes[builtInRole] !== grant.scope) return false;
-  const builtInPermissions = builtInRole ? rolePermissions[builtInRole] : undefined;
-  let rolePermissionsForGrant = builtInPermissions;
-  if (!builtInPermissions) {
+  let rolePermissionsForGrant: readonly AuthorizationPermission[] | undefined;
+  if (builtInRole) {
+    rolePermissionsForGrant = rolePermissions[builtInRole];
+  } else {
     if (
       grant.roleKind !== "ORGANIZATION_CUSTOM"
       || grant.scope !== "ORGANIZATION"
@@ -162,7 +163,7 @@ function grantApplies(
     ) return false;
     rolePermissionsForGrant = grant.customPermissions;
   }
-  if (!rolePermissionsForGrant.includes(permission) || !permissionFitsTarget(permission, target)) return false;
+  if (!rolePermissionsForGrant || !rolePermissionsForGrant.includes(permission) || !permissionFitsTarget(permission, target)) return false;
 
   if (grant.scope === target.scope && grant.scopeId === targetId(target)) {
     return true;
