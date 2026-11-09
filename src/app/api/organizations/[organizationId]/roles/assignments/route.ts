@@ -27,7 +27,8 @@ function isScope(value: unknown): value is AssignableScope {
 
 function isUserId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 128 &&
-    value.trim() === value && !/[\\u0000-\\u001F\\u007F]/.test(value);
+    value.trim() === value &&
+    !Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
 }
 
 function errorResponse(error: unknown) {
