@@ -367,9 +367,14 @@ async function recordDeniedTenantDenyAttempt(
       `;
       return true;
     });
-  } catch {
-    // Denial logging must never turn an expected 401/403 into a 500. Failure
-    // to establish a verified actor/tenant context means no audit row is written.
+  } catch (error) {
+    // Keep the original authorization response stable, while exposing a
+    // redacted diagnostic for operational investigation (no IDs or SQL values).
+    console.error("[DENY audit] denied-attempt event was not persisted", {
+      eventType,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
     return false;
   }
 }
@@ -400,8 +405,7 @@ export async function listTenantDenyPolicyHistory(organizationId: string) {
   const session = await getCurrentSession();
 
   return prisma.$transaction(async (tx) => {
-    let context: Awaited<ReturnType<typeof resolveTenantTargetContext>>;
-    context = await resolveOwnerContext(tx, session, organizationId);
+    const context = await resolveOwnerContext(tx, session, organizationId);
 
     const policies = await tx.$queryRaw<Array<Record<string, unknown>>>`
       SELECT p."id"::text AS "id", p."target_membership_id"::text AS "targetMembershipId",
