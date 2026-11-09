@@ -161,13 +161,14 @@ CREATE FUNCTION "core"."protect_role_permission_grant"()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   locked_at TIMESTAMPTZ(6);
+  role_kind "core"."RoleDefinitionKind";
 BEGIN
   IF TG_OP <> 'INSERT' THEN
     RAISE EXCEPTION 'Role permission grant snapshots are immutable.'
       USING ERRCODE = '55000';
   END IF;
 
-  SELECT "permissions_locked_at" INTO locked_at
+  SELECT "permissions_locked_at", "kind" INTO locked_at, role_kind
     FROM "core"."role_definition"
    WHERE "id" = NEW."role_definition_id"
    FOR SHARE;
@@ -177,9 +178,15 @@ BEGIN
       USING ERRCODE = '55000';
   END IF;
 
+  IF role_kind = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+     AND NEW."effect" <> 'ALLOW'::"core"."PermissionGrantEffect" THEN
+    RAISE EXCEPTION 'Organization custom roles may contain ALLOW grants only.'
+      USING ERRCODE = '23514';
+  END IF;
+
   RETURN NEW;
 END;
-$$;
+$;
 CREATE TRIGGER "role_permission_grant_immutable"
   BEFORE INSERT OR UPDATE OR DELETE ON "core"."role_permission_grant"
   FOR EACH ROW EXECUTE FUNCTION "core"."protect_role_permission_grant"();
