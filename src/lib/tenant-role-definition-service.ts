@@ -76,7 +76,8 @@ async function loadOrganizationGrantContext(
      LEFT JOIN "core"."permission_delegation_policy" dp
        ON dp."permission_definition_id" = pd."id"
      WHERE ra."revoked_at" IS NULL
-       AND ra."is_break_glass" = FALSE`,
+       AND ra."is_break_glass" = FALSE
+     FOR SHARE OF ra, om, rd, g`,
     [actorUserId, organizationId],
   );
 
