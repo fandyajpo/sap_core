@@ -311,3 +311,41 @@ The D1 and D6 jobs passed against isolated PostgreSQL CI databases. The D1 suite
 The pinned replay job recovered the exact eight-migration D14-A snapshot from commit `d27af783d3e9499a451331f720ec111e6b5e7049`, verified and executed D14-A, applied migration 9 as a staged upgrade, and then deployed all nine migrations to a separate fresh database before executing D14-B. Each stage's migration history/status assertions passed. This supersedes the earlier statement that a nine-migration staged-upgrade replay was not recorded, for this CI workflow and its disposable database.
 
 These results close those specific recorded test-execution gaps only. They do not validate application authorization, protected operations, RLS policies, pooled-session tenant context isolation, application-level tenant isolation, or hosted/production database state. **V04 remains BLOCKED** pending those remaining acceptance criteria; this plan does not promote the gate.
+
+## Provider-specific hosted verification limitation — Prisma Postgres
+
+**Decision (2026-11-09): retain Prisma Postgres as the hosted database provider.** This decision does not waive, reinterpret, or mark any V04 security acceptance criterion as passed.
+
+### Observed hosted result
+
+The read-only GitHub Actions run [42578458589](https://github.com/fandyajpo/sap_core/actions/runs/42578458589) reached the `runtime-role-flags` stage and reported the following sanitized role attributes for the configured `DATABASE_URL` connection:
+
+| Attribute | Observed value |
+|---|---:|
+| `rolsuper` | `true` |
+| `rolbypassrls` | `false` |
+| `rolcanlogin` | `true` |
+| `rolcreaterole` | `false` |
+| `rolcreatedb` | `false` |
+
+The workflow failed the existing assertion that the runtime role must not be a superuser. It stopped at that assertion; later catalog and policy checks did not run. The workflow uses a `BEGIN READ ONLY` transaction and rolls it back. This run made no database changes and does not establish the state of checks that were not reached.
+
+A PostgreSQL superuser bypasses permission checks, including row-level security. Therefore, `rolbypassrls = false` does not make a role with `rolsuper = true` safe for the V04 runtime-role contract.
+
+### Provider constraint and connection-string implications
+
+Prisma Postgres documents pooled and direct connection strings for the same database credential. The hostname differs, but the credentials/username are shared. Its documented connection credentials have full access to the database; they cannot be made read-only or restricted to selected tables, schemas, or PostgreSQL roles. See the official [Prisma Postgres connection documentation](https://www.prisma.io/docs/postgres/database/connecting-to-your-database).
+
+Consequently, switching `DATABASE_URL` between pooled and direct connection strings is not an established remedy for the observed superuser role. Do not claim that using the direct endpoint, pooled endpoint, or a newly generated Prisma Postgres connection string creates a least-privilege runtime role. Do not attempt undocumented role bootstrap or privilege changes on the hosted database.
+
+### Acceptance and security boundary
+
+- Keep Prisma Postgres as the selected hosted provider.
+- Keep the V04 runtime-role assertions unchanged: runtime must not be a superuser, must not have `BYPASSRLS`, must be able to log in, and must not own or inherit ownership of protected tables.
+- Do not weaken, skip, conditionally bypass, or relabel those assertions to obtain a green workflow.
+- Keep hosted V04 acceptance **BLOCKED**. The current hosted run proves only that the configured credential is superuser and that the workflow stopped at the runtime-role gate; it does not prove the remaining hosted checks.
+- Do not claim database-enforced RLS isolation against a connection credential that is a superuser. RLS remains part of the intended design and CI validation, but its protection against this hosted credential is not established.
+- Do not perform DDL, create or alter roles, change grants, change credentials, apply migrations, or otherwise modify the hosted database as part of this documentation decision.
+- Keep the disposable CI results and their bounded scope intact. They do not substitute for hosted least-privilege evidence.
+
+Any future change to this conclusion requires new provider-supported evidence and an explicit owner-approved security decision. Until then, report the hosted role-contract check as **BLOCKED**, not PASS.
