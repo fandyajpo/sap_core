@@ -339,6 +339,34 @@ test("D7 role assignments enforce typed scope, explicit inheritance, break-glass
        VALUES ($1, $2, $3, 'ORGANIZATION'::"core"."RoleScope")`,
       [randomUUID(), fixture.companyMembershipId, fixture.roleDefinitions.ORGANIZATION],
     ));
+
+    // D14-A: exercise both database-level scope guards on the Organization table.
+    await assertDatabaseRejects(() => client.query(
+      `INSERT INTO "core"."organization_role_assignment"
+         ("id", "organizationMembershipId", "roleDefinitionId", "role_scope")
+       VALUES ($1, $2, $3, 'COMPANY'::"core"."RoleScope")`,
+      [randomUUID(), fixture.organizationMembershipId, fixture.roleDefinitions.COMPANY],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `INSERT INTO "core"."organization_role_assignment"
+         ("id", "organizationMembershipId", "roleDefinitionId", "role_scope")
+       VALUES ($1, $2, $3, 'ORGANIZATION'::"core"."RoleScope")`,
+      [randomUUID(), fixture.organizationMembershipId, fixture.roleDefinitions.COMPANY],
+    ));
+
+    // D14-A: exercise both database-level scope guards on the Plant table.
+    await assertDatabaseRejects(() => client.query(
+      `INSERT INTO "core"."plant_role_assignment"
+         ("id", "plantAssignmentId", "roleDefinitionId", "role_scope")
+       VALUES ($1, $2, $3, 'COMPANY'::"core"."RoleScope")`,
+      [randomUUID(), fixture.plantAssignmentId, fixture.roleDefinitions.PLANT],
+    ));
+    await assertDatabaseRejects(() => client.query(
+      `INSERT INTO "core"."plant_role_assignment"
+         ("id", "plantAssignmentId", "roleDefinitionId", "role_scope")
+       VALUES ($1, $2, $3, 'PLANT'::"core"."RoleScope")`,
+      [randomUUID(), fixture.plantAssignmentId, fixture.roleDefinitions.COMPANY],
+    ));
   });
 
   await t.test("role grants require an injected authorization decision", async () => {
