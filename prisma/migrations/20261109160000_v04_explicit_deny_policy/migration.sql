@@ -76,6 +76,68 @@ CREATE INDEX "tenant_deny_policy_active_lookup_idx"
   ON "core"."tenant_deny_policy" ("organization_id", "target_membership_id", "scope", "company_id", "plant_id", "permission_definition_id")
   WHERE "revoked_at" IS NULL;
 
+-- Validate the target membership lifecycle and approved permission/scope
+-- compatibility at the persistence boundary as well as in the service.
+CREATE FUNCTION "core"."validate_tenant_deny_policy_insert"()
+RETURNS trigger LANGUAGE plpgsql AS $
+DECLARE
+  target_status "core"."OrganizationMembershipStatus";
+  permission_code TEXT;
+BEGIN
+  SELECT "status" INTO target_status
+  FROM "core"."organization_membership"
+  WHERE "id" = NEW."target_membership_id"
+    AND "userId" = NEW."target_user_id"
+    AND "organizationId" = NEW."organization_id"
+  FOR SHARE;
+
+  IF NOT FOUND OR target_status NOT IN (
+    'ACTIVE'::"core"."OrganizationMembershipStatus",
+    'SUSPENDED'::"core"."OrganizationMembershipStatus"
+  ) THEN
+    RAISE EXCEPTION 'DENY policy target must be an active or suspended membership in the same Organization.'
+      USING ERRCODE = '23514';
+  END IF;
+
+  SELECT "code" INTO permission_code
+  FROM "core"."permission_definition"
+  WHERE "id" = NEW."permission_definition_id";
+
+  IF permission_code NOT IN (
+    'organization.read', 'organization.update',
+    'organization.members.read', 'organization.members.manage',
+    'company.read', 'company.manage', 'company.members.manage',
+    'plant.read', 'plant.manage', 'plant.assignments.manage',
+    'roles.read', 'roles.create', 'roles.revise', 'roles.assign'
+  ) THEN
+    RAISE EXCEPTION 'Permission is not DENY-eligible under the approved first-iteration allowlist.'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF (
+    permission_code LIKE 'organization.%'
+    OR permission_code IN ('roles.create', 'roles.revise')
+  ) AND NEW."scope" <> 'ORGANIZATION'::"core"."RoleScope" THEN
+    RAISE EXCEPTION 'Permission is incompatible with the requested exact DENY scope.'
+      USING ERRCODE = '23514';
+  ELSIF permission_code LIKE 'company.%'
+    AND NEW."scope" <> 'COMPANY'::"core"."RoleScope" THEN
+    RAISE EXCEPTION 'Permission is incompatible with the requested exact DENY scope.'
+      USING ERRCODE = '23514';
+  ELSIF permission_code LIKE 'plant.%'
+    AND NEW."scope" NOT IN ('COMPANY'::"core"."RoleScope", 'PLANT'::"core"."RoleScope") THEN
+    RAISE EXCEPTION 'Permission is incompatible with the requested exact DENY scope.'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NEW;
+END;
+$;
+
+CREATE TRIGGER "tenant_deny_policy_insert_guard"
+  BEFORE INSERT ON "core"."tenant_deny_policy"
+  FOR EACH ROW EXECUTE FUNCTION "core"."validate_tenant_deny_policy_insert"();
+
 CREATE TABLE "core"."tenant_deny_audit_event" (
   "id" UUID NOT NULL,
   "policy_id" UUID,
