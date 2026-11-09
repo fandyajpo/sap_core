@@ -4,9 +4,9 @@
 
 **Repository and disposable-CI acceptance:** PASS  
 **Hosted/production acceptance:** BLOCKED pending separate approval and provider verification.  
-**Audited main baseline:** `35e3686e0d22ba0362ae39b634a653de06066204` (after PR #63).  
+**Audited main baseline:** `31aa3f96c12914046c85d380d40b17458514c616` (after PR #64).  
 **Session implementation:** PR #62 merged at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; [CI run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667), all 8 jobs passed.  
-**Adversarial session tests:** PR #64 head `e161ee2cca296a0baf0ff88337bdd5be660f0402`; [CI run #42597914590](https://github.com/fandyajpo/sap_core/actions/runs/42597914590), all 8 jobs passed. PR #64 is pending merge.  
+**Adversarial session tests:** [PR #64](https://github.com/fandyajpo/sap_core/pull/64) merged at `31aa3f96c12914046c85d380d40b17458514c616`; head `0d52fcb8a77215d2150e155e1543b7b550b56024` (see merge commit for exact tree). [CI run #42597914590](https://github.com/fandyajpo/sap_core/actions/runs/42597914590) passed all eight jobs on the PR head. The merged `main` baseline now includes this test suite and its evidence.  
 **Database boundary:** Disposable PostgreSQL CI was used. No hosted database was connected to, inspected, migrated, seeded, or modified.
 
 ## Executive summary
@@ -78,6 +78,6 @@ The repository and disposable CI boundary are verified. The owner-approved permi
 
 The owner-approved implementation is merged at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; [PR #62 CI run #42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs. The session lock revalidates the exact Better Auth session ID/user ID and database expiry, then holds `FOR SHARE` before tenant GUCs and protected authorization/work. This covers Organization member reads, Company/Plant reads, custom-role operations and role-assignment GET/POST.
 
-[PR #64](https://github.com/fandyajpo/sap_core/pull/64) adds real Better Auth HTTP request-first/sign-out ordering, sign-out-first denial and stale-cookie rejection, injected backend termination during session-lock acquisition (HTTP 500; session remains valid), and PostgreSQL session-lock pool reuse. [CI run #42597914590](https://github.com/fandyajpo/sap_core/actions/runs/42597914590) passed all eight jobs on PR #64 head `e161ee2cca296a0baf0ff88337bdd5be660f0402`. The evidence is on the PR branch pending merge; no claim is made that PR #64 is already on main.
+[PR #64](https://github.com/fandyajpo/sap_core/pull/64) adds real Better Auth HTTP request-first/sign-out ordering, sign-out-first denial and stale-cookie rejection, injected backend termination during session-lock acquisition (HTTP 500; session remains valid), and PostgreSQL session-lock pool reuse. [CI run #42597914590](https://github.com/fandyajpo/sap_core/actions/runs/42597914590) passed all eight jobs on PR #64 head `e161ee2cca296a0baf0ff88337bdd5be660f0402`. PR #64 is merged to `main` at `31aa3f96c12914046c85d380d40b17458514c616`; CI run #42598741970 passed all eight jobs on the final PR head `0d52fcb8a77215d2150e155e1543b7b550f0402`.
 
 Repository/disposable-CI session-revocation acceptance for the implemented API slice is PASS. V04 overall remains BLOCKED because hosted runtime-role provisioning, grants, deployment secrets, hosted migration and production smoke test remain NOT VERIFIED. No hosted database was accessed or modified.
