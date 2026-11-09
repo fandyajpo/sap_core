@@ -529,3 +529,22 @@ Transactional behavior passed on both targets: valid PlantAssignment insertion; 
 The direct User FK was not separately tested with a nonexistent User or direct User parent update/delete. No isolated organizationId-only tuple mismatch or concurrency schedule was run. D6 lifecycle and partial-unique status semantics remain separate evidence. See [V04.6 X05/D13 execution record](v04.6-x05-d13-referential-integrity-execution-record-2026-11-09.md) for exact target identities and test boundaries.
 
 **Case register:** D5, X01/D9, X02/D10, X03/D11, X04/D12, and X05/D13 = BOUNDED PASS. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. This is evidence reconciliation only; no schema, migration, policy, or gate state changed.
+
+## Hosted Prisma Postgres limitation — documentation only
+
+**Owner decision (2026-11-09): retain Prisma Postgres.** This note records a hosted verification limitation; it does not authorize database operations or change any acceptance criteria.
+
+The read-only hosted verification run [42578458589](https://github.com/fandyajpo/sap_core/actions/runs/42578458589) reported `rolsuper = true`, `rolbypassrls = false`, `rolcanlogin = true`, `rolcreaterole = false`, and `rolcreatedb = false` for the configured connection. It stopped at the existing non-superuser assertion in `runtime-role-flags`; later catalog and policy checks did not execute. The workflow's inspection transaction is read-only and rolled back.
+
+A PostgreSQL superuser bypasses RLS regardless of the `rolbypassrls` attribute. Do not interpret the false `rolbypassrls` value as evidence that RLS protects data from this credential.
+
+Prisma Postgres documents pooled and direct connection strings as endpoints for the same database credentials. Its connection credentials have full database access and cannot be restricted to selected tables, schemas, or PostgreSQL roles. Changing between pooled and direct URLs is therefore not an established fix for the observed role. See [Prisma Postgres connection documentation](https://www.prisma.io/docs/postgres/database/connecting-to-your-database).
+
+**Operational boundary:**
+- Keep the runtime-role assertions unchanged; do not weaken or skip them.
+- Keep hosted V04 acceptance **BLOCKED**. The observed run establishes only the superuser role condition and does not establish the remaining checks.
+- Do not run DDL, create/alter roles, change grants or credentials, apply migrations, or otherwise modify the hosted database to work around this result.
+- Do not claim database-enforced RLS isolation against the hosted superuser credential.
+- Disposable local/CI evidence remains bounded to its own test environment and is not hosted least-privilege evidence.
+
+Any future change requires provider-supported evidence and a separate explicit owner-approved security decision. This note is documentation only and does not authorize execution.
