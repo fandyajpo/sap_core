@@ -180,7 +180,7 @@ Also verify the role can connect to the intended database and can establish a re
 Repository behavior today:
 
 - `src/lib/prisma.ts` uses `DATABASE_URL` for the application.
-- `prisma.config.ts` uses `MIGRATION_DATABASE_URL` when set, but currently falls back to `DATABASE_URL` if it is absent.
+- `prisma.config.ts` requires `MIGRATION_DATABASE_URL` for Prisma CLI commands and does not fall back to `DATABASE_URL`.
 
 Deployment rules:
 
