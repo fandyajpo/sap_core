@@ -60,7 +60,8 @@ Because the hosted database credential has full access, every tenant-facing oper
 
 Required invariants:
 - Resolve the actor only from a verified Better Auth session.
-- Revalidate the exact session row and expiry inside the protected transaction when the operation depends on session validity.
+- Revalidate and hold a shared lock on the exact session row and expiry inside the protected transaction.
+- Hold shared locks on the active Organization membership and validated Company/Plant ancestry rows until the protected transaction completes, so concurrent suspension or ancestry changes serialize with the protected operation.
 - Derive actor identity server-side; reject caller-supplied actor identity fields.
 - Verify active Organization membership before accessing tenant resources.
 - Verify Company belongs to the requested Organization and Plant belongs to both the requested Company and Organization.
@@ -80,6 +81,8 @@ The following code paths were inspected on `main`:
 - `requireTenantPermission` locks/revalidates the Better Auth session, sets transaction-local actor context, resolves active membership and target ancestry, loads persisted grants, and evaluates the requested permission.
 - Organization member, Company, Plant, Organization role listing, custom role create/revise, and role-assignment adapters use server-derived sessions and/or transaction-bound authorization.
 - `createSessionBoundScopedAccessDatabase` binds the exact session identity and locks the session row in the same transaction.
+- Tenant target resolution now holds shared locks on the active Organization membership, Company row, and Plant plus parent Company rows while the protected query runs.
+- Custom role create/revise authorization holds a shared lock on the acting user's active Organization membership through commit.
 - `scopedAccessDatabase` is also exported as an unbound adapter from `src/lib/scoped-access.ts`. No use of this export was established in the limited inspection. It must remain unused by tenant request paths; complete call-site inventory and static enforcement are still required before declaring the audit complete.
 
 This document is not a claim that every application call-site or every adversarial HTTP path has been exhaustively audited. The unbound `scopedAccessDatabase` export was removed from `src/lib/scoped-access.ts` in this change; production code must use `createSessionBoundScopedAccessDatabase` and still apply operation-specific authorization. Complete the remaining checks before production traffic:
