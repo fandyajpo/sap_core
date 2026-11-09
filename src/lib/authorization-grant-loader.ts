@@ -46,13 +46,13 @@ async function lockAuthorizationGrantRows(
   tx: Prisma.TransactionClient,
   context: TenantTargetContext,
 ): Promise<void> {
-  await tx.$queryRaw\`
+  await tx.$queryRaw`
     SELECT ra."id"
     FROM "core"."organization_role_assignment" ra
     JOIN "core"."organization_membership" om
       ON om."id" = ra."organizationMembershipId"
-     AND om."userId" = \${context.userId}
-     AND om."organizationId" = \${context.organizationId}::uuid
+     AND om."userId" = ${context.userId}
+     AND om."organizationId" = ${context.organizationId}::uuid
      AND om."status" = 'ACTIVE'
     JOIN "core"."role_definition" rd
       ON rd."id" = ra."roleDefinitionId"
@@ -63,17 +63,17 @@ async function lockAuthorizationGrantRows(
     JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
     WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
     FOR SHARE OF ra, om, rd, g
-  \`;
+  `;
 
   if (context.scope === "COMPANY" || context.scope === "PLANT") {
-    await tx.$queryRaw\`
+    await tx.$queryRaw`
       SELECT ra."id"
       FROM "core"."company_role_assignment" ra
       JOIN "core"."company_membership" cm
         ON cm."id" = ra."companyMembershipId"
-       AND cm."userId" = \${context.userId}
-       AND cm."organizationId" = \${context.organizationId}::uuid
-       AND cm."companyId" = \${context.companyId}::uuid
+       AND cm."userId" = ${context.userId}
+       AND cm."organizationId" = ${context.organizationId}::uuid
+       AND cm."companyId" = ${context.companyId}::uuid
        AND cm."status" = 'ACTIVE'
       JOIN "core"."organization_membership" om
         ON om."id" = cm."organizationMembershipId"
@@ -90,19 +90,19 @@ async function lockAuthorizationGrantRows(
       JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
       WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
       FOR SHARE OF ra, cm, om, rd, g
-    \`;
+    `;
   }
 
   if (context.scope === "PLANT") {
-    await tx.$queryRaw\`
+    await tx.$queryRaw`
       SELECT ra."id"
       FROM "core"."plant_role_assignment" ra
       JOIN "core"."plant_assignment" pa
         ON pa."id" = ra."plantAssignmentId"
-       AND pa."userId" = \${context.userId}
-       AND pa."organizationId" = \${context.organizationId}::uuid
-       AND pa."companyId" = \${context.companyId}::uuid
-       AND pa."plantId" = \${context.plantId}::uuid
+       AND pa."userId" = ${context.userId}
+       AND pa."organizationId" = ${context.organizationId}::uuid
+       AND pa."companyId" = ${context.companyId}::uuid
+       AND pa."plantId" = ${context.plantId}::uuid
        AND pa."status" = 'ACTIVE'
       JOIN "core"."company_membership" cm
         ON cm."id" = pa."companyMembershipId"
@@ -125,7 +125,7 @@ async function lockAuthorizationGrantRows(
       JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
       WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
       FOR SHARE OF ra, pa, cm, om, rd, g
-    \`;
+    `;
   }
 }
 
@@ -134,7 +134,6 @@ export async function loadAuthorizationGrants(
   context: TenantTargetContext,
 ): Promise<LoadedAuthorizationGrants> {
   const actorUserId = context.userId;
-  await lockAuthorizationGrantRows(tx, context);
   if (context.scope !== "ORGANIZATION" && context.scope !== "COMPANY" && context.scope !== "PLANT") {
     throw new AuthorizationGrantLoadError("The tenant target scope is invalid.");
   }
@@ -145,6 +144,7 @@ export async function loadAuthorizationGrants(
     throw new AuthorizationGrantLoadError("A Plant target requires a Plant identifier.");
   }
 
+  await lockAuthorizationGrantRows(tx, context);
   const rows = await tx.$queryRaw<PersistedGrantRow[]>`
     SELECT ra."id"::text AS "assignmentId", rd."id"::text AS "roleDefinitionId",
       rd."code" AS "roleCode", rd."kind"::text AS "roleKind",
