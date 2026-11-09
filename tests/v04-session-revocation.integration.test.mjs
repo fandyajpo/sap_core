@@ -63,18 +63,17 @@ test("request-first row lock makes session revocation wait and then complete wit
     assert.equal(locked.rowCount, 1);
 
     await revokeClient.query("BEGIN");
+    const revokeBackend = await revokeClient.query("SELECT pg_backend_pid() AS pid");
+    const revokePid = revokeBackend.rows[0].pid;
     const revokePromise = revokeClient.query('DELETE FROM "core"."session" WHERE "id" = $1', [sessionId]);
     let waitingForLock = false;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      // Inspect the backend executing the DELETE; it must be blocked by FOR SHARE.
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      // Inspect the exact backend executing the DELETE; it must be blocked by FOR SHARE.
       const lockWait = await pool.query(
-        `SELECT wait_event_type
+        `SELECT wait_event_type, wait_event, state
            FROM pg_stat_activity
-          WHERE datname = current_database()
-            AND query ILIKE '%DELETE FROM "core"."session"%'
-            AND state = 'active'
-          ORDER BY query_start DESC
-          LIMIT 1`,
+          WHERE pid = $1`,
+        [revokePid],
       );
       if (lockWait.rows[0]?.wait_event_type === "Lock") {
         waitingForLock = true;
