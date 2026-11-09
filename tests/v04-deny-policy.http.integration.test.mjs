@@ -42,7 +42,7 @@ function sessionCookie(response) {
   return cookies.map(value => value.split(";", 1)[0]).filter(Boolean).join("; ");
 }
 
-async function createActor(label, roleCode) {
+async function createActor(label, roleCode, existingOrganizationId) {
   const email = `${prefix}${label}@example.test`;
   const signup = await authRequest("/sign-up/email", {
     method: "POST",
@@ -54,14 +54,15 @@ async function createActor(label, roleCode) {
   assert.equal(typeof userId, "string");
   const cookie = sessionCookie(signup);
   assert.match(cookie, /session_token=/);
-  const organizationId = randomUUID();
+  const organizationId = existingOrganizationId ?? randomUUID();
   const membershipId = randomUUID();
-  organizationIds.push(organizationId);
-
-  await pool.query(
-    'INSERT INTO "core"."organization" ("id","created_at","updated_at") VALUES ($1,NOW(),NOW())',
-    [organizationId],
-  );
+  if (!existingOrganizationId) {
+    organizationIds.push(organizationId);
+    await pool.query(
+      'INSERT INTO "core"."organization" ("id","created_at","updated_at") VALUES ($1,NOW(),NOW())',
+      [organizationId],
+    );
+  }
   await pool.query(
     `INSERT INTO "core"."organization_membership"
        ("id","userId","organizationId","status","created_at","updated_at")
@@ -115,8 +116,8 @@ after(async () => {
 
 test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke", async () => {
   const owner = await createActor("owner", "ORG_OWNER");
-  const target = await createActor("target", "ORG_MEMBER");
-  const admin = await createActor("admin", "ORG_ADMIN");
+  const target = await createActor("target", "ORG_MEMBER", owner.organizationId);
+  const admin = await createActor("admin", "ORG_ADMIN", owner.organizationId);
 
   const input = {
     targetMembershipId: target.membershipId,
@@ -166,7 +167,7 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
 
 test("concurrent real HTTP creates for the same membership/scope yield one policy and one conflict", async () => {
   const owner = await createActor("concurrent-owner", "ORG_OWNER");
-  const target = await createActor("concurrent-target", "ORG_MEMBER");
+  const target = await createActor("concurrent-target", "ORG_MEMBER", owner.organizationId);
   const input = {
     targetMembershipId: target.membershipId,
     permissionCode: "organization.read",
