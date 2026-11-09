@@ -1,11 +1,11 @@
 # V04 Explicit DENY Governance Design
 
-**Status:** `PROPOSAL — NOT OWNER-APPROVED`  
+**Status:** `OWNER-APPROVED POLICY BASELINE — IMPLEMENTATION NOT APPROVED`  
 **Date:** 2026-11-09  
 **Base:** `main` after PR #69 merge (`31c0b0a7658df64470a60f7d3374d4f3b1af7593`)  
 **Scope:** Tenant-administration authorization for Organization, Company and Plant. ERP operational permissions remain out of scope.
 
-> This document proposes governance and an implementation boundary. It does not authorize schema changes, migrations, permission seeding, service/API implementation, RLS changes, hosted database access, or production rollout. Those require a separate explicit owner decision.
+> The owner has approved the seven governance recommendations in §10 as the policy baseline. This approval does not authorize schema changes, migrations, permission seeding, service/API implementation, RLS changes, hosted database access, or production rollout. Those require separate review and explicit approval.
 
 ## 1. Why a separate governance decision is required
 
@@ -51,7 +51,7 @@ A DENY is not a negative role, does not grant any other permission, and must not
 
 ### 4.1 Who may issue or revoke
 
-**Recommendation:** only an active `ORG_OWNER` may create or revoke tenant DENY records within their own Organization.
+**Approved:** only an active `ORG_OWNER` may create or revoke tenant DENY records within their own Organization.
 
 - `ORG_ADMIN`, Company Admin, Plant Manager, custom-role creators, and ordinary members cannot issue or revoke DENY.
 - An Organization Owner cannot affect another Organization or any platform-level principal.
@@ -59,22 +59,22 @@ A DENY is not a negative role, does not grant any other permission, and must not
 - The target must be an active or suspended membership in the same Organization. Revoked/ended membership is not a valid target for a new DENY.
 - Issuing or revoking a DENY is a privileged policy-administration action, not `roles.assign` and not custom-role authoring.
 
-**Open owner decision:** whether the owner-only rule is sufficient or whether a second independent Organization Owner approval is required for high-impact restrictions.
+**Decision:** owner-only approval is the selected baseline. A second independent Organization Owner approval is not required by this policy baseline; it may be reconsidered only through a separate policy revision.
 
 ### 4.2 Who may be targeted
 
-**Recommendation:** target one specific Organization membership at a time, not an entire role definition or every holder of a role.
+**Approved:** target one specific Organization membership at a time, not an entire role definition or every holder of a role.
 
 Why:
 - A role-level DENY changes behavior for every assignee and makes the impact of a role revision difficult to reason about.
 - A principal-specific DENY is attributable, reviewable, and independently revocable.
 - The target membership anchors the restriction to one Organization and avoids cross-tenant ambiguity.
 
-A target membership change or reactivation must not silently transfer a DENY to a different membership. The policy lifecycle must explicitly define what happens when a membership is revoked and later recreated.
+A DENY is bound to its specific target membership. It does not transfer to a different or newly created membership, including when the same user later rejoins the Organization. A new membership requires a new, explicit DENY if the restriction is still warranted. A revoked/ended target membership makes the existing DENY historical/inactive; preserve its audit history.
 
 ### 4.3 Scope semantics
 
-**Recommendation:** exact-scope only, matching the current strict-scope baseline.
+**Approved:** exact-scope only, matching the current strict-scope baseline.
 
 - Organization DENY applies only to the Organization target.
 - Company DENY applies only to that Company, after verifying it belongs to the target Organization.
@@ -88,7 +88,7 @@ If an Organization-wide restriction is required, it must be represented as an Or
 
 ### 4.4 Permission eligibility
 
-**Recommendation:** DENY may refer only to known, explicitly approved tenant-administration permissions in the permission catalog.
+**Approved:** DENY may refer only to known, explicitly approved tenant-administration permissions in the permission catalog, using a centrally reviewed allowlist.
 
 - Reject unknown permission identifiers.
 - Reject platform permissions and any future operational permission until separately governed.
@@ -96,20 +96,20 @@ If an Organization-wide restriction is required, it must be represented as an Or
 - Keep a centrally reviewed deny-eligibility allowlist; a permission being ALLOW-delegable does not automatically make it DENY-eligible.
 - Do not allow DENY to bypass authentication, session validation, membership validation, tenant-boundary checks, or platform security controls.
 
-**Open owner decision:** define which current tenant-administration permissions are DENY-eligible and which are protected against DENY to avoid administrative lockout. The initial implementation should not guess this list.
+**Deferred detail:** define the concrete permission codes that are DENY-eligible and which are protected against DENY to avoid administrative lockout. This allowlist must be reviewed and approved before implementation; the initial implementation must not guess it.
 
 ### 4.5 Reason, duration, and lifecycle
 
-**Recommendation:**
+**Approved:**
 - Require a non-empty reason for every create and revoke action.
-- Support an optional expiry timestamp; require expiry for high-impact restrictions if the owner chooses that rule.
+- Expiry is optional; when supplied, it is evaluated against the database clock. No mandatory-expiry exception is part of this baseline.
 - A DENY is effective only while active, not revoked, and not expired.
 - Revocation is a new auditable event; do not delete or rewrite historical evidence.
 - Replacing a DENY requires an explicit revoke followed by a new create, each with its own reason and audit event.
 - Expiry is evaluated server-side against the database clock, not a browser clock.
 - No background job is required for correctness if expired records are ignored at read time; a cleanup/archive job must not be part of the authorization boundary.
 
-**Open owner decision:** whether expiry is mandatory for all DENYs, mandatory only for selected permissions, or optional.
+**Decision:** expiry is optional under the approved baseline.
 
 ## 5. Persistence boundary — conceptual only
 
@@ -159,7 +159,7 @@ Minimum event data proposed:
 
 Never log session tokens, OAuth tokens, database credentials, raw request secrets, or unnecessary personal data.
 
-Audit records should be append-only to application services. Corrections are compensating events, not edits to prior events. Read access to DENY policy and audit history must itself be authorized and logged.
+Audit records must be append-only to application services. Corrections are compensating events, not edits to prior events. Read access to DENY policy and audit history must itself be authorized and logged. The concrete reader roles and retention period remain deferred operational details and must be approved before implementation/production use.
 
 ## 7. Transaction and concurrency requirements
 
@@ -199,27 +199,39 @@ Every test must exercise the real HTTP/service boundary as appropriate and use d
 
 ## 9. Rollout sequence if approved
 
-1. Owner approves the governance decisions in §10.
-2. Version this policy proposal as an approved policy document.
-3. Specify a database migration and backfill strategy separately; no existing role grants should be reinterpreted implicitly.
-4. Implement server-only policy repository/service and transaction locks.
-5. Integrate DENY loading into the common authorization path without weakening current checks.
-6. Add HTTP and PostgreSQL concurrency tests.
-7. Update runbook and threat model.
-8. Validate local suite and CI.
-9. Review audit visibility, operational recovery, and hosted provider constraints.
-10. Obtain explicit production rollout approval before any hosted DB change.
+1. The seven governance principles in §10 have owner approval.
+2. Resolve the deferred permission allowlist and audit retention/reader details before implementation.
+3. Version this policy as the approved governance baseline.
+4. Specify a database migration and backfill strategy separately; no existing role grants should be reinterpreted implicitly.
+5. Implement server-only policy repository/service and transaction locks.
+6. Integrate DENY loading into the common authorization path without weakening current checks.
+7. Add HTTP and PostgreSQL concurrency tests.
+8. Update runbook and threat model.
+9. Validate local suite and CI.
+10. Review audit visibility, operational recovery, and hosted provider constraints.
+11. Obtain explicit production rollout approval before any hosted DB change.
 
-## 10. Owner decisions required before implementation
+## 10. Owner-approved governance decisions
 
-These are intentionally unresolved. Do not infer approval from this proposal.
+The owner explicitly approved all seven recommended governance principles on 2026-11-09. The approved baseline is:
 
-1. **Issuer authority:** owner-only, or owner plus a second independent approver for high-impact DENYs?
-2. **Target model:** one specific Organization membership (recommended), or role-wide restrictions?
-3. **Scope:** exact-scope only (recommended), or any deliberate descendant propagation?
-4. **Permission eligibility:** which tenant-administration permissions may be denied, and which must be protected from DENY to prevent lockout?
-5. **Expiry:** optional, mandatory for all, or mandatory only for selected permissions?
-6. **Membership lifecycle:** should a DENY become permanently historical/inactive when its target membership is revoked, and must a newly created membership require a new DENY?
-7. **Audit retention and review:** who can read the audit trail and what retention period is required?
+1. **Issuer authority — approved:** only an active `ORG_OWNER` may create or revoke DENY records within their own Organization. No second independent approver is required by this baseline.
+2. **Target model — approved:** each DENY targets one specific Organization membership, never a role or all holders of a role.
+3. **Scope — approved:** exact-scope only (Organization, Company, or Plant); no implicit inheritance or descendant propagation.
+4. **Permission eligibility — approved in principle:** only known tenant-administration permissions on a centrally reviewed allowlist may be denied. The concrete permission-code allowlist and protected permissions remain to be specified and approved before implementation.
+5. **Expiry — approved:** expiry is optional. When present, it is evaluated using the database clock.
+6. **Membership lifecycle — approved:** DENY is bound to the exact membership, does not transfer to a newly created membership, and becomes historical/inactive when its target membership is revoked/ended. A new membership requires a new explicit DENY.
+7. **Audit — approved:** append-only audit events; access to policy/audit history must be authorized and logged. Concrete reader roles and retention period remain to be specified before implementation/production use.
 
-Until these decisions are explicitly approved, keep DENY write paths unavailable. Existing evaluator and loader support is not authorization to create persisted DENY records.
+### Explicitly not approved
+
+This policy approval is not authorization to implement or deploy. The following remain gated:
+
+- final permission-code allowlist and lockout-protected permissions;
+- detailed audit reader roles and retention period;
+- schema/migration/backfill design;
+- service/API implementation and UI;
+- RLS changes;
+- hosted database changes or production rollout.
+
+Existing evaluator and loader support is not authorization to create persisted DENY records. Keep DENY write paths unavailable until the deferred details are resolved, an implementation plan is reviewed, and implementation is separately approved.
