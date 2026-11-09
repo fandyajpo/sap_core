@@ -11,7 +11,7 @@ The project owner selected all three policy options:
 
 | Decision | Approved choice | Normative rule |
 |---|---|---|
-| Scope inheritance | `strict` | No role or permission is inherited automatically from Organization to Company or Plant. A principal needs an active membership/assignment and a role assignment at the target scope. |
+| Scope inheritance | `strict` | No role or permission is inherited automatically from Organization to Company or Plant. Company/Plant operational permissions require active membership/assignment and a role assignment at that exact scope. Explicit Organization-scoped administrative permissions in the matrix may administer child-scope structure and membership only; they are not inherited operational access. |
 | Organization Admin authority | `manage` | `ORG_ADMIN` may administer tenant structure and membership within the Organization, including Company/Plant administration, but does not receive operational permissions in every Company or Plant. |
 | Custom-role delegation | `subset` | A custom role may contain only permissions the creator is authorized to delegate at that role's scope. It cannot expand the creator's authority. |
 
@@ -60,7 +60,7 @@ This catalog deliberately excludes operational permissions. A new permission req
 
 ## 4. Built-in tenant roles and permission matrix
 
-Legend: ✓ = granted by this baseline; — = not granted. A role assignment is valid only when the principal also has the corresponding active membership/assignment at that scope.
+Legend: ✓ = granted by this baseline; — = not granted. Company/Plant operational role assignments require the corresponding active membership/assignment. The Organization roles' explicit child-administration grants are a narrow exception: they authorize only the listed administrative operations against descendants of that Organization, after verifying the target's parent chain; they do not create Company membership, Plant assignment or operational access.
 
 | Permission | ORG_OWNER | ORG_ADMIN | ORG_MEMBER | COMPANY_ADMIN | COMPANY_MEMBER | PLANT_MANAGER | PLANT_OPERATOR | PLANT_VIEWER |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -102,8 +102,9 @@ The Company and Plant role names do not themselves create Company membership or 
 - An Organization role applies only to Organization-scoped permissions explicitly listed for that role.
 - A Company role applies only to the assigned Company. It does not apply to sibling Companies.
 - A Plant role applies only to the assigned Plant. It does not apply to sibling Plants or other Companies.
-- An Organization administrator may administer Company/Plant structure because the matrix explicitly grants those administrative permissions; this is not inherited operational access.
-- To perform an action at Company or Plant scope, the actor must satisfy that scope's membership/assignment and authorization checks. Organization role membership alone is insufficient.
+- An Organization administrator may administer Company/Plant structure and memberships only for descendants of that Organization because the matrix explicitly grants those child-administration permissions. This is a direct, narrow Organization-level administrative grant, not permission inheritance.
+- Company/Plant operational actions require the actor's active membership/assignment and role at the exact target scope. Organization role membership alone is insufficient for operational access.
+- Every child-administration operation must verify the target Company/Plant belongs to the actor's Organization and must not expose operational data or actions.
 
 ### Custom roles
 
