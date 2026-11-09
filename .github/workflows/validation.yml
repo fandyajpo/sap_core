@@ -37,6 +37,7 @@ jobs:
       - run: pnpm test:authorization-policy
       - run: pnpm test:organization-members-reader
       - run: pnpm test:v04-transaction-boundary
+      - run: pnpm test:v04-session-revocation -- --test-name-pattern='verified session lock|tenant permission locks|tenant role assignment|session-bound adapter'
       - run: pnpm test:v04-role-assignment
       - run: pnpm test:v04-role-assignment-production
 
