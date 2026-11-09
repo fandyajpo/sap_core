@@ -5,7 +5,6 @@ import { getCurrentSession } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import { lockVerifiedSessionRow } from "@/lib/verified-session-lock";
 import { resolveTenantTargetContext } from "@/lib/tenant-target-context";
-import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
 import type { TenantScopeRequest } from "@/lib/tenant-scope-types";
 
 const denyEligiblePermissions = new Set([
