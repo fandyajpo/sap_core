@@ -259,7 +259,7 @@ model PlantAssignment {
   @@schema("core")
 }
 
-// Candidate catalog structure only; no permission catalog or grant matrix is implied.
+// Tenant Role Definitions own immutable, sealed permission snapshots.
 model RoleDefinition {
   id                      String                       @id @default(uuid()) @db.Uuid
   roleFamilyId            String?                      @map("role_family_id") @db.Uuid
@@ -280,6 +280,7 @@ model RoleDefinition {
   // Typed assignment matching, family version identity, and sealed permission snapshots.
   @@unique([id, scope], map: "role_definition_id_scope_key")
   @@unique([roleFamilyId, version], map: "role_definition_role_family_version_key")
+  @@unique([scope, code], where: raw("kind = 'SYSTEM'"), map: "role_definition_system_scope_code_key")
   @@index([ownerOrganizationId])
   @@map("role_definition")
   @@schema("core")
