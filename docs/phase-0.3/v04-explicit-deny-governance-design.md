@@ -2,7 +2,7 @@
 
 **Status:** `OWNER-APPROVED POLICY BASELINE — IMPLEMENTATION NOT APPROVED`  
 **Date:** 2026-11-09  
-**Base:** `main` after PR #69 merge (`31c0b0a7658df64470a60f7d3374d4f3b1af7593`)  
+**Base:** `main` after PR #70 merge (`79ea84571375b529a1f53a90617e41c8d30846e2`)  
 **Scope:** Tenant-administration authorization for Organization, Company and Plant. ERP operational permissions remain out of scope.
 
 > The owner has approved the seven governance recommendations in §10, including the initial 14-permission DENY allowlist with `audit.read` protected for the first iteration. This approval records policy only; it does not authorize schema changes, migrations, permission seeding, service/API implementation, RLS changes, hosted database access, or production rollout. Those require separate review and explicit approval.
@@ -179,7 +179,7 @@ Minimum event data proposed:
 
 Never log session tokens, OAuth tokens, database credentials, raw request secrets, or unnecessary personal data.
 
-Audit records must be append-only to application services. Corrections are compensating events, not edits to prior events. Read access to DENY policy and audit history must itself be authorized and logged. The concrete reader roles and retention period remain deferred operational details and must be approved before implementation/production use.
+Audit records must be append-only to application services. Corrections are compensating events, not edits to prior events. Read access to DENY policy and audit history must itself be authorized and logged. The concrete reader authorization and retention policy are owner-approved in §10.1.
 
 ## 7. Transaction and concurrency requirements
 
@@ -220,7 +220,7 @@ Every test must exercise the real HTTP/service boundary as appropriate and use d
 ## 9. Rollout sequence if approved
 
 1. The seven governance principles in §10, including the initial 14-permission allowlist and protected `audit.read`, have owner approval.
-2. Resolve the deferred audit retention/reader details before implementation.
+2. Record the owner-approved audit reader and retention decisions in §10.1.
 3. Version this policy as the approved governance baseline.
 4. Specify a database migration and backfill strategy separately; no existing role grants should be reinterpreted implicitly.
 5. Implement server-only policy repository/service and transaction locks.
@@ -241,13 +241,44 @@ The owner explicitly approved all seven governance principles on 2026-11-09. The
 4. **Permission eligibility — approved:** exactly 14 permission codes listed in §4.4 are DENY-eligible for the first iteration; `audit.read` is protected and not DENY-eligible. Future additions or changes require a separate policy revision and explicit owner approval.
 5. **Expiry — approved:** expiry is optional. When present, it is evaluated using the database clock.
 6. **Membership lifecycle — approved:** DENY is bound to the exact membership, does not transfer to a newly created membership, and becomes historical/inactive when its target membership is revoked/ended. A new membership requires a new explicit DENY.
-7. **Audit — approved:** append-only audit events; access to policy/audit history must be authorized and logged. Concrete reader roles and retention period remain to be specified before implementation/production use.
+7. **Audit — approved:** append-only audit events; access to policy/audit history must be authorized and logged. Reader authorization and retention are specified in §10.1.
+
+
+### 10.1 Owner-approved DENY audit access and retention decisions
+
+The owner explicitly approved both operational audit decisions on 2026-11-09. These decisions complete the deferred governance details; they do not authorize implementation.
+
+#### Reader authorization
+
+**Approved: `owner_only` — only an active `ORG_OWNER` may read DENY policy records and DENY audit history for their own Organization.**
+
+- The reader must be derived from the verified Better Auth session and must hold the active Organization membership and exact `ORG_OWNER` assignment required by the tenant authorization boundary.
+- `ORG_ADMIN`, Company Admin, Plant Manager, custom-role holders, ordinary members, and other tenant roles are not readers, even if they hold the general `audit.read` permission.
+- The general `audit.read` permission does not independently authorize access to DENY policy records or DENY audit history.
+- Organization isolation applies: an Owner may read only the records belonging to their own Organization.
+- Platform Admin or other platform-trust status does not create implicit access under this tenant policy. Any platform-level access path requires a separate owner-approved policy.
+- Successful and denied attempts to read DENY policy/audit history must themselves be attributable and logged. This requirement does not authorize an endpoint, service, or schema implementation.
+
+#### Retention
+
+**Approved: `3_years` for DENY audit events.**
+
+- DENY audit events are retained for three years from each event's database-recorded occurrence time.
+- Active DENY policy records remain available while active; the three-year audit-event retention rule does not expire or remove an active restriction.
+- For revoked or expired DENY policy records, preserve the policy's historical evidence and associated audit events for three years after the policy reaches its terminal state, subject to any applicable legal hold.
+- A legal hold suspends purge while it remains active.
+- Expiry of the retention period does not authorize ad hoc deletion. Any future purge/archive mechanism must be separately designed, access-controlled, auditable, and approved before implementation.
+- This three-year period is the owner's product policy decision; it is not a claim of universal statutory compliance. Applicable legal or contractual requirements may require a separate policy revision.
+
+#### Implementation boundary
+
+These decisions authorize documentation of the policy only. They do **not** authorize Prisma schema changes, migrations, backfills, permission seeding, service/API or UI implementation, RLS changes, hosted database access or modification, deployment, or production rollout. Each remains subject to separate review and explicit owner approval.
+
 
 ### Explicitly not approved
 
 This policy approval is not authorization to implement or deploy. The following remain gated:
 
-- detailed audit reader roles and retention period;
 - schema/migration/backfill design;
 - service/API implementation and UI;
 - RLS changes;
