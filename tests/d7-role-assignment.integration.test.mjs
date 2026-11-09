@@ -199,7 +199,7 @@ before(async () => {
       `UPDATE "core"."role_definition"
           SET "permissions_locked_at" = NOW()
         WHERE "id" = ANY($1::uuid[])`,
-      [...Object.values(fixture.roleDefinitions), fixture.unusedRoleDefinitionId],
+      [[...Object.values(fixture.roleDefinitions), fixture.unusedRoleDefinitionId]],
     );
   }
 });
