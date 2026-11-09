@@ -339,7 +339,10 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     ));
     await assertDatabaseRejects(() => client.query(
       `UPDATE "core"."role_permission_grant" SET "effect" = 'DENY'
-        WHERE "role_definition_id" = $1 LIMIT 1`,
+        WHERE "id" = (
+          SELECT "id" FROM "core"."role_permission_grant"
+          WHERE "role_definition_id" = $1 LIMIT 1
+        )`,
       [orgOwnerId],
     ));
     await assertDatabaseRejects(() => client.query(
