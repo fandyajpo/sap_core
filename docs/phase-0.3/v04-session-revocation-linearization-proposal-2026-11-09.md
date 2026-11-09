@@ -6,7 +6,7 @@
 **Adversarial test CI:** [Run #42597366143](https://github.com/fandyajpo/sap_core/actions/runs/42597366143), PR #64 head `03f1086293e7635aac6a8f1afb8629333144f8f9`, all eight jobs passed; PR #64 is pending merge.  
 **Better Auth version:** `1.7.17`; Prisma `7.10.1`.  
 **Scope:** Close the time-of-check/time-of-use gap between Better Auth session verification and the transaction that performs a protected tenant operation.  
-**Database boundary:** Source/schema review only. No database was connected to or modified.
+**Database boundary:** Session adversarial tests used disposable CI PostgreSQL only. No hosted database was connected to, inspected, or modified.
 
 ## 1. Problem
 
