@@ -132,6 +132,7 @@ jobs:
       CI_DATABASE_PORT: "55435"
       CI_DATABASE_NAME: sap_core_d7_test
       D7_ALLOW_DISPOSABLE_DB: "1"
+      V04_ALLOW_DISPOSABLE_DB: "1"
       D8_ALLOW_DISPOSABLE_DB: "1"
     steps:
       - uses: actions/checkout@v4
@@ -353,6 +354,7 @@ jobs:
       CI_DATABASE_PORT: "55435"
       CI_DATABASE_NAME: sap_core_d7_test
       D7_ALLOW_DISPOSABLE_DB: "1"
+      V04_ALLOW_DISPOSABLE_DB: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -369,6 +371,7 @@ jobs:
       - run: pnpm db:migrate:deploy
       - run: pnpm db:status
       - run: pnpm test:d7
+      - run: pnpm test:v04-tenant-guc
 
   d8-integration:
     runs-on: ubuntu-latest

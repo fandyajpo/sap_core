@@ -7,6 +7,7 @@ import {
 } from "@/lib/authorization-policy-core";
 import { loadAuthorizationGrants } from "@/lib/authorization-grant-loader";
 import { resolveTenantTargetContext } from "@/lib/tenant-target-context";
+import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
 import type { TenantScopeRequest } from "@/lib/tenant-context-core";
 
 export class TenantAuthorizationError extends Error {
@@ -29,7 +30,26 @@ export async function requireTenantPermission(
   request: TenantScopeRequest,
   permission: AuthorizationPermission,
 ) {
+  if (!session?.user?.id) {
+    throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
+  }
+
+  // Actor identity is trusted only because it comes from the verified Better Auth session.
+  // The third argument makes this GUC transaction-local; never replace it with session SET.
+  await tx.$queryRaw`SELECT set_config('app.user_id', ${session.user.id}, true)`;
+
+  // Resolve membership and target ancestry on the same transaction/connection.
   const context = await resolveTenantTargetContext(tx, session, request);
+
+  // Tenant identifiers are not installed until the actor's membership and target ancestry
+  // have been validated. Empty child values explicitly clear non-applicable target scopes.
+  await tx.$queryRaw`
+    SELECT
+      set_config('app.organization_id', ${context.organizationId}, true),
+      set_config('app.company_id', ${context.companyId ?? ""}, true),
+      set_config('app.plant_id', ${context.plantId ?? ""}, true)
+  `;
+
   const { actorUserId, grants, denies } = await loadAuthorizationGrants(tx, context);
   if (actorUserId !== context.userId) {
     throw new TenantAuthorizationError(permission, "ACTOR_CONTEXT_MISMATCH");
