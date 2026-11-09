@@ -19,15 +19,15 @@ function makeResolver(overrides = {}) {
         calls.push(["membership", actorId, organizationId]);
         return overrides.membership === null
           ? null
-          : { id: "membership-1", organizationId };
+          : { id: "membership-1", organizationId: overrides.membershipOrganizationId ?? organizationId };
       },
       async findCompanyTarget(organizationId, companyId) {
         calls.push(["company", organizationId, companyId]);
-        return overrides.company === null ? null : { id: companyId, organizationId };
+        return overrides.company === null ? null : { id: overrides.companyId ?? companyId, organizationId: overrides.companyOrganizationId ?? organizationId };
       },
       async findPlantTarget(organizationId, companyId, plantId) {
         calls.push(["plant", organizationId, companyId, plantId]);
-        return overrides.plant === null ? null : { id: plantId, organizationId, companyId };
+        return overrides.plant === null ? null : { id: overrides.plantId ?? plantId, organizationId: overrides.plantOrganizationId ?? organizationId, companyId: overrides.plantCompanyId ?? companyId };
       },
     },
   });
@@ -57,6 +57,24 @@ test("Company and Plant target ancestry is mandatory", async () => {
   const missingPlant = makeResolver({ plant: null });
   await assert.rejects(
     missingPlant.resolver({ kind: "PLANT", organizationId: org, companyId: company, plantId: plant }),
+    (error) => error instanceof TenantTargetContextError && error.code === "TENANT_ACCESS_DENIED",
+  );
+});
+
+test("Repository rows that do not match the requested Organization or target IDs fail closed", async () => {
+  const wrongMembership = makeResolver({ membershipOrganizationId: "99999999-9999-4999-8999-999999999999" });
+  await assert.rejects(
+    wrongMembership.resolver({ kind: "COMPANY", organizationId: org, companyId: company }),
+    (error) => error instanceof TenantTargetContextError && error.code === "TENANT_ACCESS_DENIED",
+  );
+  const wrongCompany = makeResolver({ companyId: "99999999-9999-4999-8999-999999999999" });
+  await assert.rejects(
+    wrongCompany.resolver({ kind: "COMPANY", organizationId: org, companyId: company }),
+    (error) => error instanceof TenantTargetContextError && error.code === "TENANT_ACCESS_DENIED",
+  );
+  const wrongPlantParent = makeResolver({ plantCompanyId: "99999999-9999-4999-8999-999999999999" });
+  await assert.rejects(
+    wrongPlantParent.resolver({ kind: "PLANT", organizationId: org, companyId: company, plantId: plant }),
     (error) => error instanceof TenantTargetContextError && error.code === "TENANT_ACCESS_DENIED",
   );
 });
