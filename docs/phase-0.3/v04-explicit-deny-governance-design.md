@@ -133,7 +133,7 @@ This allowlist decision is a policy record only. It does not authorize permissio
 
 ## 5. Persistence boundary — conceptual only
 
-No schema is approved by this document. If the owner approves the model, prefer a dedicated principal-scoped policy record rather than inserting DENY into a reusable role definition.
+This section remains conceptual and is not a Prisma specification. The isolated source implementation authorized in §10.2 uses a dedicated principal-scoped policy record rather than inserting DENY into a reusable role definition.
 
 Conceptual attributes to evaluate:
 
@@ -298,7 +298,7 @@ Still not authorized:
 The approved `owner_only` reader policy and `3_years` retention baseline remain unchanged. Until a separately reviewed retention/archive mechanism is approved, the implementation must not delete historical audit events; retaining them longer is preferable to premature purge. This does not waive the requirement to design legal-hold-aware retention handling before production acceptance.
 ### Explicitly not approved
 
-This policy approval is not authorization to implement or deploy. The following remain gated:
+The source implementation authorization in §10.2 is limited to an isolated review branch. The following remain gated:
 
 - hosted database changes or production rollout;
 - RLS changes;
