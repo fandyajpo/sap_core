@@ -265,3 +265,14 @@ The run confirmed the exact composite FK core.plant(organizationId, companyId) �
 This is a database-level bounded result for the pinned eight-migration recovery baseline only. It is not evidence of Core application authorization, protected operations, RLS, application tenant isolation, hosted/production state, or complete V04 acceptance. No fallback validator was used or needed; the expected composite FK enforced the tested invariant.
 
 **Current case register:** D5 = BOUNDED PASS; X01 / D9 = BOUNDED PASS; X02 / D10 = BOUNDED PASS; X03–X05 = NOT RUN. Do not repeat D5, X01/D9, or X02/D10 without identifying a specific evidence gap. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. No schema, migration, policy decision, or gate state is changed by this reconciliation.
+
+
+## V04.6 X03 / D11 execution reconciliation — 2026-11-09
+
+X03 / D11 was executed on both recovered migrations 1–8 disposable targets (fresh and staged). Read-only catalog preflight confirmed the direct, validated `OrganizationMembership.userId → User.id` and `OrganizationMembership.organizationId → Organization.id` FKs, with both delete and update actions set to RESTRICT. The source and target scalar types and required nullability matched the migration: User ID and membership `userId` are TEXT; Organization ID, membership ID, and membership `organizationId` are UUID.
+
+Transactional behavior assertions passed on both targets: valid membership episodes inserted; duplicate ACTIVE and SUSPENDED current slots were rejected by `organization_membership_user_slot_key`; missing User and Organization parents were rejected by their respective named FKs; referenced User and Organization key updates/deletes were rejected; one ACTIVE plus REVOKED and ENDED episodes coexisted; and all fixture rows were removed by transaction rollback with zero residual counts.
+
+See [X03 / D11 execution record](v04.6-x03-d11-referential-integrity-execution-record-2026-11-09.md) for target identities, catalog output summary, assertions, and limitations. No X03 concurrency schedule was run. These results do not establish complete D1/D3 lifecycle behavior, active entitlement, authorization, RLS, application tenant isolation, hosted/production state, or full V04 acceptance.
+
+**Latest bounded case register:** D5 = BOUNDED PASS; X01/D9 = BOUNDED PASS; X02/D10 = BOUNDED PASS; X03/D11 = BOUNDED PASS; X04/D12 and X05/D13 = NOT RUN. V04 remains **BLOCKED**; V05–V10 and Phase 1 remain **BLOCKED**. This is an evidence update only; no schema, migration, policy, or gate state changed.
