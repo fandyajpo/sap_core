@@ -36,6 +36,23 @@ export class AuthorizationGrantLoadError extends Error {
 }
 
 const permissionSet = new Set<string>(authorizationPermissions);
+const denyEligiblePermissions = new Set<string>([
+  "organization.read",
+  "organization.update",
+  "organization.members.read",
+  "organization.members.manage",
+  "company.read",
+  "company.manage",
+  "company.members.manage",
+  "plant.read",
+  "plant.manage",
+  "plant.assignments.manage",
+  "roles.read",
+  "roles.create",
+  "roles.revise",
+  "roles.assign",
+]);
+
 const builtInRoles = new Set<string>([
   "ORG_OWNER", "ORG_ADMIN", "ORG_MEMBER",
   "COMPANY_ADMIN", "COMPANY_MEMBER",
@@ -238,6 +255,40 @@ export async function loadAuthorizationGrants(
       AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
   `;
 
+
+  // Dedicated membership-bound DENY policies are loaded independently from
+  // reusable role grants. Only the exact target scope is considered.
+  const policyDenyRows = await tx.$queryRaw<Array<{
+    scope: AuthorizationScope;
+    scopeId: string;
+    permissionCode: string;
+  }>>`
+    SELECT p."scope"::text AS "scope",
+      CASE p."scope"
+        WHEN 'ORGANIZATION'::"core"."RoleScope" THEN p."organization_id"::text
+        WHEN 'COMPANY'::"core"."RoleScope" THEN p."company_id"::text
+        WHEN 'PLANT'::"core"."RoleScope" THEN p."plant_id"::text
+      END AS "scopeId",
+      pd."code" AS "permissionCode"
+    FROM "core"."tenant_deny_policy" p
+    JOIN "core"."permission_definition" pd
+      ON pd."id" = p."permission_definition_id"
+    WHERE p."organization_id" = ${context.organizationId}::uuid
+      AND p."target_membership_id" = ${context.organizationMembershipId}::uuid
+      AND p."scope" = ${context.scope}::"core"."RoleScope"
+      AND p."company_id" IS NOT DISTINCT FROM ${context.companyId}::uuid
+      AND p."plant_id" IS NOT DISTINCT FROM ${context.plantId}::uuid
+      AND p."revoked_at" IS NULL
+      AND (p."expires_at" IS NULL OR p."expires_at" > clock_timestamp())
+    FOR SHARE OF p
+  `;
+
+  for (const row of policyDenyRows) {
+    if (!denyEligiblePermissions.has(row.permissionCode) || !permissionSet.has(row.permissionCode)) {
+      throw new AuthorizationGrantLoadError("A persisted DENY policy contains a protected or unknown permission identifier.");
+    }
+  }
+
   const byAssignment = new Map<string, {
     roleCode: string;
     roleKind: "SYSTEM" | "ORGANIZATION_CUSTOM";
@@ -296,6 +347,13 @@ export async function loadAuthorizationGrants(
       for (const permission of grant.deny) permissions.add(permission);
       denyIndex.set(key, permissions);
     }
+  }
+
+  for (const row of policyDenyRows) {
+    const key = `${row.scope}:${row.scopeId}`;
+    const permissions = denyIndex.get(key) ?? new Set<AuthorizationPermission>();
+    permissions.add(row.permissionCode as AuthorizationPermission);
+    denyIndex.set(key, permissions);
   }
 
   const denies: ExplicitPermissionDeny[] = [];
