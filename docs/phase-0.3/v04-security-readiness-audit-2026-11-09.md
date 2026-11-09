@@ -70,7 +70,7 @@ The repository and disposable CI boundary are verified. The owner-approved permi
 2. **Session revocation HTTP acceptance:** add real Better Auth cookie/sign-out request-first and revocation-first interleavings with HTTP status and persisted-state assertions; inject lock/query/database failure and assert no protected work; explicitly test session-lock behavior under pool reuse. The PostgreSQL request-first lock-timeout/retry test is not a substitute for this HTTP coverage.
 3. **Scope discipline:** the current API proof covers Organization member read, Company read, Plant read, Organization custom-role list/create/revision, and Organization role-assignment GET/POST. Future membership/assignment mutation and ERP routes require their own exact-scope authorization and tests.
 
-**Conclusion:** Repository implementation and disposable-CI acceptance are PASS. V04 production acceptance remains BLOCKED by the two owner-controlled gates above.
+**Conclusion:** The reviewed repository implementation and its documented disposable-CI slices have passing evidence, but session-revocation HTTP acceptance remains incomplete. V04 overall and hosted/production acceptance remain BLOCKED by the hosted-provider and session-revocation gates above; future route scope also remains bounded to the listed API slice.
 
 
 
