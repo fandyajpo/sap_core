@@ -329,9 +329,19 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     );
     assert.equal(permissionRows[0].count, 15);
     const { rows: delegableRows } = await client.query(
-      `SELECT COUNT(*)::int AS count FROM "core"."permission_delegation_policy" WHERE "is_delegable" = TRUE`,
+      `SELECT pd."code", dp."approved_by"
+         FROM "core"."permission_delegation_policy" dp
+         JOIN "core"."permission_definition" pd
+           ON pd."id" = dp."permission_definition_id"
+        WHERE dp."is_delegable" = TRUE
+        ORDER BY pd."code"`,
     );
-    assert.equal(delegableRows[0].count, 0, "no permission is delegable until the owner approves its classification");
+    assert.deepEqual(
+      delegableRows.map((row) => row.code),
+      ["company.read", "organization.read", "plant.read", "roles.read"],
+      "only the four owner-approved read permissions may be delegated",
+    );
+    assert.ok(delegableRows.every((row) => row.approved_by === "project-owner-approval:2026-11-09"));
     const { rows: roleRows } = await client.query(
       `SELECT COUNT(*)::int AS count FROM "core"."role_definition"
         WHERE "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"`,
