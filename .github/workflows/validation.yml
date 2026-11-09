@@ -11,8 +11,10 @@ permissions:
 jobs:
   static:
     runs-on: ubuntu-latest
+    # Static Prisma checks only need a syntactically valid URL; never expose
+    # production database credentials to pull-request code.
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/sap_core_static?schema=public
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -53,7 +55,6 @@ jobs:
       CI_DATABASE_PORT: "55432"
       CI_DATABASE_NAME: sap_core_v03_test
       V03_ALLOW_DISPOSABLE_DB: "1"
-      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
       BETTER_AUTH_URL: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v4
@@ -63,8 +64,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - name: Configure disposable DATABASE_URL
-        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+      - name: Configure disposable test credentials
+        run: |
+          set -euo pipefail
+          echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+          echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
