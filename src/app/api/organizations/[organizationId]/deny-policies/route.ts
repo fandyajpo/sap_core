@@ -3,14 +3,18 @@ import {
   createTenantDenyPolicy,
   listTenantDenyPolicyHistory,
   TenantDenyPolicyError,
+  recordDeniedTenantDenyWriteAttempt,
   type CreateTenantDenyPolicyInput,
 } from "@/lib/tenant-deny-policy-service";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
 
 export const runtime = "nodejs";
 
-function errorResponse(error: unknown) {
+async function errorResponse(error: unknown, organizationId: string, action?: "CREATE") {
   if (error instanceof TenantDenyPolicyError) {
+    if (action && (error.code === "FORBIDDEN" || error.code === "UNAUTHENTICATED")) {
+      await recordDeniedTenantDenyWriteAttempt(organizationId, action);
+    }
     const status =
       error.code === "UNAUTHENTICATED" ? 401 :
       error.code === "FORBIDDEN" ? 403 :
@@ -35,7 +39,7 @@ export async function GET(
     const history = await listTenantDenyPolicyHistory(organizationId);
     return NextResponse.json({ organizationId, ...history });
   } catch (error) {
-    return errorResponse(error);
+    return await errorResponse(error, organizationId);
   }
 }
 
@@ -55,6 +59,6 @@ export async function POST(
     const policy = await createTenantDenyPolicy(organizationId, body);
     return NextResponse.json({ organizationId, policy }, { status: 201 });
   } catch (error) {
-    return errorResponse(error);
+    return await errorResponse(error, organizationId, "CREATE");
   }
 }
