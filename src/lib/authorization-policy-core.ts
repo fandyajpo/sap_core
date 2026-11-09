@@ -153,7 +153,12 @@ function grantApplies(
   if (builtInRole && builtInRoleScopes[builtInRole] !== grant.scope) return false;
   let rolePermissionsForGrant: readonly AuthorizationPermission[] | undefined;
   if (builtInRole) {
-    rolePermissionsForGrant = rolePermissions[builtInRole];
+    // Production grant loaders attach the persisted, sealed SYSTEM permission snapshot.
+    // Keep the static matrix as a pure-core fallback for callers that intentionally test
+    // the policy in isolation without a persistence adapter.
+    rolePermissionsForGrant = grant.roleKind === "SYSTEM"
+      ? grant.customPermissions
+      : rolePermissions[builtInRole];
   } else {
     if (
       grant.roleKind !== "ORGANIZATION_CUSTOM"
