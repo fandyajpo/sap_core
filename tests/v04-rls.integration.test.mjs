@@ -195,7 +195,7 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     "core"."role_definition", "core"."role_permission_grant"
     TO sap_core_runtime`);
   await owner.query(`GRANT SELECT, INSERT ON "core"."role_definition_audit", "core"."break_glass_access_audit" TO sap_core_runtime`);
-  await owner.query(`GRANT SELECT ON "core"."permission_definition" TO sap_core_runtime`);
+  await owner.query(`GRANT SELECT ON "core"."permission_definition", "core"."permission_delegation_policy" TO sap_core_runtime`);
   await owner.query(`GRANT SELECT, INSERT, UPDATE ON "core"."user" TO sap_core_runtime`);
   await owner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON "core"."session", "core"."account", "core"."verification" TO sap_core_runtime`);
 
@@ -235,6 +235,8 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     assert.equal(await count(runtime, '"core"."organization_membership"'), 0);
     assert.equal(await count(runtime, '"core"."user"'), 3, "Better Auth identity rows remain available without tenant context");
     assert.equal(await count(runtime, '"core"."permission_definition"'), 15, "permission catalog remains globally readable");
+    assert.equal(await count(runtime, '"core"."permission_delegation_policy"'), 15, "delegation policy is globally readable but owner-controlled");
+    assert.equal(await count(runtime, '"core"."permission_delegation_policy"', 'WHERE "is_delegable" = TRUE'), 0, "delegation remains fail-closed by default");
 
     await runtime.query("SELECT set_config('app.user_id', $1, true)", [ids.actorA]);
     assert.equal(await count(runtime, '"core"."organization_membership"'), 1, "bootstrap reveals only the actor's own ACTIVE membership");
