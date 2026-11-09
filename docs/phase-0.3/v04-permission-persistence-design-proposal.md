@@ -53,7 +53,9 @@ A version-specific permission entry for one RoleDefinition.
 
 Required uniqueness: one row per `(role_definition_id, permission_definition_id)`; one permission cannot be both ALLOW and DENY within the same role version. Add indexes for role-definition lookup and permission lookup.
 
-The grant table must be immutable after insertion. Role revision creates a new RoleDefinition version with a complete new grant set; it does not update or delete old grant rows. This aligns with D8's immutable version-family model.
+**Permission-set sealing is required.** Add a nullable `permissions_locked_at` timestamp to RoleDefinition. In one transaction, the creator inserts the RoleDefinition, inserts its complete grant set, and performs a one-way transition from NULL to a timestamp. A database trigger must reject grant insertion after the role is sealed, reject all grant updates/deletes, and reject any attempt to clear or change an existing lock timestamp. The D8 RoleDefinition immutability trigger must permit only this one-way lock transition in addition to its existing lifecycle exceptions. Role assignment must reject an unsealed RoleDefinition. System-role seeds use the same insert-grants-then-seal sequence.
+
+Role revision creates a new RoleDefinition version with a complete new grant set; it does not update or delete old grant rows. This aligns with D8's immutable version-family model. The migration must also make SYSTEM RoleDefinition rows and PermissionDefinition identifiers immutable; changing the approved built-in matrix or a permission's semantics requires a new policy version and an explicit versioned replacement/assignment plan, not an in-place privilege expansion.
 
 ### 3.3 Built-in tenant roles
 
