@@ -17,7 +17,7 @@ Use a hybrid of system roles and custom roles. Within the applicable scope, an e
 
 The project owner approved the following v0.1 tenant-administration rules on 2026-11-09:
 
-- **Strict scope:** no automatic role or permission inheritance from Organization to Company or Plant. Each narrower scope requires its own active membership/assignment and role assignment.
+- **Strict scope:** no automatic role or permission inheritance from Organization to Company or Plant. Company/Plant operational permissions require their own active membership/assignment and role assignment. The matrix explicitly grants Organization administrators a narrow ability to administer descendant Company/Plant structure and membership; this is direct administrative authority, not inherited operational access.
 - **ORG_ADMIN manage:** may administer Organization membership and tenant structure, including Company/Plant administration explicitly granted by the matrix, but does not receive automatic operational access in all Companies/Plants.
 - **Custom-role subset:** a custom role may contain only permissions its creator is authorized to delegate at that role's scope. It cannot expand the creator's authority.
 
