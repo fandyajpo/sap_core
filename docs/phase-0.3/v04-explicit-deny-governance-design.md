@@ -1,11 +1,11 @@
 # V04 Explicit DENY Governance Design
 
-**Status:** `OWNER-APPROVED POLICY BASELINE — IMPLEMENTATION NOT APPROVED`  
+**Status:** `OWNER-APPROVED POLICY BASELINE — SOURCE IMPLEMENTATION AUTHORIZED; HOSTED ROLLOUT NOT APPROVED`  
 **Date:** 2026-11-09  
 **Base:** `main` after PR #70 merge (`79ea84571375b529a1f53a90617e41c8d30846e2`)  
 **Scope:** Tenant-administration authorization for Organization, Company and Plant. ERP operational permissions remain out of scope.
 
-> The owner has approved the seven governance recommendations in §10, including the initial 14-permission DENY allowlist with `audit.read` protected for the first iteration. This approval records policy only; it does not authorize schema changes, migrations, permission seeding, service/API implementation, RLS changes, hosted database access, or production rollout. Those require separate review and explicit approval.
+> The owner has approved the seven governance recommendations in §10, the audit decisions in §10.1, and source implementation within the isolated repository branch described in §10.2. Hosted database access/modification, RLS changes, deployment, and production rollout remain separately gated.
 
 ## 1. Why a separate governance decision is required
 
@@ -133,7 +133,7 @@ This allowlist decision is a policy record only. It does not authorize permissio
 
 ## 5. Persistence boundary — conceptual only
 
-No schema is approved by this document. If the owner approves the model, prefer a dedicated principal-scoped policy record rather than inserting DENY into a reusable role definition.
+This section remains conceptual and is not a Prisma specification. The isolated source implementation authorized in §10.2 uses a dedicated principal-scoped policy record rather than inserting DENY into a reusable role definition.
 
 Conceptual attributes to evaluate:
 
@@ -150,7 +150,7 @@ Conceptual attributes to evaluate:
 | Expires at | Optional policy expiry |
 | Revoked at / revoked by | Lifecycle state and attribution |
 
-The persistence design must enforce or transactionally verify:
+The implemented persistence boundary enforces or transactionally verifies the following; integration tests must continue to exercise these guarantees:
 - Target membership belongs to the same Organization.
 - Company and Plant target ancestry is valid and immutable for the duration of the protected transaction.
 - One active duplicate restriction cannot be created accidentally.
@@ -159,7 +159,7 @@ The persistence design must enforce or transactionally verify:
 - Current policy rows are locked while they influence an authorization decision.
 - Historical audit evidence is retained according to an owner-approved retention policy.
 
-Do not treat this conceptual table as a Prisma model or migration specification.
+This conceptual table records the design intent; the concrete Prisma model and forward migration are maintained in source and reviewed separately.
 
 ## 6. Audit and observability
 
@@ -183,7 +183,7 @@ Audit records must be append-only to application services. Corrections are compe
 
 ## 7. Transaction and concurrency requirements
 
-A future implementation must use one transaction for:
+The service implementation uses one transaction for:
 1. lock and revalidate the exact Better Auth session;
 2. resolve and lock the actor's active Organization membership;
 3. validate and lock the target membership;
@@ -199,9 +199,9 @@ Concurrent semantics must be deterministic:
 - Revocation follows the same serialization rule.
 - Expiry is checked using database time inside the transaction.
 
-Tests must prove both orderings with disposable PostgreSQL, not mocks alone.
+Disposable PostgreSQL integration tests are required to prove both orderings for policy creation/revocation and protected operations; mocks alone are insufficient.
 
-## 8. Required test matrix before implementation can be accepted
+## 8. Required test matrix before production acceptance
 
 | Area | Required cases |
 |---|---|
@@ -215,21 +215,16 @@ Tests must prove both orderings with disposable PostgreSQL, not mocks alone.
 | Concurrency | Protected request vs create; protected request vs revoke; create/revoke race; membership suspension/revocation race |
 | Regression | Existing strict scope, custom-role subset delegation, role assignment, session revocation and tenant HTTP tests remain green |
 
-Every test must exercise the real HTTP/service boundary as appropriate and use disposable integration data. Do not bypass production guards to create fixtures.
+Every test must exercise the real HTTP/service boundary as appropriate and use disposable integration data. Database-guard tests do not replace service/HTTP authorization tests. Do not bypass production guards to create fixtures.
 
-## 9. Rollout sequence if approved
+## 9. Remaining production-readiness sequence
 
-1. The seven governance principles in §10, including the initial 14-permission allowlist and protected `audit.read`, have owner approval.
-2. Record the owner-approved audit reader and retention decisions in §10.1.
-3. Version this policy as the approved governance baseline.
-4. Specify a database migration and backfill strategy separately; no existing role grants should be reinterpreted implicitly.
-5. Implement server-only policy repository/service and transaction locks.
-6. Integrate DENY loading into the common authorization path without weakening current checks.
-7. Add HTTP and PostgreSQL concurrency tests.
-8. Update runbook and threat model.
-9. Validate local suite and CI.
-10. Review audit visibility, operational recovery, and hosted provider constraints.
-11. Obtain explicit production rollout approval before any hosted DB change.
+1. Complete service/HTTP authorization and PostgreSQL concurrency coverage, including create/revoke races and protected-operation ordering.
+2. Review operational recovery, audit visibility, and legal-hold-aware three-year retention/archive design.
+3. Update the runbook and threat model with tested failure modes and recovery steps.
+4. Validate the full suite and CI on the final implementation commit.
+5. Conduct a focused security review of the implementation PR.
+6. Obtain explicit production rollout approval before any hosted DB change, RLS change, or deployment.
 
 ## 10. Owner-approved governance decisions
 
@@ -246,7 +241,7 @@ The owner explicitly approved all seven governance principles on 2026-11-09. The
 
 ### 10.1 Owner-approved DENY audit access and retention decisions
 
-The owner explicitly approved both operational audit decisions on 2026-11-09. These decisions complete the deferred governance details; they do not authorize implementation.
+The owner explicitly approved both operational audit decisions on 2026-11-09. They complete the deferred governance details; isolated source implementation was separately authorized in §10.2.
 
 #### Reader authorization
 
@@ -272,16 +267,36 @@ The owner explicitly approved both operational audit decisions on 2026-11-09. Th
 
 #### Implementation boundary
 
-These decisions authorize documentation of the policy only. They do **not** authorize Prisma schema changes, migrations, backfills, permission seeding, service/API or UI implementation, RLS changes, hosted database access or modification, deployment, or production rollout. Each remains subject to separate review and explicit owner approval.
+These decisions define the required behavior for the source implementation. They do **not** authorize RLS changes, hosted database access or modification, deployment, or production rollout. Those remain subject to separate review and explicit owner approval.
 
 
+### 10.2 Owner authorization for isolated source implementation
+
+On 2026-11-09, the owner explicitly instructed the project to proceed with DENY implementation after PR #71 was merged.
+
+Authorized work:
+- Dedicated membership-bound DENY policy and append-only audit persistence models.
+- Forward-only Prisma migration source.
+- Server-side owner-only create, revoke, and history service/API paths.
+- Integration of active, exact-scope membership DENY records into the transaction-bound authorization loader.
+- Unit, static-boundary, and disposable PostgreSQL validation.
+- Isolated feature branch and reviewable pull request.
+
+Still not authorized:
+- Applying the migration to any hosted database.
+- Hosted database inspection, credential use, grants, or role provisioning.
+- RLS policy changes.
+- Deployment or production rollout.
+- Purge/archive automation or any deletion of retained audit evidence.
+- Merging the implementation PR before review and successful CI.
+
+The approved `owner_only` reader policy and `3_years` retention baseline remain unchanged. Until a separately reviewed retention/archive mechanism is approved, the implementation must not delete historical audit events; retaining them longer is preferable to premature purge. This does not waive the requirement to design legal-hold-aware retention handling before production acceptance.
 ### Explicitly not approved
 
-This policy approval is not authorization to implement or deploy. The following remain gated:
+The source implementation authorization in §10.2 is limited to an isolated review branch. The following remain gated:
 
-- schema/migration/backfill design;
-- service/API implementation and UI;
+- hosted database changes or production rollout;
 - RLS changes;
-- hosted database changes or production rollout.
+- purge/archive automation and deletion of historical audit evidence.
 
-Existing evaluator and loader support is not authorization to create persisted DENY records. Keep DENY write paths unavailable until the deferred details are resolved, an implementation plan is reviewed, and implementation is separately approved.
+The isolated source implementation is authorized under §10.2. It is not production-enabled: hosted database changes, RLS, deployment, and rollout remain gated by separate explicit approval.

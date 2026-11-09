@@ -90,6 +90,9 @@ model User {
   organizationMemberships OrganizationMembership[]
   companyMemberships      CompanyMembership[]
   plantAssignments        PlantAssignment[]
+  issuedTenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyIssuer")
+  revokedTenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyRevoker")
+  tenantDenyAuditEvents TenantDenyAuditEvent[] @relation("TenantDenyAuditActor")
 
   @@unique([email])
   @@map("user")
@@ -166,6 +169,7 @@ model Company {
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   plants         Plant[]             @relation("CompanyPlants")
   memberships    CompanyMembership[] @relation("CompanyMemberships")
+  tenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyCompany")
 
   // Composite target required for X02 and X04 references; id remains the primary key.
   @@unique([organizationId, id], map: "company_organization_id_id_key")
@@ -182,6 +186,7 @@ model Plant {
   updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
   company        Company           @relation("CompanyPlants", fields: [organizationId, companyId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict)
   assignments    PlantAssignment[]
+  tenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyPlant")
 
   // Composite target required for the X05 Plant reference; id remains the primary key.
   @@unique([organizationId, companyId, id], map: "plant_organization_company_id_key")
@@ -201,6 +206,7 @@ model OrganizationMembership {
   organization       Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   companyMemberships CompanyMembership[]
   roleAssignments    OrganizationRoleAssignment[]
+  tenantDenyPolicies TenantDenyPolicy[]
 
   // Composite target required for the X04 OrganizationMembership reference.
   @@unique([id, userId, organizationId], map: "organization_membership_id_user_org_key")
@@ -304,6 +310,8 @@ model PermissionDefinition {
   code        String                @unique
   description String                @db.Text
   delegationPolicy PermissionDelegationPolicy?
+  tenantDenyPolicies TenantDenyPolicy[]
+  tenantDenyAuditEvents TenantDenyAuditEvent[]
   createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   grants      RolePermissionGrant[]
 
@@ -416,5 +424,93 @@ model BreakGlassAccessAudit {
   @@index([roleAssignmentId])
   @@index([scope, scopeParentId, occurredAt])
   @@map("break_glass_access_audit")
+  @@schema("core")
+}
+
+
+enum DenyAuditEventType {
+  POLICY_CREATED
+  POLICY_REVOKED
+  POLICY_READ
+  POLICY_READ_DENIED
+  POLICY_WRITE_DENIED
+  POLICY_ENFORCEMENT_DENIED
+
+  @@schema("core")
+}
+
+enum DenyAuditOutcome {
+  SUCCESS
+  DENIED
+  FAILURE
+
+  @@schema("core")
+}
+
+// Dedicated principal-bound DENY policy. It is intentionally separate from
+// reusable RolePermissionGrant snapshots.
+model TenantDenyPolicy {
+  id                     String     @id @default(uuid()) @db.Uuid
+  organizationId         String     @map("organization_id") @db.Uuid
+  targetMembershipId     String     @map("target_membership_id") @db.Uuid
+  targetUserId           String     @map("target_user_id")
+  permissionDefinitionId String     @map("permission_definition_id") @db.Uuid
+  scope                  RoleScope
+  companyId              String?    @map("company_id") @db.Uuid
+  plantId                String?    @map("plant_id") @db.Uuid
+  reason                 String     @db.Text
+  issuedByUserId         String     @map("issued_by_user_id")
+  issuedAt               DateTime   @default(now()) @map("issued_at") @db.Timestamptz(6)
+  expiresAt              DateTime?  @map("expires_at") @db.Timestamptz(6)
+  revokedAt              DateTime?  @map("revoked_at") @db.Timestamptz(6)
+  revokedByUserId        String?    @map("revoked_by_user_id")
+  revokeReason           String?    @map("revoke_reason") @db.Text
+
+  targetMembership OrganizationMembership @relation(fields: [targetMembershipId, targetUserId, organizationId], references: [id, userId, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  permissionDefinition PermissionDefinition @relation(fields: [permissionDefinitionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  issuer User @relation("TenantDenyPolicyIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  revoker User? @relation("TenantDenyPolicyRevoker", fields: [revokedByUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  company Company? @relation("TenantDenyPolicyCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  plant Plant? @relation("TenantDenyPolicyPlant", fields: [plantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  auditEvents TenantDenyAuditEvent[]
+
+  @@index([organizationId, targetMembershipId, issuedAt])
+  @@index([permissionDefinitionId])
+  @@index([issuedByUserId, issuedAt])
+  @@index([revokedByUserId, revokedAt])
+  @@index([targetMembershipId, scope, companyId, plantId, permissionDefinitionId])
+  @@map("tenant_deny_policy")
+  @@schema("core")
+}
+
+// Append-only evidence for policy lifecycle and DENY-history read attempts.
+// Nullable actor/target fields allow recording unauthenticated or malformed
+// read attempts without trusting client-supplied identity.
+model TenantDenyAuditEvent {
+  id                     String              @id @default(uuid()) @db.Uuid
+  policyId               String?             @map("policy_id") @db.Uuid
+  organizationId         String?             @map("organization_id") @db.Uuid
+  targetMembershipId     String?             @map("target_membership_id") @db.Uuid
+  targetUserId           String?             @map("target_user_id")
+  permissionDefinitionId String?             @map("permission_definition_id") @db.Uuid
+  scope                  RoleScope?
+  companyId              String?             @map("company_id") @db.Uuid
+  plantId                String?             @map("plant_id") @db.Uuid
+  actorUserId            String?             @map("actor_user_id")
+  eventType              DenyAuditEventType  @map("event_type")
+  outcome                DenyAuditOutcome
+  reason                 String?             @db.Text
+  reasonCode             String?             @map("reason_code") @db.VarChar(64)
+  requestId              String?             @map("request_id") @db.VarChar(128)
+  occurredAt             DateTime            @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  policy TenantDenyPolicy? @relation(fields: [policyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor User? @relation("TenantDenyAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  permissionDefinition PermissionDefinition? @relation(fields: [permissionDefinitionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([organizationId, occurredAt])
+  @@index([policyId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("tenant_deny_audit_event")
   @@schema("core")
 }

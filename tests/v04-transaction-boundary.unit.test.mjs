@@ -29,8 +29,10 @@ test("all tenant GUC writes are transaction-local and use the injected transacti
   const writes = [...authorization.matchAll(/set_config\(/g)];
   assert.equal(writes.length, 4, "one actor and three verified scope GUCs are installed");
   assert.doesNotMatch(authorization, /\bSET\s+(?:SESSION\s+)?app\./i);
-  assert.doesNotMatch(authorization, /from ["']@\/lib\/prisma["']/);
   assert.match(authorization, /tx\.\$queryRaw/);
+  // Denial evidence is intentionally committed through the shared Prisma client
+  // because the protected transaction rolls back when authorization throws.
+  assert.match(authorization, /prisma\.\$executeRaw[\s\S]*tenant_deny_audit_event/);
 });
 
 test("Company and Plant target GUCs are installed only after each descendant is verified", async () => {
