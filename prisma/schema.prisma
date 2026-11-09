@@ -286,10 +286,24 @@ model RoleDefinition {
   @@schema("core")
 }
 
+model PermissionDelegationPolicy {
+  permissionDefinitionId String               @id @map("permission_definition_id") @db.Uuid
+  permissionDefinition   PermissionDefinition @relation(fields: [permissionDefinitionId], references: [id], onDelete: Restrict)
+  isDelegable            Boolean              @default(false) @map("is_delegable")
+  approvedAt             DateTime?            @map("approved_at") @db.Timestamptz(6)
+  approvedBy             String?              @map("approved_by")
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("permission_delegation_policy")
+  @@schema("core")
+}
+
 model PermissionDefinition {
   id          String                @id @default(uuid()) @db.Uuid
   code        String                @unique
   description String                @db.Text
+  delegationPolicy PermissionDelegationPolicy?
   createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   grants      RolePermissionGrant[]
 

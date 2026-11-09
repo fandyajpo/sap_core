@@ -7,23 +7,30 @@ import {
 
 type RawQueryClient = {
   $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+  $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
 };
 
 function createSession(client: unknown): ScopedAccessSession {
   const rawClient = client as RawQueryClient;
   return {
-    query: <Row extends object>(statement: string, values: unknown[] = []) =>
-      rawClient.$queryRawUnsafe<Row[]>(statement, ...values),
+    query: async <Row extends object>(statement: string, values: unknown[] = []): Promise<Row[]> => {
+      const command = statement.trimStart();
+      if (/^(INSERT|UPDATE|DELETE)\b/i.test(command) && !/\bRETURNING\b/i.test(command)) {
+        await rawClient.$executeRawUnsafe(statement, ...values);
+        return [];
+      }
+      return rawClient.$queryRawUnsafe<Row[]>(statement, ...values);
+    },
   };
 }
 
-const database = {
+export const scopedAccessDatabase: ScopedAccessDatabase = {
   ...createSession(prisma),
   transaction: <T>(work: (session: ScopedAccessSession) => Promise<T>) =>
     prisma.$transaction((transaction) => work(createSession(transaction))),
-} as ScopedAccessDatabase;
+};
 
-export const scopedAccess = createScopedAccessService(database);
+export const scopedAccess = createScopedAccessService(scopedAccessDatabase);
 
 export const {
   grantCompanyMembership,

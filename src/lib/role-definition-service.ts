@@ -58,12 +58,16 @@ export interface CustomRoleReviseAuthorization extends CustomRoleCreateAuthoriza
 
 /** Implementations must bind the human actor to the caller's approved Organization-admin policy. */
 export interface RoleDefinitionAuthorization {
-  getDelegablePermissions(input: {
-    actorUserId: string;
-    organizationId: string;
-  }): Promise<readonly AuthorizationPermission[]>;
-  authorizeCreate(input: CustomRoleCreateAuthorization): Promise<boolean>;
-  authorizeRevise(input: CustomRoleReviseAuthorization): Promise<boolean>;
+  initializeContext(
+    input: { actorUserId: string; organizationId: string },
+    session: ScopedAccessSession,
+  ): Promise<void>;
+  getDelegablePermissions(
+    input: { actorUserId: string; organizationId: string },
+    session: ScopedAccessSession,
+  ): Promise<readonly AuthorizationPermission[]>;
+  authorizeCreate(input: CustomRoleCreateAuthorization, session: ScopedAccessSession): Promise<boolean>;
+  authorizeRevise(input: CustomRoleReviseAuthorization, session: ScopedAccessSession): Promise<boolean>;
 }
 
 export type CustomRoleCreateInput = CustomRoleCreateAuthorization;
@@ -71,6 +75,7 @@ export type CustomRoleCreateInput = CustomRoleCreateAuthorization;
 /** Revisions create a new immutable permission snapshot; omitted permissions copy the prior version. */
 export interface CustomRoleReviseInput {
   actorUserId: string;
+  organizationId: string;
   roleDefinitionId: string;
   code?: string;
   scope?: CustomRoleScope;
@@ -225,7 +230,7 @@ async function requireOrganization(session: ScopedAccessSession, organizationId:
 
 async function lockRoleFamily(session: ScopedAccessSession, roleFamilyId: string): Promise<void> {
   await session.query(
-    `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
+    `WITH lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))) SELECT 1 AS locked FROM lock`,
     [roleFamilyId],
   );
 }
@@ -257,6 +262,7 @@ async function writeAudit(
 
 function requireAuthorization(authorization: RoleDefinitionAuthorization): void {
   if (
+    typeof authorization?.initializeContext !== "function" ||
     typeof authorization?.getDelegablePermissions !== "function" ||
     typeof authorization?.authorizeCreate !== "function" ||
     typeof authorization?.authorizeRevise !== "function"
@@ -279,14 +285,18 @@ export function createRoleDefinitionService(
       requireCustomScope(input.scope);
 
       return database.transaction(async (session) => {
+        await authorization.initializeContext(
+          { actorUserId: input.actorUserId, organizationId: input.organizationId },
+          session,
+        );
         await requireHumanActor(session, input.actorUserId);
         await requireOrganization(session, input.organizationId);
 
         const permissions = await requirePermissionSet(session, input.permissions);
-        const delegablePermissions = await authorization.getDelegablePermissions({
-          actorUserId: input.actorUserId,
-          organizationId: input.organizationId,
-        });
+        const delegablePermissions = await authorization.getDelegablePermissions(
+          { actorUserId: input.actorUserId, organizationId: input.organizationId },
+          session,
+        );
         if (!isPermissionSubset(permissions, delegablePermissions)) {
           throw new RoleDefinitionError("AUTHORIZATION_DENIED", "The requested permission set exceeds the creator's delegable permissions.");
         }
@@ -296,7 +306,7 @@ export function createRoleDefinitionService(
           code,
           scope: "ORGANIZATION",
           permissions,
-        });
+        }, session);
         if (!authorized) {
           throw new RoleDefinitionError("AUTHORIZATION_DENIED", "The custom Role Definition create was not authorized.");
         }
@@ -321,6 +331,7 @@ export function createRoleDefinitionService(
 
     async reviseCustomRole(input: CustomRoleReviseInput): Promise<RoleDefinitionRecord> {
       requireUserId(input.actorUserId, "Role Definition actor user ID");
+      requireUuid(input.organizationId, "Organization ID");
       requireUuid(input.roleDefinitionId, "Role Definition ID");
       const requestedCode = input.code === undefined ? undefined : requireCode(input.code);
       if (input.scope !== undefined) {
@@ -328,6 +339,10 @@ export function createRoleDefinitionService(
       }
 
       return database.transaction(async (session) => {
+        await authorization.initializeContext(
+          { actorUserId: input.actorUserId, organizationId: input.organizationId },
+          session,
+        );
         await requireHumanActor(session, input.actorUserId);
         const sourceRows = await session.query<RoleDefinitionSourceRow>(
           `SELECT "id", "role_family_id"::text AS "roleFamilyId", "code", "version",
@@ -343,6 +358,12 @@ export function createRoleDefinitionService(
           throw new RoleDefinitionError(
             "ROLE_DEFINITION_NOT_FOUND",
             `Role Definition ${input.roleDefinitionId} does not exist.`,
+          );
+        }
+        if (source.kind === "ORGANIZATION_CUSTOM" && source.ownerOrganizationId !== input.organizationId) {
+          throw new RoleDefinitionError(
+            "ROLE_DEFINITION_NOT_FOUND",
+            `Role Definition ${input.roleDefinitionId} does not exist in the requested Organization.`,
           );
         }
         if (source.kind !== "ORGANIZATION_CUSTOM" || !source.roleFamilyId || !source.ownerOrganizationId) {
@@ -381,10 +402,10 @@ export function createRoleDefinitionService(
         }
         const priorPermissions = input.permissions ?? await readPermissionSnapshot(session, source.id);
         const permissions = await requirePermissionSet(session, priorPermissions);
-        const delegablePermissions = await authorization.getDelegablePermissions({
-          actorUserId: input.actorUserId,
-          organizationId: source.ownerOrganizationId,
-        });
+        const delegablePermissions = await authorization.getDelegablePermissions(
+          { actorUserId: input.actorUserId, organizationId: source.ownerOrganizationId },
+          session,
+        );
         if (!isPermissionSubset(permissions, delegablePermissions)) {
           throw new RoleDefinitionError("AUTHORIZATION_DENIED", "The revised permission set exceeds the creator's delegable permissions.");
         }
@@ -399,7 +420,7 @@ export function createRoleDefinitionService(
           code,
           scope: "ORGANIZATION",
           permissions,
-        });
+        }, session);
         if (!authorized) {
           throw new RoleDefinitionError("AUTHORIZATION_DENIED", "The custom Role Definition revision was not authorized.");
         }
