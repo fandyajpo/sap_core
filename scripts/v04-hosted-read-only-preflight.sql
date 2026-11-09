@@ -53,13 +53,17 @@ WHERE table_name = '_prisma_migrations'
 ORDER BY table_schema;
 
 -- Migration history is metadata, not business data.
--- If the table exists in public, this reports aggregate status only.
+-- psql conditional avoids referencing a table that may not exist.
+SELECT to_regclass('public._prisma_migrations') IS NOT NULL AS public_migrations_table_exists \\gset
+\\if :public_migrations_table_exists
 SELECT
   COUNT(*) AS migration_rows,
   COUNT(*) FILTER (WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL) AS successful_rows,
   COUNT(*) FILTER (WHERE rolled_back_at IS NOT NULL) AS rolled_back_rows,
   COUNT(*) FILTER (WHERE finished_at IS NULL AND rolled_back_at IS NULL) AS unfinished_rows
-FROM public._prisma_migrations
-WHERE to_regclass('public._prisma_migrations') IS NOT NULL;
+FROM public._prisma_migrations;
+\\else
+\\echo 'No public._prisma_migrations table; use the schema location reported above and request a reviewed follow-up query.'
+\\endif
 
 ROLLBACK;
