@@ -312,8 +312,7 @@ async function authorize(
               "ownerOrganizationId"::text AS "ownerOrganizationId",
               "disabled_at" AS "disabledAt", "permissions_locked_at" AS "permissionsLockedAt"
        FROM "core"."role_definition"
-       WHERE "id" = $1
-       FOR SHARE`,
+       WHERE "id" = $1`,
       [grantInput.roleDefinitionId],
     );
     const definition = definitions[0];
