@@ -354,6 +354,28 @@ jobs:
             await client.end();
           }
           NODE
+      - name: Apply migration 15 SYSTEM role assignment RLS lock
+        run: |
+          set -euo pipefail
+          cp -R "$RUNNER_TEMP/v04-current-migrations/20261110120000_v04_system_role_assignment_rls_lock" prisma/migrations/
+          pnpm db:migrate:deploy
+          pnpm db:status
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          try {
+            const { rows } = await client.query(
+              'SELECT "migration_name", "rolled_back_at" FROM public."_prisma_migrations" ORDER BY "started_at"',
+            );
+            assert.equal(rows.length, 15);
+            assert.ok(rows.every((row) => row.rolled_back_at === null));
+            assert.equal(rows[14].migration_name, "20261110120000_v04_system_role_assignment_rls_lock");
+          } finally {
+            await client.end();
+          }
+          NODE
       - name: Create isolated D8 fresh database
         run: |
           node --input-type=module <<'NODE'
@@ -585,6 +607,49 @@ jobs:
       - run: pnpm db:migrate:deploy
       - run: pnpm db:status
       - run: pnpm test:v04-deny-policy:integration
+
+  v04-application-adversarial:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: sap_core
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: sap_core_v04_app_test
+        ports:
+          - "55438:5432"
+        options: >-
+          --health-cmd "pg_isready -U sap_core -d sap_core_v04_app_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI_DATABASE_USER: sap_core
+      CI_DATABASE_HOST: 127.0.0.1
+      CI_DATABASE_PORT: "55438"
+      CI_DATABASE_NAME: sap_core_v04_app_test
+      V04_APP_ADVERSARIAL_ALLOW_DISPOSABLE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Configure separate migration-owner and runtime URLs
+        run: |
+          set -euo pipefail
+          echo "MIGRATION_DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+          echo "DATABASE_URL=postgresql://sap_core_runtime@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:validate
+      - run: pnpm db:generate
+      - run: pnpm db:migrate:deploy
+      - run: pnpm db:status
+      - run: pnpm test:v04-application-adversarial
 
   v04-rls-integration:
     runs-on: ubuntu-latest

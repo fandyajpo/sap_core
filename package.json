@@ -37,7 +37,8 @@
     "test:v04-session-revocation:http": "node --test tests/v04-session-revocation.http.integration.test.mjs",
     "test:v04-deny-policy": "node --test tests/v04-deny-policy.unit.test.mjs",
     "test:v04-deny-policy:integration": "node --test tests/v04-deny-policy.integration.test.mjs",
-    "test:v04-deny-policy:http": "node --test tests/v04-deny-policy.http.integration.test.mjs"
+    "test:v04-deny-policy:http": "node --test tests/v04-deny-policy.http.integration.test.mjs",
+    "test:v04-application-adversarial": "node --test tests/v04-application-adversarial.integration.test.mjs"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "1.7.17",

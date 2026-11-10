@@ -130,6 +130,8 @@ async function lockActorGrantRows(
   actorUserId: string,
   target: TargetContext,
 ): Promise<void> {
+  // Lock mutable assignment and membership rows only. SYSTEM role definitions
+  // and permission snapshots are global read-only catalog data under RLS.
   await session.query(
     `SELECT ra."id"
        FROM "core"."organization_role_assignment" ra
@@ -141,9 +143,30 @@ async function lockActorGrantRows(
          ON rd."id" = ra."roleDefinitionId" AND rd."scope" = ra."role_scope"
         AND rd."scope" = 'ORGANIZATION'::"core"."RoleScope"
         AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL
-       JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
       WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
-      FOR SHARE OF ra, om, rd, g`,
+      FOR SHARE OF ra, om`,
+    [actorUserId, target.organizationId],
+  );
+
+  // Custom Organization roles can still be revised/disabled by their owner.
+  // Lock only these tenant-owned definitions, whose UPDATE RLS policy is
+  // intentionally scoped to the current Organization context.
+  await session.query(
+    `SELECT rd."id"
+       FROM "core"."organization_role_assignment" ra
+       JOIN "core"."organization_membership" om
+         ON om."id" = ra."organizationMembershipId"
+        AND om."userId" = $1 AND om."organizationId" = $2::uuid
+        AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+       JOIN "core"."role_definition" rd
+         ON rd."id" = ra."roleDefinitionId"
+        AND rd."scope" = ra."role_scope"
+        AND rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+        AND rd."ownerOrganizationId" = $2::uuid
+        AND rd."disabled_at" IS NULL
+        AND rd."permissions_locked_at" IS NOT NULL
+      WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+      FOR SHARE OF rd`,
     [actorUserId, target.organizationId],
   );
 
@@ -165,9 +188,8 @@ async function lockActorGrantRows(
           AND rd."scope" = 'COMPANY'::"core"."RoleScope"
           AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
           AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL
-         JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
         WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
-        FOR SHARE OF ra, cm, om, rd, g`,
+        FOR SHARE OF ra, cm, om`,
       [actorUserId, target.organizationId, target.companyId],
     );
   }
@@ -195,9 +217,8 @@ async function lockActorGrantRows(
           AND rd."scope" = 'PLANT'::"core"."RoleScope"
           AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
           AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL
-         JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
         WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
-        FOR SHARE OF ra, pa, cm, om, rd, g`,
+        FOR SHARE OF ra, pa, cm, om`,
       [actorUserId, target.organizationId, target.companyId, target.plantId],
     );
   }
@@ -398,19 +419,33 @@ async function authorize(
   }
 
   await session.query("SELECT set_config('app.user_id', $1, true)", [sessionUserId]);
-  const actorMemberships = await session.query<{ id: string }>(
+
+  // The bootstrap SELECT policy exposes only the actor's own membership before
+  // tenant context exists. Discover its ID without a row lock, establish the
+  // verified Organization GUC, then lock and revalidate that exact membership
+  // under the tenant UPDATE policy.
+  const actorMembershipCandidates = await session.query<{ id: string }>(
     `SELECT "id" FROM "core"."organization_membership"
      WHERE "userId" = $1 AND "organizationId" = $2::uuid
        AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-     LIMIT 1 FOR SHARE`,
+     LIMIT 1`,
     [sessionUserId, organizationId],
   );
-  if (!actorMemberships[0]) return false;
+  if (!actorMembershipCandidates[0]) return false;
 
   await session.query(
     "SELECT set_config('app.organization_id', $1, true), set_config('app.company_id', '', true), set_config('app.plant_id', '', true)",
     [organizationId],
   );
+
+  const actorMemberships = await session.query<{ id: string }>(
+    `SELECT "id" FROM "core"."organization_membership"
+     WHERE "id" = $1 AND "userId" = $2 AND "organizationId" = $3::uuid
+       AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+     FOR SHARE`,
+    [actorMembershipCandidates[0].id, sessionUserId, organizationId],
+  );
+  if (!actorMemberships[0]) return false;
   if (permission === "roles.assign") {
     const grantInput = input as RoleAssignmentGrantAuthorization;
     const definitions = await session.query<{
@@ -424,11 +459,10 @@ async function authorize(
               "ownerOrganizationId"::text AS "ownerOrganizationId",
               "disabled_at" AS "disabledAt", "permissions_locked_at" AS "permissionsLockedAt"
        FROM "core"."role_definition"
-       WHERE "id" = $1
-       FOR SHARE`,
+       WHERE "id" = $1`,
       [grantInput.roleDefinitionId],
     );
-    const definition = definitions[0];
+    let definition = definitions[0];
     if (
       !definition
       || definition.scope !== grantInput.scope
@@ -438,6 +472,30 @@ async function authorize(
       || (definition.kind === "ORGANIZATION_CUSTOM" && definition.ownerOrganizationId !== organizationId)
       || (definition.kind !== "SYSTEM" && definition.kind !== "ORGANIZATION_CUSTOM")
     ) return false;
+
+    // SYSTEM definitions are immutable and SELECT-only for tenant roles;
+    // PostgreSQL RLS hides them from SELECT ... FOR SHARE. Custom roles are
+    // tenant-owned and remain locked against concurrent governance changes.
+    if (definition.kind === "ORGANIZATION_CUSTOM") {
+      const lockedDefinitions = await session.query<typeof definition>(
+        `SELECT "scope"::text AS "scope", "kind"::text AS "kind",
+                "ownerOrganizationId"::text AS "ownerOrganizationId",
+                "disabled_at" AS "disabledAt", "permissions_locked_at" AS "permissionsLockedAt"
+         FROM "core"."role_definition"
+         WHERE "id" = $1
+           AND "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+         FOR SHARE`,
+        [grantInput.roleDefinitionId],
+      );
+      definition = lockedDefinitions[0];
+      if (
+        !definition
+        || definition.scope !== grantInput.scope
+        || definition.disabledAt !== null
+        || definition.permissionsLockedAt === null
+        || definition.ownerOrganizationId !== organizationId
+      ) return false;
+    }
   }
 
   const target = await resolveTarget(session, organizationId, input.scope, input.parentId, expectedUserId);
