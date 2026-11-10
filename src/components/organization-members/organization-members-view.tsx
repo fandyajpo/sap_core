@@ -87,7 +87,7 @@ export function OrganizationMembersView({ organizationId }: OrganizationMembersV
     getRowId: (member: OrganizationMemberDto) => member.membershipId,
   };
 
-  if (query.isError && !query.isFetching) {
+  if (query.isError && !query.data) {
     return (
       <section aria-labelledby="members-title" className={styles.pageContent}>
         <PageHeading organizationId={organizationId} />
@@ -96,7 +96,9 @@ export function OrganizationMembersView({ organizationId }: OrganizationMembersV
     );
   }
 
-  if (query.isLoading || query.isFetching) {
+  // Only the initial load replaces the table with a loading state; a
+  // background refetch keeps the already-loaded rows visible.
+  if (query.isLoading) {
     return (
       <section aria-labelledby="members-title" className={styles.pageContent}>
         <PageHeading organizationId={organizationId} />

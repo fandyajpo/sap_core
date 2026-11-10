@@ -33,8 +33,9 @@ test("client view uses the existing query hook and never branches on client auth
 test("loading, denied/error, empty, retry, and successful states use only safe messages and DTO rows", async () => {
   const view = await readSource("src/components/organization-members/organization-members-view.tsx");
 
-  assert.match(view, /query\.isLoading\s*\|\|\s*query\.isFetching/);
-  assert.match(view, /query\.isError/);
+  assert.match(view, /if \(query\.isError && !query\.data\)/);
+  assert.match(view, /if \(query\.isLoading\)/);
+  assert.doesNotMatch(view, /query\.isLoading\s*\|\|\s*query\.isFetching/);
   assert.match(view, /isLoading\s+loadingState="Loading organization members…"/);
   assert.match(view, /Unable to load organization members\. Please try again\./);
   assert.match(view, /onClick=\{onRetry\}/);
