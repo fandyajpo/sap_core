@@ -53,7 +53,7 @@ function createSession(client) {
   return {
     async query(statement, values = []) {
       const result = await client.query(statement, values);
-      if (statement.includes('"core"."role_definition"') || statement.includes('"core"."organization_membership"') || statement.includes('"core"."role_permission_grant"')) {
+      if (statement.includes("set_config") || statement.includes('"core"."organization_membership"')) {
         console.log("V04_AUTH_QUERY", statement.replace(/\\s+/g, " ").slice(0, 220), "ROWS", JSON.stringify(result.rows));
       }
       return result.rows;
