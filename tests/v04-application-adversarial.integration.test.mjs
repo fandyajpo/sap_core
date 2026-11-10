@@ -48,6 +48,7 @@ const ids = {
 };
 let ownerConnected = false;
 let fixturesCreated = false;
+let memberRoleDefinitionId;
 
 function createSession(client) {
   return {
@@ -141,6 +142,7 @@ before(async () => {
   const roleIds = Object.fromEntries(roles.map((row) => [row.code, row.id]));
   assert.ok(roleIds.ORG_OWNER, "ORG_OWNER system role must exist and be sealed");
   assert.ok(roleIds.ORG_MEMBER, "ORG_MEMBER system role must exist and be sealed");
+  memberRoleDefinitionId = roleIds.ORG_MEMBER;
 
   await owner.query(`
     INSERT INTO "core"."user"
@@ -206,12 +208,12 @@ test("production role-assignment service enforces verified actor and tenant boun
     const assignment = await actorAService.grantRoleAssignment({
       scope: "ORGANIZATION",
       parentId: ids.recipientMembershipA,
-      roleDefinitionId: "10000000-0000-4000-8000-000000000003",
+      roleDefinitionId: memberRoleDefinitionId,
       actorUserId: ids.actorA,
     });
     assert.equal(assignment.scope, "ORGANIZATION");
     assert.equal(assignment.parentId, ids.recipientMembershipA);
-    assert.equal(assignment.roleDefinitionId, "10000000-0000-4000-8000-000000000003");
+    assert.equal(assignment.roleDefinitionId, memberRoleDefinitionId);
     assert.equal(assignment.grantActorUserId, ids.actorA);
     assert.equal(assignment.isBreakGlass, false);
   });
@@ -224,7 +226,7 @@ test("production role-assignment service enforces verified actor and tenant boun
       parentId: ids.recipientMembershipA,
     });
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].roleDefinitionId, "10000000-0000-4000-8000-000000000003");
+    assert.equal(rows[0].roleDefinitionId, memberRoleDefinitionId);
   });
 
   await t.test("actor from another Organization cannot grant into Organization A", async () => {
@@ -232,7 +234,7 @@ test("production role-assignment service enforces verified actor and tenant boun
     await expectAuthorizationDenied(() => foreignService.grantRoleAssignment({
       scope: "ORGANIZATION",
       parentId: ids.recipientMembershipA,
-      roleDefinitionId: "10000000-0000-4000-8000-000000000003",
+      roleDefinitionId: memberRoleDefinitionId,
       actorUserId: ids.actorB,
     }));
   });
@@ -252,7 +254,7 @@ test("production role-assignment service enforces verified actor and tenant boun
       () => actorAService.grantRoleAssignment({
         scope: "ORGANIZATION",
         parentId: ids.recipientMembershipA,
-        roleDefinitionId: "10000000-0000-4000-8000-000000000003",
+        roleDefinitionId: memberRoleDefinitionId,
         actorUserId: ids.actorB,
       }),
       (error) => error instanceof Error && /does not match the verified Better Auth session/.test(error.message),
