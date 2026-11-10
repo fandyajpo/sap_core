@@ -139,6 +139,7 @@ before(async () => {
     TO sap_core_runtime
   `);
   await owner.query('GRANT SELECT ON "core"."permission_definition" TO sap_core_runtime');
+  await owner.query('GRANT SELECT ON "core"."tenant_deny_policy" TO sap_core_runtime');
   await owner.query(`
     GRANT SELECT, INSERT, UPDATE ON
       "core"."company_role_assignment",
