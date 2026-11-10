@@ -166,7 +166,12 @@ export function RoleAssignmentsView({ organizationId }: RoleAssignmentsViewProps
 
   const members = membersQuery.data?.members ?? emptyMembers;
   const roles = rolesQuery.data?.roles ?? emptyRoles;
-  const roleByDefinitionId = new Map(roles.map((role) => [role.id, role]));
+  // Memoized on the roles array (a stable reference from the query cache
+  // or a module constant) so the columns useMemo keeps stable dependencies.
+  const roleByDefinitionId = useMemo(
+    () => new Map(roles.map((role) => [role.id, role])),
+    [roles],
+  );
   const selectedAssignment = assignmentsQuery.data?.assignments.find(
     (assignment) => assignment.id === selectedAssignmentId,
   ) ?? null;
