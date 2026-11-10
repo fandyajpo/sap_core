@@ -39,12 +39,14 @@
     "test:v04-deny-policy:integration": "node --test tests/v04-deny-policy.integration.test.mjs",
     "test:v04-deny-policy:http": "node --test tests/v04-deny-policy.http.integration.test.mjs",
     "test:v04-application-adversarial": "node --test tests/v04-application-adversarial.integration.test.mjs",
-    "test:v04-role-definition-owner-pre-read": "node --test tests/v04-role-definition-owner-pre-read.unit.test.mjs"
+    "test:v04-role-definition-owner-pre-read": "node --test tests/v04-role-definition-owner-pre-read.unit.test.mjs",
+    "test:client-data": "node --test tests/client-data.unit.test.mjs"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "1.7.17",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
+    "@tanstack/react-query": "5.90.3",
     "better-auth": "1.7.17",
     "next": "16.4.5",
     "pg": "8.16.3",
