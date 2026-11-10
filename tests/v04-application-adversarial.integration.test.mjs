@@ -195,12 +195,12 @@ before(async () => {
       [ids.actorA, ids.orgA],
     );
     assert.equal(actorMembership.rowCount, 1, "runtime RLS must expose the actor's own active membership");
+    await diagnosticClient.query("SELECT set_config('app.organization_id', $1, true)", [ids.orgA]);
     const targetMembership = await diagnosticClient.query(
       'SELECT "id", "userId", "organizationId"::text AS "organizationId", "status"::text AS "status" FROM "core"."organization_membership" WHERE "id" = $1 AND "organizationId" = $2::uuid AND "status" = \'ACTIVE\'::"core"."OrganizationMembershipStatus"',
       [ids.recipientMembershipA, ids.orgA],
     );
     assert.equal(targetMembership.rowCount, 1, "runtime RLS must expose active target membership after organization context is installed");
-    await diagnosticClient.query("SELECT set_config('app.organization_id', $1, true)", [ids.orgA]);
     const ownerAssignment = await diagnosticClient.query(
       'SELECT ra."id" FROM "core"."organization_role_assignment" ra JOIN "core"."organization_membership" om ON om."id" = ra."organizationMembershipId" WHERE om."userId" = $1 AND om."organizationId" = $2',
       [ids.actorA, ids.orgA],
