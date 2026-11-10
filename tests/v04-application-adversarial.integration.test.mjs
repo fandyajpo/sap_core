@@ -40,14 +40,36 @@ const ids = {
   actorA: randomUUID(),
   recipientA: randomUUID(),
   actorB: randomUUID(),
+  actorC: randomUUID(),
+  actorD: randomUUID(),
+  recipientB: randomUUID(),
   orgA: randomUUID(),
   orgB: randomUUID(),
+  companyA: randomUUID(),
+  companyB: randomUUID(),
+  plantA1: randomUUID(),
+  plantA2: randomUUID(),
+  plantB: randomUUID(),
   membershipA: randomUUID(),
   recipientMembershipA: randomUUID(),
   membershipB: randomUUID(),
+  membershipC: randomUUID(),
+  membershipD: randomUUID(),
+  recipientMembershipB: randomUUID(),
+  companyMembershipActorC: randomUUID(),
+  companyMembershipActorD: randomUUID(),
+  companyMembershipRecipientA: randomUUID(),
+  companyMembershipRecipientB: randomUUID(),
+  plantAssignmentActorD: randomUUID(),
+  plantAssignmentRecipientA: randomUUID(),
+  plantAssignmentRecipientB: randomUUID(),
 };
 let ownerConnected = false;
 let memberRoleDefinitionId;
+let companyMemberRoleDefinitionId;
+let companyAdminRoleDefinitionId;
+let plantViewerRoleDefinitionId;
+let plantManagerRoleDefinitionId;
 
 function createSession(client) {
   return {
@@ -121,9 +143,13 @@ before(async () => {
   `);
   await owner.query('GRANT SELECT ON "core"."permission_definition" TO sap_core_runtime');
   await owner.query(`
-    GRANT SELECT ON
+    GRANT SELECT, INSERT, UPDATE ON
       "core"."company_role_assignment",
-      "core"."plant_role_assignment",
+      "core"."plant_role_assignment"
+    TO sap_core_runtime
+  `);
+  await owner.query(`
+    GRANT SELECT, UPDATE ON
       "core"."company_membership",
       "core"."plant_assignment"
     TO sap_core_runtime
@@ -142,27 +168,41 @@ before(async () => {
     SELECT id::text AS id, code
     FROM "core"."role_definition"
     WHERE kind = 'SYSTEM'::"core"."RoleDefinitionKind"
-      AND code IN ('ORG_OWNER', 'ORG_MEMBER')
+      AND code IN ('ORG_OWNER', 'ORG_MEMBER', 'COMPANY_ADMIN', 'COMPANY_MEMBER', 'PLANT_MANAGER', 'PLANT_VIEWER')
       AND disabled_at IS NULL
       AND permissions_locked_at IS NOT NULL
   `);
   const roleIds = Object.fromEntries(roles.map((row) => [row.code, row.id]));
   assert.ok(roleIds.ORG_OWNER, "ORG_OWNER system role must exist and be sealed");
   assert.ok(roleIds.ORG_MEMBER, "ORG_MEMBER system role must exist and be sealed");
+  assert.ok(roleIds.COMPANY_ADMIN, "COMPANY_ADMIN system role must exist and be sealed");
+  assert.ok(roleIds.COMPANY_MEMBER, "COMPANY_MEMBER system role must exist and be sealed");
+  assert.ok(roleIds.PLANT_MANAGER, "PLANT_MANAGER system role must exist and be sealed");
+  assert.ok(roleIds.PLANT_VIEWER, "PLANT_VIEWER system role must exist and be sealed");
   memberRoleDefinitionId = roleIds.ORG_MEMBER;
+  companyAdminRoleDefinitionId = roleIds.COMPANY_ADMIN;
+  companyMemberRoleDefinitionId = roleIds.COMPANY_MEMBER;
+  plantManagerRoleDefinitionId = roleIds.PLANT_MANAGER;
+  plantViewerRoleDefinitionId = roleIds.PLANT_VIEWER;
 
   await owner.query(`
     INSERT INTO "core"."user"
       ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
     VALUES
-      ($1, 'V04 adversarial actor A', $4, false, NOW(), NOW()),
-      ($2, 'V04 adversarial recipient A', $5, false, NOW(), NOW()),
-      ($3, 'V04 adversarial actor B', $6, false, NOW(), NOW())
+      ($1, 'V04 actor A', $7, false, NOW(), NOW()),
+      ($2, 'V04 recipient A', $8, false, NOW(), NOW()),
+      ($3, 'V04 actor B', $9, false, NOW(), NOW()),
+      ($4, 'V04 actor C', $10, false, NOW(), NOW()),
+      ($5, 'V04 actor D', $11, false, NOW(), NOW()),
+      ($6, 'V04 recipient B', $12, false, NOW(), NOW())
   `, [
-    ids.actorA, ids.recipientA, ids.actorB,
+    ids.actorA, ids.recipientA, ids.actorB, ids.actorC, ids.actorD, ids.recipientB,
     `v04-app-${ids.actorA}@example.test`,
     `v04-app-${ids.recipientA}@example.test`,
     `v04-app-${ids.actorB}@example.test`,
+    `v04-app-${ids.actorC}@example.test`,
+    `v04-app-${ids.actorD}@example.test`,
+    `v04-app-${ids.recipientB}@example.test`,
   ]);
   await owner.query(
     'INSERT INTO "core"."organization" ("id", "updated_at") VALUES ($1, NOW()), ($2, NOW())',
@@ -174,17 +214,74 @@ before(async () => {
     VALUES
       ($1, $2, $3, 'ACTIVE', NOW()),
       ($4, $5, $3, 'ACTIVE', NOW()),
-      ($6, $7, $8, 'ACTIVE', NOW())
+      ($6, $7, $8, 'ACTIVE', NOW()),
+      ($9, $10, $3, 'ACTIVE', NOW()),
+      ($11, $12, $3, 'ACTIVE', NOW()),
+      ($13, $14, $3, 'ACTIVE', NOW())
   `, [
     ids.membershipA, ids.actorA, ids.orgA,
     ids.recipientMembershipA, ids.recipientA,
     ids.membershipB, ids.actorB, ids.orgB,
+    ids.membershipC, ids.actorC,
+    ids.membershipD, ids.actorD,
+    ids.recipientMembershipB, ids.recipientB,
+  ]);
+
+  await owner.query(`
+    INSERT INTO "core"."company" ("id", "organizationId", "updated_at")
+    VALUES ($1, $3, NOW()), ($2, $3, NOW())
+  `, [ids.companyA, ids.companyB, ids.orgA]);
+  await owner.query(`
+    INSERT INTO "core"."plant" ("id", "organizationId", "companyId", "updated_at")
+    VALUES
+      ($1, $4, $5, NOW()),
+      ($2, $4, $5, NOW()),
+      ($3, $4, $6, NOW())
+  `, [ids.plantA1, ids.plantA2, ids.plantB, ids.orgA, ids.companyA, ids.companyB]);
+
+  await owner.query(`
+    INSERT INTO "core"."company_membership"
+      ("id", "userId", "organizationMembershipId", "organizationId", "companyId", "status", "updated_at")
+    VALUES
+      ($1, $2, $3, $4, $5, 'ACTIVE', NOW()),
+      ($6, $7, $8, $4, $5, 'ACTIVE', NOW()),
+      ($9, $10, $11, $4, $5, 'ACTIVE', NOW()),
+      ($12, $13, $14, $4, $15, 'ACTIVE', NOW())
+  `, [
+    ids.companyMembershipActorC, ids.actorC, ids.membershipC, ids.orgA, ids.companyA,
+    ids.companyMembershipActorD, ids.actorD, ids.membershipD,
+    ids.companyMembershipRecipientA, ids.recipientA, ids.recipientMembershipA,
+    ids.companyMembershipRecipientB, ids.recipientB, ids.recipientMembershipB, ids.companyB,
+  ]);
+
+  await owner.query(`
+    INSERT INTO "core"."plant_assignment"
+      ("id", "userId", "companyMembershipId", "organizationId", "companyId", "plantId", "status", "updated_at")
+    VALUES
+      ($1, $2, $3, $4, $5, $6, 'ACTIVE', NOW()),
+      ($7, $8, $9, $4, $5, $10, 'ACTIVE', NOW()),
+      ($11, $12, $13, $4, $14, $15, 'ACTIVE', NOW())
+  `, [
+    ids.plantAssignmentActorD, ids.actorD, ids.companyMembershipActorD, ids.orgA, ids.companyA, ids.plantA1,
+    ids.plantAssignmentRecipientA, ids.recipientA, ids.companyMembershipRecipientA, ids.plantA2,
+    ids.plantAssignmentRecipientB, ids.recipientB, ids.companyMembershipRecipientB, ids.companyB, ids.plantB,
   ]);
   await owner.query(`
     INSERT INTO "core"."organization_role_assignment"
       ("id", "organizationMembershipId", "roleDefinitionId", "role_scope", "grant_actor_user_id", "is_break_glass")
     VALUES ($1, $2, $3, 'ORGANIZATION', $4, false)
   `, [randomUUID(), ids.membershipA, roleIds.ORG_OWNER, ids.actorA]);
+
+  await owner.query(`
+    INSERT INTO "core"."company_role_assignment"
+      ("id", "companyMembershipId", "roleDefinitionId", "role_scope", "grant_actor_user_id", "is_break_glass")
+    VALUES ($1, $2, $3, 'COMPANY', $4, false)
+  `, [randomUUID(), ids.companyMembershipActorC, companyAdminRoleDefinitionId, ids.actorC]);
+  await owner.query(`
+    INSERT INTO "core"."plant_role_assignment"
+      ("id", "plantAssignmentId", "roleDefinitionId", "role_scope", "grant_actor_user_id", "is_break_glass")
+    VALUES ($1, $2, $3, 'PLANT', $4, false)
+  `, [randomUUID(), ids.plantAssignmentActorD, plantManagerRoleDefinitionId, ids.actorD]);
 
   const diagnosticClient = await runtimePool.connect();
   try {
@@ -294,6 +391,26 @@ test("production role-assignment service enforces verified actor and tenant boun
     }));
   });
 
+  await t.test("Company admin cannot grant into a sibling Company", async () => {
+    const companyAdminService = createService(ids.actorC, ids.orgA);
+    await expectAuthorizationDenied(() => companyAdminService.grantRoleAssignment({
+      scope: "COMPANY",
+      parentId: ids.companyMembershipRecipientB,
+      roleDefinitionId: companyMemberRoleDefinitionId,
+      actorUserId: ids.actorC,
+    }));
+  });
+
+  await t.test("Plant manager cannot grant into a sibling Plant", async () => {
+    const plantManagerService = createService(ids.actorD, ids.orgA);
+    await expectAuthorizationDenied(() => plantManagerService.grantRoleAssignment({
+      scope: "PLANT",
+      parentId: ids.plantAssignmentRecipientA,
+      roleDefinitionId: plantViewerRoleDefinitionId,
+      actorUserId: ids.actorD,
+    }));
+  });
+
   await t.test("actor from another Organization cannot list Organization A assignments", async () => {
     const foreignService = createService(ids.actorB, ids.orgA);
     await expectAuthorizationDenied(() => foreignService.listEffectiveRoleAssignments({
@@ -316,11 +433,21 @@ test("production role-assignment service enforces verified actor and tenant boun
     );
   });
 
-  await t.test("denied operations leave no extra assignment rows", async () => {
-    const { rows } = await owner.query(
+  await t.test("denied operations leave no Organization, Company, or Plant assignment rows", async () => {
+    const organizationRows = await owner.query(
       'SELECT COUNT(*)::int AS count FROM "core"."organization_role_assignment" WHERE "organizationMembershipId" = $1',
       [ids.recipientMembershipA],
     );
-    assert.equal(rows[0].count, 1);
+    const companyRows = await owner.query(
+      'SELECT COUNT(*)::int AS count FROM "core"."company_role_assignment" WHERE "companyMembershipId" = $1',
+      [ids.companyMembershipRecipientB],
+    );
+    const plantRows = await owner.query(
+      'SELECT COUNT(*)::int AS count FROM "core"."plant_role_assignment" WHERE "plantAssignmentId" = $1',
+      [ids.plantAssignmentRecipientA],
+    );
+    assert.equal(organizationRows.rows[0].count, 1, "only the authorized Organization assignment exists");
+    assert.equal(companyRows.rows[0].count, 0, "denied sibling-Company grant leaves no row");
+    assert.equal(plantRows.rows[0].count, 0, "denied sibling-Plant grant leaves no row");
   });
 });
