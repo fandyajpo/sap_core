@@ -81,6 +81,28 @@ The HTTP suite includes real Better Auth sign-out/session-revocation ordering, C
 
 These tests are not a substitute for production observability, operational controls, or provider-side security boundaries.
 
+### Test-boundary qualifications
+
+- The real Better Auth HTTP suites run against disposable PostgreSQL using the migration/test database identity. They prove the tested route composition and concurrency behavior, but they do **not** prove that every HTTP route succeeds under the restricted non-owner role.
+- The separate non-owner adversarial application suite exercises the role-assignment production service adapter, including tenant isolation and denied-write behavior. The direct RLS suite exercises database policy behavior with a restricted role. Neither suite is a complete HTTP test of every API route under that role.
+- The HTTP test for the role-revision endpoint currently checks malformed-body rejection; it is not a full successful revision / authorization matrix. Additional success, denial, stale-version, and concurrent-revision tests remain desirable before that endpoint is treated as broadly hardened.
+- The current CI now adds `pnpm build` to the static job. This build check was absent from the original PR #82 validation workflow; the new run on this audit branch must pass before this report is merged.
+- The workflow does not exercise a deployed Vercel environment, hosted Prisma Postgres credentials, hosted migrations, backups, monitoring, or production traffic.
+
+### Disposition of earlier source-audit findings
+
+The 2026-11-09 source audit recorded F-01 through F-05 as open at that earlier commit. Review of the current `main` tree shows these changes:
+
+| Earlier finding | Current source disposition | Remaining boundary |
+|---|---|---|
+| F-01 — unbound membership / assignment persistence façade | The old unbound Prisma-backed `scopedAccessDatabase` and convenience exports are absent. `scoped-access.ts` is marked `server-only` and exports only `createSessionBoundScopedAccessDatabase`, which locks the verified session in the same transaction. | Do not wire new membership/assignment mutations without operation-specific authorization. |
+| F-02 — role assignment not production-wired / unauthorised listing helper | The production adapter now derives actor identity from Better Auth, binds the session transaction, and passes authorization through the transaction. The HTTP route rejects caller-supplied actor/recipient IDs and break-glass fields; service code rejects break-glass. | Keep service-core/test adapters out of request paths; continue route-specific regression coverage. |
+| F-03 — missing application-path adversarial tests | Real Better Auth HTTP tests now cover the implemented member, Company, Plant, role, assignment, session-revocation, and DENY flows; the separate restricted-role adversarial service suite covers role assignment. | Coverage is bounded as stated above; not every route/method has a full success/denial/concurrency matrix. |
+| F-04 — legacy non-transactional tenant resolver | The previously cited `src/lib/tenant-context.ts` and `tenant-context-core.ts` are absent from the current `src/lib` tree. | Do not reintroduce an unbound resolver as an authorization boundary. |
+| F-05 — missing server-only markers | `src/lib/prisma.ts` and `src/lib/scoped-access.ts` both import `server-only`; protected tenant adapters also use server-only boundaries. | Continue to keep privileged DB modules out of client component imports. |
+
+This is a current-tree source review, not a proof against future code changes. The historical source-audit document should remain as a record of findings at its original commit; this table records their current disposition.
+
 ## 6. Prisma Postgres hosted-provider limitation — production blocker
 
 The selected provider remains **Prisma Postgres**. Prior hosted read-only evidence recorded the generated database credential as superuser/effectively full-access, with RLS not forced and application tables owned by that identity. Prisma Postgres does not provide custom PostgreSQL roles or per-table privilege separation for its generated credentials; pooled and direct connection endpoints are routing variants, not different privilege levels.
