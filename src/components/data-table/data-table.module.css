@@ -1,0 +1,165 @@
+.root {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.filterField {
+  display: grid;
+  width: min(100%, 320px);
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.filterInput {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.filterInput:focus-visible,
+.pageSizeSelect:focus-visible,
+.sortButton:focus-visible,
+.paginationButton:focus-visible {
+  outline: 3px solid rgba(23, 105, 170, 0.25);
+  outline-offset: 2px;
+}
+
+.toolbarContent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+.tableViewport {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.headerCell {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #f7f9fc;
+  color: #344761;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.cell {
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf1f5;
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child .cell {
+  border-bottom: 0;
+}
+
+.stateCell {
+  padding: 28px 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.paginationSummary {
+  white-space: nowrap;
+}
+
+.paginationControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pageSizeLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.pageSizeSelect,
+.paginationButton {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.pageSizeSelect {
+  padding: 0 8px;
+}
+
+.paginationButton {
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.paginationButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (max-width: 640px) {
+  .toolbar,
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbarContent {
+    margin-inline-start: 0;
+  }
+
+  .paginationControls {
+    flex-wrap: wrap;
+  }
+}
