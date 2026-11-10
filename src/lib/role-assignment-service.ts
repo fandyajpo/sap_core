@@ -295,7 +295,24 @@ export function createRoleAssignmentService(
       }
 
       return database.transaction(async (session) => {
+        // The user table is outside the tenant RLS policy set. Establish the verified
+        // actor's tenant context before reading role definitions or typed membership
+        // parents, both of which are protected by tenant RLS.
         await requireHumanActor(session, input.actorUserId);
+
+        const authorizationInput: RoleAssignmentGrantAuthorization = {
+          scope: input.scope,
+          parentId: input.parentId,
+          roleDefinitionId: input.roleDefinitionId,
+          actorUserId: input.actorUserId,
+        };
+        if (!(await authorization.authorizeGrant(authorizationInput, session))) {
+          throw new RoleAssignmentError("AUTHORIZATION_DENIED", "The Role Assignment grant was not authorized.");
+        }
+
+        // Authorization installs transaction-local tenant GUCs and locks/validates
+        // the role definition and target ancestry. These defensive reads now run
+        // under that same validated context and retain their FOR SHARE locks.
         const roleDefinition = await requireRoleDefinition(session, input.roleDefinitionId);
         if (roleDefinition.scope === "PLATFORM") {
           throw new RoleAssignmentError(
@@ -311,16 +328,6 @@ export function createRoleAssignmentService(
         }
         const parent = await requireTypedParent(session, input.scope, input.parentId);
         assertRoleDefinitionOwnership(roleDefinition, parent.organizationId);
-
-        const authorizationInput: RoleAssignmentGrantAuthorization = {
-          scope: input.scope,
-          parentId: input.parentId,
-          roleDefinitionId: input.roleDefinitionId,
-          actorUserId: input.actorUserId,
-        };
-        if (!(await authorization.authorizeGrant(authorizationInput, session))) {
-          throw new RoleAssignmentError("AUTHORIZATION_DENIED", "The Role Assignment grant was not authorized.");
-        }
 
         const mapping = assignmentTables[input.scope];
         const rows = await session.query<RoleAssignmentRecordRow>(
