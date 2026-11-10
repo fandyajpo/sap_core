@@ -327,6 +327,19 @@ export function createRoleAssignmentService(
 
       return database.transaction(async (session) => {
         await requireHumanActor(session, input.actorUserId);
+
+        // Authorization establishes app.user_id and the verified tenant
+        // ancestry GUCs before RLS-protected parent/role reads occur.
+        const authorizationInput: RoleAssignmentGrantAuthorization = {
+          scope: input.scope,
+          parentId: input.parentId,
+          roleDefinitionId: input.roleDefinitionId,
+          actorUserId: input.actorUserId,
+        };
+        if (!(await authorization.authorizeGrant(authorizationInput, session))) {
+          throw new RoleAssignmentError("AUTHORIZATION_DENIED", "The Role Assignment grant was not authorized.");
+        }
+
         const roleDefinition = await requireRoleDefinition(session, input.roleDefinitionId);
         if (roleDefinition.scope === "PLATFORM") {
           throw new RoleAssignmentError(
@@ -342,16 +355,6 @@ export function createRoleAssignmentService(
         }
         const parent = await requireTypedParent(session, input.scope, input.parentId);
         assertRoleDefinitionOwnership(roleDefinition, parent.organizationId);
-
-        const authorizationInput: RoleAssignmentGrantAuthorization = {
-          scope: input.scope,
-          parentId: input.parentId,
-          roleDefinitionId: input.roleDefinitionId,
-          actorUserId: input.actorUserId,
-        };
-        if (!(await authorization.authorizeGrant(authorizationInput, session))) {
-          throw new RoleAssignmentError("AUTHORIZATION_DENIED", "The Role Assignment grant was not authorized.");
-        }
 
         const mapping = assignmentTables[input.scope];
         const rows = await session.query<RoleAssignmentRecordRow>(
