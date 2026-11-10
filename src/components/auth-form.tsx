@@ -57,8 +57,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   }
 
   return (
-    <main className="auth-page">
-      <section className="auth-card" aria-labelledby="auth-title">
+    <section className="auth-card" aria-labelledby="auth-title">
         <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true">SC</span>
           <span className="brand-name">SAP Core</span>
@@ -81,6 +80,8 @@ export function AuthForm({ mode }: AuthFormProps) {
               <input
                 autoComplete="name"
                 className="text-input"
+                aria-describedby={error ? "auth-form-error" : undefined}
+                aria-invalid={Boolean(error)}
                 disabled={isPending}
                 id="name"
                 name="name"
@@ -95,6 +96,8 @@ export function AuthForm({ mode }: AuthFormProps) {
             <input
               autoComplete="email"
               className="text-input"
+              aria-describedby={error ? "auth-form-error" : undefined}
+              aria-invalid={Boolean(error)}
               disabled={isPending}
               id="email"
               name="email"
@@ -108,6 +111,8 @@ export function AuthForm({ mode }: AuthFormProps) {
             <input
               autoComplete={isRegistration ? "new-password" : "current-password"}
               className="text-input"
+              aria-describedby={error ? "auth-form-error" : undefined}
+              aria-invalid={Boolean(error)}
               disabled={isPending}
               id="password"
               minLength={8}
@@ -118,7 +123,7 @@ export function AuthForm({ mode }: AuthFormProps) {
           </label>
 
           {error && (
-            <p className="auth-error" role="alert">
+            <p className="auth-error" id="auth-form-error" role="alert">
               {error}
             </p>
           )}
@@ -140,6 +145,5 @@ export function AuthForm({ mode }: AuthFormProps) {
           company or plant data are checked separately.
         </p>
       </section>
-    </main>
   );
 }

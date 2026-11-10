@@ -1,3 +1,8 @@
+/*
+ * Design-token adoption (quality gate): colors, radii, elevation, and
+ * focus styling consume semantic tokens so the role assignments view
+ * is dark-ready.
+ */
 .pageContent {
   display: grid;
   gap: 22px;
@@ -15,21 +20,21 @@
 
 .heading h1 {
   margin: 0;
-  color: var(--ink);
+  color: var(--sc-color-foreground);
   font-size: clamp(27px, 5vw, 34px);
   letter-spacing: -0.035em;
   line-height: 1.2;
 }
 
 .organizationContext {
-  color: var(--muted);
-  font-size: 14px;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-body);
   line-height: 1.6;
 }
 
 .organizationContext code {
   overflow-wrap: anywhere;
-  color: #344761;
+  color: var(--sc-color-secondary-foreground);
   font-size: 0.95em;
 }
 
@@ -38,10 +43,10 @@
 .detailsCard {
   min-width: 0;
   padding: clamp(18px, 3.5vw, 28px);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-  box-shadow: 0 12px 34px rgba(23, 43, 77, 0.05);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-surface);
+  box-shadow: var(--sc-shadow-md);
 }
 
 .filterCard {
@@ -51,7 +56,7 @@
 
 .filterCard h2 {
   margin: 0;
-  color: var(--ink);
+  color: var(--sc-color-foreground);
   font-size: clamp(20px, 3.5vw, 24px);
   letter-spacing: -0.03em;
   line-height: 1.25;
@@ -70,8 +75,8 @@
 }
 
 .filterField > span {
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-caption);
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -81,44 +86,44 @@
 .input {
   min-height: 40px;
   padding: 0 12px;
-  border: 1px solid #cdd8e6;
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
+  color: var(--sc-color-foreground);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--sc-text-body);
 }
 
 .select:focus-visible,
 .input:focus-visible {
-  outline: 3px solid rgba(36, 74, 105, 0.18);
-  outline-offset: 2px;
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
 }
 
 .filterHint {
   margin: 0;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-label);
   line-height: 1.55;
 }
 
 .filterHint code {
   overflow-wrap: anywhere;
-  color: #344761;
+  color: var(--sc-color-secondary-foreground);
   font-size: 0.95em;
 }
 
 .waitingState {
   padding: 22px 24px;
-  border: 1px solid #d7e6f1;
-  border-radius: 12px;
-  background: #f5fafd;
-  color: #244a69;
+  border: var(--sc-border-width) solid var(--sc-color-info-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-info-subtle);
+  color: var(--sc-color-info);
 }
 
 .waitingState p {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--sc-text-body);
   line-height: 1.5;
 }
 
@@ -136,7 +141,7 @@
 
 .detailsHeader h2 {
   margin: 0;
-  color: var(--ink);
+  color: var(--sc-color-foreground);
   font-size: clamp(20px, 3.5vw, 24px);
   letter-spacing: -0.03em;
   line-height: 1.25;
@@ -151,14 +156,14 @@
 
 .detailsItem {
   padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #fbfdff;
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-surface-secondary);
 }
 
 .detailsItem dt {
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-caption);
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -167,14 +172,14 @@
 .detailsItem dd {
   margin: 6px 0 0;
   overflow-wrap: anywhere;
-  color: var(--ink);
-  font-size: 14px;
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-body);
   line-height: 1.5;
 }
 
 .monoValue {
   overflow-wrap: anywhere;
-  color: #344761;
+  color: var(--sc-color-secondary-foreground);
   font-size: 0.92em;
 }
 
@@ -183,11 +188,11 @@
   min-height: 26px;
   align-items: center;
   padding: 2px 9px;
-  border: 1px solid #d7e6f1;
-  border-radius: 999px;
-  background: #edf6fc;
-  color: #244a69;
-  font-size: 12px;
+  border: var(--sc-border-width) solid var(--sc-color-info-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-info-subtle);
+  color: var(--sc-color-info);
+  font-size: var(--sc-text-caption);
   font-weight: 700;
   line-height: 1.3;
 }
@@ -197,11 +202,11 @@
   min-height: 26px;
   align-items: center;
   padding: 2px 9px;
-  border: 1px solid #e3d3d3;
-  border-radius: 999px;
-  background: #fbf3f3;
-  color: #7c3a3a;
-  font-size: 12px;
+  border: var(--sc-border-width) solid var(--sc-color-danger-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-danger-subtle);
+  color: var(--sc-color-danger);
+  font-size: var(--sc-text-caption);
   font-weight: 700;
   line-height: 1.3;
 }
@@ -211,11 +216,11 @@
   min-height: 26px;
   align-items: center;
   padding: 2px 9px;
-  border: 1px solid #e0d0ae;
-  border-radius: 999px;
-  background: #fdf6e3;
-  color: #7a5a1f;
-  font-size: 12px;
+  border: var(--sc-border-width) solid var(--sc-color-warning-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-warning-subtle);
+  color: var(--sc-color-warning);
+  font-size: var(--sc-text-caption);
   font-weight: 700;
   line-height: 1.3;
 }
@@ -223,23 +228,23 @@
 .detailsButton {
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid #cdd8e6;
-  border-radius: 8px;
-  background: var(--surface);
-  color: #244a69;
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
+  color: var(--sc-color-secondary-foreground);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--sc-text-label);
   font-weight: 700;
 }
 
 .detailsButton:hover:not(:disabled) {
-  background: #f2f7fc;
+  background: var(--sc-color-surface-secondary);
 }
 
 .detailsButton:focus-visible {
-  outline: 3px solid rgba(36, 74, 105, 0.18);
-  outline-offset: 2px;
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
 }
 
 .errorState {
@@ -248,15 +253,15 @@
   justify-content: space-between;
   gap: 18px;
   padding: 22px 24px;
-  border: 1px solid #f0d2d2;
-  border-radius: 12px;
-  background: #fff8f8;
-  color: #8f2f2f;
+  border: var(--sc-border-width) solid var(--sc-color-danger-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-danger-subtle);
+  color: var(--sc-color-danger);
 }
 
 .errorState p {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--sc-text-body);
   line-height: 1.5;
 }
 
@@ -266,15 +271,15 @@
   justify-content: space-between;
   gap: 18px;
   padding: 18px 22px;
-  border: 1px solid #ecd9b8;
-  border-radius: 12px;
-  background: #fffaf0;
-  color: #7a5a1f;
+  border: var(--sc-border-width) solid var(--sc-color-warning-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-warning-subtle);
+  color: var(--sc-color-warning);
 }
 
 .refreshNotice p {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--sc-text-body);
   line-height: 1.5;
 }
 
@@ -282,23 +287,23 @@
   min-height: 40px;
   flex: 0 0 auto;
   padding: 0 16px;
-  border: 1px solid #d9bcbc;
-  border-radius: 8px;
-  background: var(--surface);
-  color: #7c2626;
+  border: var(--sc-border-width) solid var(--sc-color-danger-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
+  color: var(--sc-color-danger);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--sc-text-label);
   font-weight: 700;
 }
 
 .retryButton:hover:not(:disabled) {
-  background: #fff0f0;
+  background: var(--sc-color-danger-subtle);
 }
 
 .retryButton:focus-visible {
-  outline: 3px solid rgba(163, 45, 45, 0.2);
-  outline-offset: 2px;
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
 }
 
 @media (max-width: 520px) {

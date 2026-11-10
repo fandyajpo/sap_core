@@ -7,5 +7,9 @@ export default async function SignInPage() {
     redirect("/");
   }
 
-  return <AuthForm mode="sign-in" />;
+  return (
+    <main className="auth-page">
+      <AuthForm mode="sign-in" />
+    </main>
+  );
 }

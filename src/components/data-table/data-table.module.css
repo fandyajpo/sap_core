@@ -1,3 +1,8 @@
+/*
+ * Design-token adoption (quality gate): all colors, radii, and focus
+ * styling now consume the semantic tokens from src/app/styles/ so the
+ * table renders correctly in light and dark themes. Legacy vars removed.
+ */
 .root {
   display: grid;
   min-width: 0;
@@ -14,18 +19,18 @@
   display: grid;
   width: min(100%, 320px);
   gap: 6px;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-label);
   font-weight: 700;
 }
 
 .filterInput {
   min-height: 40px;
   padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
+  color: var(--sc-color-foreground);
   font: inherit;
   font-weight: 400;
 }
@@ -34,8 +39,8 @@
 .pageSizeSelect:focus-visible,
 .sortButton:focus-visible,
 .paginationButton:focus-visible {
-  outline: 3px solid rgba(23, 105, 170, 0.25);
-  outline-offset: 2px;
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
 }
 
 .toolbarContent {
@@ -47,24 +52,24 @@
 
 .tableViewport {
   overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  color: var(--ink);
-  font-size: 14px;
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-body);
 }
 
 .headerCell {
   padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  background: #f7f9fc;
-  color: #344761;
-  font-size: 12px;
+  border-bottom: var(--sc-border-width) solid var(--sc-color-border);
+  background: var(--sc-color-surface-secondary);
+  color: var(--sc-color-secondary-foreground);
+  font-size: var(--sc-text-caption);
   font-weight: 700;
   text-align: start;
   white-space: nowrap;
@@ -84,7 +89,7 @@
 
 .cell {
   padding: 12px 14px;
-  border-bottom: 1px solid #edf1f5;
+  border-bottom: var(--sc-border-width) solid var(--sc-color-border);
   vertical-align: middle;
 }
 
@@ -94,7 +99,7 @@
 
 .stateCell {
   padding: 28px 14px;
-  color: var(--muted);
+  color: var(--sc-color-muted-foreground);
   text-align: center;
 }
 
@@ -103,8 +108,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-label);
 }
 
 .paginationSummary {
@@ -127,10 +132,10 @@
 .pageSizeSelect,
 .paginationButton {
   min-height: 34px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--ink);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-color-surface);
+  color: var(--sc-color-foreground);
   font: inherit;
 }
 

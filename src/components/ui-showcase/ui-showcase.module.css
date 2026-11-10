@@ -1,0 +1,185 @@
+/* Showcase styles — written directly against the PR #91 semantic tokens. */
+.page {
+  display: grid;
+  gap: 22px;
+  margin-top: clamp(28px, 5vw, 48px);
+}
+
+.heading {
+  display: grid;
+  gap: 9px;
+}
+
+.heading h1 {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: clamp(27px, 5vw, 34px);
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.context {
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-body);
+  line-height: 1.6;
+}
+
+.context code {
+  color: var(--sc-color-secondary-foreground);
+  font-size: 0.95em;
+}
+
+.card {
+  min-width: 0;
+  padding: clamp(18px, 3.5vw, 28px);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-surface);
+  box-shadow: var(--sc-shadow-sm);
+  display: grid;
+  gap: 14px;
+}
+
+.card h2 {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-h3);
+  letter-spacing: -0.015em;
+}
+
+.card h3 {
+  margin: 0 0 10px;
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-h4);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.demoControls {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.demoButton {
+  min-height: 36px;
+  padding: 0 14px;
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
+  color: var(--sc-color-secondary-foreground);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--sc-text-label);
+  font-weight: 700;
+}
+
+.demoButton[aria-pressed="true"] {
+  border-color: var(--sc-color-primary);
+  color: var(--sc-color-primary);
+}
+
+.demoButton:focus-visible {
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
+}
+
+.note {
+  margin: 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-label);
+  line-height: 1.55;
+}
+
+.formGrid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+}
+
+.formCell {
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-md);
+  padding: 16px;
+  background: var(--sc-color-surface-secondary);
+}
+
+.chipGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 2px 12px;
+  border-radius: var(--sc-radius-full);
+  font-size: var(--sc-text-caption);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.chipInfo {
+  border: var(--sc-border-width) solid var(--sc-color-info-border);
+  background: var(--sc-color-info-subtle);
+  color: var(--sc-color-info);
+}
+
+.chipSuccess {
+  border: var(--sc-border-width) solid var(--sc-color-success-border);
+  background: var(--sc-color-success-subtle);
+  color: var(--sc-color-success);
+}
+
+.chipWarning {
+  border: var(--sc-border-width) solid var(--sc-color-warning-border);
+  background: var(--sc-color-warning-subtle);
+  color: var(--sc-color-warning);
+}
+
+.chipDanger {
+  border: var(--sc-border-width) solid var(--sc-color-danger-border);
+  background: var(--sc-color-danger-subtle);
+  color: var(--sc-color-danger);
+}
+
+.statusActive {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 2px 8px;
+  border: var(--sc-border-width) solid var(--sc-color-info-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-info-subtle);
+  color: var(--sc-color-info);
+  font-size: var(--sc-text-caption);
+  font-weight: 700;
+}
+
+.statusRevoked {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 2px 8px;
+  border: var(--sc-border-width) solid var(--sc-color-danger-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-danger-subtle);
+  color: var(--sc-color-danger);
+  font-size: var(--sc-text-caption);
+  font-weight: 700;
+}
+
+.numeric {
+  font-variant-numeric: var(--sc-numeric-font-variant);
+  display: inline-block;
+  min-width: 9ch;
+  text-align: end;
+}

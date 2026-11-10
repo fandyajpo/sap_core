@@ -7,5 +7,9 @@ export default async function RegisterPage() {
     redirect("/");
   }
 
-  return <AuthForm mode="register" />;
+  return (
+    <main className="auth-page">
+      <AuthForm mode="register" />
+    </main>
+  );
 }

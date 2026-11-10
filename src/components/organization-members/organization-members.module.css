@@ -1,3 +1,7 @@
+/*
+ * Design-token adoption (quality gate): colors, radii, elevation, and
+ * focus styling consume semantic tokens so the members view is dark-ready.
+ */
 .pageContent {
   display: grid;
   gap: 22px;
@@ -15,31 +19,31 @@
 
 .heading h1 {
   margin: 0;
-  color: var(--ink);
+  color: var(--sc-color-foreground);
   font-size: clamp(27px, 5vw, 34px);
   letter-spacing: -0.035em;
   line-height: 1.2;
 }
 
 .organizationContext {
-  color: var(--muted);
-  font-size: 14px;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-body);
   line-height: 1.6;
 }
 
 .organizationContext code {
   overflow-wrap: anywhere;
-  color: #344761;
+  color: var(--sc-color-secondary-foreground);
   font-size: 0.95em;
 }
 
 .tableCard {
   min-width: 0;
   padding: clamp(18px, 3.5vw, 28px);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-  box-shadow: 0 12px 34px rgba(23, 43, 77, 0.05);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-surface);
+  box-shadow: var(--sc-shadow-md);
 }
 
 .status {
@@ -47,11 +51,11 @@
   min-height: 26px;
   align-items: center;
   padding: 2px 9px;
-  border: 1px solid #d7e6f1;
-  border-radius: 999px;
-  background: #edf6fc;
-  color: #244a69;
-  font-size: 12px;
+  border: var(--sc-border-width) solid var(--sc-color-info-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-info-subtle);
+  color: var(--sc-color-info);
+  font-size: var(--sc-text-caption);
   font-weight: 700;
   line-height: 1.3;
 }
@@ -62,15 +66,15 @@
   justify-content: space-between;
   gap: 18px;
   padding: 22px 24px;
-  border: 1px solid #f0d2d2;
-  border-radius: 12px;
-  background: #fff8f8;
-  color: #8f2f2f;
+  border: var(--sc-border-width) solid var(--sc-color-danger-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-danger-subtle);
+  color: var(--sc-color-danger);
 }
 
 .errorState p {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--sc-text-body);
   line-height: 1.5;
 }
 
@@ -78,23 +82,23 @@
   min-height: 40px;
   flex: 0 0 auto;
   padding: 0 16px;
-  border: 1px solid #d9bcbc;
-  border-radius: 8px;
-  background: var(--surface);
-  color: #7c2626;
+  border: var(--sc-border-width) solid var(--sc-color-danger-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
+  color: var(--sc-color-danger);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--sc-text-label);
   font-weight: 700;
 }
 
 .retryButton:hover:not(:disabled) {
-  background: #fff0f0;
+  background: var(--sc-color-danger-subtle);
 }
 
 .retryButton:focus-visible {
-  outline: 3px solid rgba(163, 45, 45, 0.2);
-  outline-offset: 2px;
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
 }
 
 @media (max-width: 520px) {
