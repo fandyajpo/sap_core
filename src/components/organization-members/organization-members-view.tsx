@@ -3,6 +3,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/data-table";
 import type { OrganizationMemberDto } from "@/lib/client-data/contracts";
+import { HttpApiError } from "@/lib/client-data/http";
 import { useOrganizationMembers } from "@/lib/client-data/queries/use-organization-members";
 import styles from "./organization-members.module.css";
 
@@ -80,6 +81,8 @@ function MembersLoadError({ onRetry }: MembersLoadErrorProps) {
 
 export function OrganizationMembersView({ organizationId }: OrganizationMembersViewProps) {
   const query = useOrganizationMembers(organizationId);
+  const isAuthorizationError = query.error instanceof HttpApiError
+    && (query.error.status === 401 || query.error.status === 403);
   const tableProps = {
     ariaLabel: "Organization members",
     columns,
@@ -87,7 +90,9 @@ export function OrganizationMembersView({ organizationId }: OrganizationMembersV
     getRowId: (member: OrganizationMemberDto) => member.membershipId,
   };
 
-  if (query.isError && !query.data) {
+  // Never keep protected member rows visible after the server rejects access.
+  // Transient failures may retain stale rows, but 401/403 must hide them.
+  if (query.isError && (!query.data || isAuthorizationError)) {
     return (
       <section aria-labelledby="members-title" className={styles.pageContent}>
         <PageHeading organizationId={organizationId} />
