@@ -126,6 +126,9 @@ function requireAssignableScope(value: string): asserts value is AssignableRoleS
 }
 
 async function requireHumanActor(session: ScopedAccessSession, actorUserId: string): Promise<void> {
+  // The caller has already verified and locked the Better Auth session. A plain
+  // existence read is sufficient here; FOR SHARE would require UPDATE privilege
+  // on core.user, which the tenant runtime role intentionally does not have.
   const rows = await session.query<{ id: string }>(
     `SELECT "id" FROM "core"."user" WHERE "id" = $1`,
     [actorUserId],
