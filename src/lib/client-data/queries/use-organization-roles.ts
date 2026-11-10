@@ -18,6 +18,8 @@ export function createOrganizationRolesQueryOptions(organizationId: string) {
     queryKey: clientDataKeys.organizationRoles(organizationId),
     queryFn: ({ signal }: { signal: AbortSignal }) => listOrganizationRoles(organizationId, signal),
     enabled: organizationId.trim().length > 0,
+    gcTime: 0,
+    staleTime: 0,
   };
 }
 
