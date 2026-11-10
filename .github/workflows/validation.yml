@@ -50,6 +50,7 @@ jobs:
       - run: pnpm test:client-data
       - run: pnpm test:data-table
       - run: pnpm test:organization-members-ui
+      - run: pnpm test:organization-roles-ui
       - run: node --test tests/architecture-boundaries.unit.test.mjs
 
   v03-integration:
