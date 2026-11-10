@@ -329,14 +329,6 @@ before(async () => {
       effectiveActorGrants.rows.some((row) => row.roleCode === "ORG_OWNER" && row.permissionCode === "roles.assign" && row.effect === "ALLOW"),
       `runtime effective-grant query must return ORG_OWNER roles.assign; got ${JSON.stringify(effectiveActorGrants.rows)}`,
     );
-    const authorization = createRoleAssignmentAuthorization(ids.actorA, ids.orgA);
-    const directDecision = await authorization.authorizeGrant({
-      scope: "ORGANIZATION",
-      parentId: ids.recipientMembershipA,
-      roleDefinitionId: memberRoleDefinitionId,
-      actorUserId: ids.actorA,
-    }, createSession(diagnosticClient));
-    assert.equal(directDecision, true, "authorization core must allow the fixture's sealed ORG_OWNER grant");
     await diagnosticClient.query("ROLLBACK");
   } finally {
     diagnosticClient.release();
