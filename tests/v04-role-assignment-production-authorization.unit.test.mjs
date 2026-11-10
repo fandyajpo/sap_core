@@ -15,6 +15,14 @@ function harness({ actorMember = true, targetMember = true, deny = false, explic
   const session = {
     async query(statement, values = []) {
       statements.push({ statement, values });
+      if (
+        statement.includes('FROM "core"."organization_membership"') &&
+        statement.includes('"id" = $1 AND "userId" = $2')
+      ) {
+        return actorMember
+          ? [{ id: "55555555-5555-4555-8555-555555555555" }]
+          : [];
+      }
       if (statement.includes('FROM "core"."organization_membership"') && statement.includes('"id" = $1')) {
         return targetMember
           ? [{ id: membershipId, organizationId, userId: recipientId, status: "ACTIVE" }]
