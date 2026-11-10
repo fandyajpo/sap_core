@@ -349,16 +349,15 @@ after(async () => {
   if (ownerConnected) await owner.end();
 });
 
-test("production role-assignment service enforces verified actor and tenant boundaries on non-owner RLS role", async (t) => {
+test("production role-assignment adapter enforces verified-session actor and tenant boundaries on non-owner RLS role", async (t) => {
   const actorAService = createService(ids.actorA);
-  const actorBService = createService(ids.actorB);
 
-  await t.test("authorized Organization owner grants a role to an active same-tenant member", async () => {
+  await t.test("verified Organization owner grants a role to an active same-tenant member", async () => {
     const assignment = await actorAService.grantRoleAssignmentForCurrentUser({
+      organizationId: ids.orgA,
       scope: "ORGANIZATION",
       parentId: ids.recipientMembershipA,
       roleDefinitionId: memberRoleDefinitionId,
-      actorUserId: ids.actorA,
     });
     assert.equal(assignment.scope, "ORGANIZATION");
     assert.equal(assignment.parentId, ids.recipientMembershipA);
@@ -367,9 +366,9 @@ test("production role-assignment service enforces verified actor and tenant boun
     assert.equal(assignment.isBreakGlass, false);
   });
 
-  await t.test("authorized actor can list the target member's effective assignment", async () => {
+  await t.test("verified actor can list the target member's effective assignment", async () => {
     const rows = await actorAService.listRoleAssignmentsForCurrentUser({
-      actorUserId: ids.actorA,
+      organizationId: ids.orgA,
       userId: ids.recipientA,
       scope: "ORGANIZATION",
       parentId: ids.recipientMembershipA,
@@ -381,37 +380,37 @@ test("production role-assignment service enforces verified actor and tenant boun
   await t.test("actor from another Organization cannot grant into Organization A", async () => {
     const foreignService = createService(ids.actorB);
     await expectAuthorizationDenied(() => foreignService.grantRoleAssignmentForCurrentUser({
+      organizationId: ids.orgA,
       scope: "ORGANIZATION",
       parentId: ids.recipientMembershipA,
       roleDefinitionId: memberRoleDefinitionId,
-      actorUserId: ids.actorB,
     }));
   });
 
   await t.test("Company admin cannot grant into a sibling Company", async () => {
     const companyAdminService = createService(ids.actorC);
     await expectAuthorizationDenied(() => companyAdminService.grantRoleAssignmentForCurrentUser({
+      organizationId: ids.orgA,
       scope: "COMPANY",
       parentId: ids.companyMembershipRecipientB,
       roleDefinitionId: companyMemberRoleDefinitionId,
-      actorUserId: ids.actorC,
     }));
   });
 
   await t.test("Plant manager cannot grant into a sibling Plant", async () => {
     const plantManagerService = createService(ids.actorD);
     await expectAuthorizationDenied(() => plantManagerService.grantRoleAssignmentForCurrentUser({
+      organizationId: ids.orgA,
       scope: "PLANT",
       parentId: ids.plantAssignmentRecipientA,
       roleDefinitionId: plantViewerRoleDefinitionId,
-      actorUserId: ids.actorD,
     }));
   });
 
   await t.test("actor from another Organization cannot list Organization A assignments", async () => {
     const foreignService = createService(ids.actorB);
     await expectAuthorizationDenied(() => foreignService.listRoleAssignmentsForCurrentUser({
-      actorUserId: ids.actorB,
+      organizationId: ids.orgA,
       userId: ids.recipientA,
       scope: "ORGANIZATION",
       parentId: ids.recipientMembershipA,
@@ -422,7 +421,7 @@ test("production role-assignment service enforces verified actor and tenant boun
     const assignment = await actorAService.grantRoleAssignmentForCurrentUser({
       organizationId: ids.orgA,
       scope: "ORGANIZATION",
-      parentId: ids.recipientMembershipA,
+      parentId: ids.recipientMembershipB,
       roleDefinitionId: memberRoleDefinitionId,
       actorUserId: ids.actorB,
     });
@@ -469,4 +468,4 @@ test("production role-assignment service enforces verified actor and tenant boun
     assert.equal(companyRows.rows[0].count, 0, "denied sibling-Company grant leaves no row");
     assert.equal(plantRows.rows[0].count, 0, "denied sibling-Plant grant leaves no row");
   });
-});
+});;
