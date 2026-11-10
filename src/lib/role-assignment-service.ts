@@ -127,7 +127,7 @@ function requireAssignableScope(value: string): asserts value is AssignableRoleS
 
 async function requireHumanActor(session: ScopedAccessSession, actorUserId: string): Promise<void> {
   const rows = await session.query<{ id: string }>(
-    `SELECT "id" FROM "core"."user" WHERE "id" = $1 FOR SHARE`,
+    `SELECT "id" FROM "core"."user" WHERE "id" = $1`,
     [actorUserId],
   );
   if (!rows[0]) {
