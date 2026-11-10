@@ -6,11 +6,23 @@ import { grantRoleAssignment as grantRoleAssignmentRequest, listRoleAssignments 
 import type { GrantRoleAssignmentRequest, RoleAssignmentsQuery } from "../contracts.ts";
 import { clientDataKeys } from "./keys.ts";
 
-export function useRoleAssignments(organizationId: string, query: RoleAssignmentsQuery) {
-  return useQuery({
+export function createRoleAssignmentsQueryOptions(
+  organizationId: string,
+  query: RoleAssignmentsQuery,
+) {
+  return {
     queryKey: clientDataKeys.roleAssignments(organizationId, query),
-    queryFn: ({ signal }) => listRoleAssignments(organizationId, query, signal),
-  });
+    queryFn: ({ signal }: { signal: AbortSignal }) => listRoleAssignments(organizationId, query, signal),
+    enabled:
+      organizationId.trim().length > 0 &&
+      query.scope.trim().length > 0 &&
+      query.parentId.trim().length > 0 &&
+      query.userId.trim().length > 0,
+  };
+}
+
+export function useRoleAssignments(organizationId: string, query: RoleAssignmentsQuery) {
+  return useQuery(createRoleAssignmentsQueryOptions(organizationId, query));
 }
 
 export function createGrantRoleAssignmentMutationOptions(

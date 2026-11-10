@@ -13,11 +13,16 @@ import type {
 } from "../contracts.ts";
 import { clientDataKeys } from "./keys.ts";
 
-export function useOrganizationRoles(organizationId: string) {
-  return useQuery({
+export function createOrganizationRolesQueryOptions(organizationId: string) {
+  return {
     queryKey: clientDataKeys.organizationRoles(organizationId),
-    queryFn: ({ signal }) => listOrganizationRoles(organizationId, signal),
-  });
+    queryFn: ({ signal }: { signal: AbortSignal }) => listOrganizationRoles(organizationId, signal),
+    enabled: organizationId.trim().length > 0,
+  };
+}
+
+export function useOrganizationRoles(organizationId: string) {
+  return useQuery(createOrganizationRolesQueryOptions(organizationId));
 }
 
 export function createOrganizationRoleMutationOptions(

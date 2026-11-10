@@ -11,9 +11,11 @@ import { grantRoleAssignment, listRoleAssignments } from "../src/lib/client-data
 import { HttpApiError, requestJson } from "../src/lib/client-data/http.ts";
 import { createQueryClient, getQueryClient } from "../src/lib/client-data/query-client.ts";
 import { clientDataKeys } from "../src/lib/client-data/queries/keys.ts";
-import { createOrganizationRoleMutationOptions, createReviseOrganizationRoleMutationOptions } from "../src/lib/client-data/queries/use-organization-roles.ts";
-import { createGrantRoleAssignmentMutationOptions } from "../src/lib/client-data/queries/use-role-assignments.ts";
-import { createRevokeTenantDenyPolicyMutationOptions, createTenantDenyPolicyMutationOptions } from "../src/lib/client-data/queries/use-deny-policies.ts";
+import { createOrganizationRoleMutationOptions, createOrganizationRolesQueryOptions, createReviseOrganizationRoleMutationOptions } from "../src/lib/client-data/queries/use-organization-roles.ts";
+import { createGrantRoleAssignmentMutationOptions, createRoleAssignmentsQueryOptions } from "../src/lib/client-data/queries/use-role-assignments.ts";
+import { createRevokeTenantDenyPolicyMutationOptions, createTenantDenyPolicyMutationOptions, createTenantDenyPolicyHistoryQueryOptions } from "../src/lib/client-data/queries/use-deny-policies.ts";
+import { createOrganizationMembersQueryOptions } from "../src/lib/client-data/queries/use-organization-members.ts";
+import { createCompanyQueryOptions, createPlantQueryOptions } from "../src/lib/client-data/queries/use-tenant-resources.ts";
 
 const originalFetch = globalThis.fetch;
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -216,6 +218,34 @@ test("query keys isolate each feature and retain the role-assignment invalidatio
   assert.deepEqual(clientDataKeys.plant("org-1", "company-1", "plant-1"), [
     "organizations", "org-1", "companies", "company-1", "plants", "plant-1",
   ]);
+});
+
+test("query hooks stay disabled until every required identifier is non-empty", () => {
+  assert.equal(createOrganizationMembersQueryOptions("").enabled, false);
+  assert.equal(createOrganizationMembersQueryOptions("org-1").enabled, true);
+  assert.equal(createOrganizationMembersQueryOptions("  ").enabled, false);
+
+  assert.equal(createOrganizationRolesQueryOptions("").enabled, false);
+  assert.equal(createOrganizationRolesQueryOptions("org-1").enabled, true);
+
+  const assignmentQuery = { scope: "PLANT", parentId: "plant-1", userId: "user-1" };
+  assert.equal(createRoleAssignmentsQueryOptions("org-1", assignmentQuery).enabled, true);
+  assert.equal(createRoleAssignmentsQueryOptions("", assignmentQuery).enabled, false);
+  assert.equal(createRoleAssignmentsQueryOptions("org-1", { ...assignmentQuery, scope: "" }).enabled, false);
+  assert.equal(createRoleAssignmentsQueryOptions("org-1", { ...assignmentQuery, parentId: "" }).enabled, false);
+  assert.equal(createRoleAssignmentsQueryOptions("org-1", { ...assignmentQuery, userId: "" }).enabled, false);
+
+  assert.equal(createTenantDenyPolicyHistoryQueryOptions("").enabled, false);
+  assert.equal(createTenantDenyPolicyHistoryQueryOptions("org-1").enabled, true);
+
+  assert.equal(createCompanyQueryOptions("org-1", "company-1").enabled, true);
+  assert.equal(createCompanyQueryOptions("", "company-1").enabled, false);
+  assert.equal(createCompanyQueryOptions("org-1", "").enabled, false);
+
+  assert.equal(createPlantQueryOptions("org-1", "company-1", "plant-1").enabled, true);
+  assert.equal(createPlantQueryOptions("", "company-1", "plant-1").enabled, false);
+  assert.equal(createPlantQueryOptions("org-1", "", "plant-1").enabled, false);
+  assert.equal(createPlantQueryOptions("org-1", "company-1", "").enabled, false);
 });
 
 test("QueryClient defaults are stable and server calls receive isolated clients", () => {

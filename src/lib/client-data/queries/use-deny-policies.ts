@@ -10,11 +10,16 @@ import {
 import type { CreateTenantDenyPolicyRequest, RevokeTenantDenyPolicyRequest } from "../contracts.ts";
 import { clientDataKeys } from "./keys.ts";
 
-export function useTenantDenyPolicyHistory(organizationId: string) {
-  return useQuery({
+export function createTenantDenyPolicyHistoryQueryOptions(organizationId: string) {
+  return {
     queryKey: clientDataKeys.tenantDenyPolicyHistory(organizationId),
-    queryFn: ({ signal }) => getTenantDenyPolicyHistory(organizationId, signal),
-  });
+    queryFn: ({ signal }: { signal: AbortSignal }) => getTenantDenyPolicyHistory(organizationId, signal),
+    enabled: organizationId.trim().length > 0,
+  };
+}
+
+export function useTenantDenyPolicyHistory(organizationId: string) {
+  return useQuery(createTenantDenyPolicyHistoryQueryOptions(organizationId));
 }
 
 export function createTenantDenyPolicyMutationOptions(
