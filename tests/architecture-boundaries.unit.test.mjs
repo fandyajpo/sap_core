@@ -308,17 +308,17 @@ function inspectClientBoundaries(modules, entries, aliasMappings) {
       const filePath = pending.pop();
       if (visited.has(filePath)) continue;
       visited.add(filePath);
-      const module = modules.get(filePath);
-      if (!module) {
+      const moduleInfo = modules.get(filePath);
+      if (!moduleInfo) {
         report({ rule: "unresolved-client-module", entry, filePath });
         continue;
       }
-      if (module.hasServerOnlyMarker) {
+      if (moduleInfo.hasServerOnlyMarker) {
         report({ rule: "client-reaches-server-only-module", entry, filePath });
         continue;
       }
 
-      for (const imported of module.imports) {
+      for (const imported of moduleInfo.imports) {
         if (!imported.runtime) continue;
         const resolution = resolveSourceImport(filePath, imported.specifier, modules, aliasMappings);
         if (isForbiddenClientDependency(imported.specifier, resolution.candidate ?? resolution.target)) {
@@ -369,17 +369,17 @@ function inspectPureDomainDependencies(modules, entryPoints, aliasMappings) {
       const filePath = pending.pop();
       if (visited.has(filePath)) continue;
       visited.add(filePath);
-      const module = modules.get(filePath);
-      if (!module) {
+      const moduleInfo = modules.get(filePath);
+      if (!moduleInfo) {
         violations.push({ rule: "missing-pure-domain-module", entry, filePath });
         continue;
       }
-      if (module.hasServerOnlyMarker) {
+      if (moduleInfo.hasServerOnlyMarker) {
         violations.push({ rule: "pure-domain-reaches-server-only-module", entry, filePath });
         continue;
       }
 
-      for (const imported of module.imports) {
+      for (const imported of moduleInfo.imports) {
         if (!imported.runtime) continue;
         const resolution = resolveSourceImport(filePath, imported.specifier, modules, aliasMappings);
         if (isForbiddenPureDependency(imported.specifier, resolution.candidate ?? resolution.target)) {
@@ -441,8 +441,8 @@ for (const filePath of sourceFiles) {
 }
 
 const clientEntries = [...sourceModules.values()]
-  .filter((module) => module.clientEntry)
-  .map((module) => module.filePath)
+  .filter((moduleInfo) => moduleInfo.clientEntry)
+  .map((moduleInfo) => moduleInfo.filePath)
   .sort();
 
 const organizationRouteFiles = [...sourceModules.keys()]
