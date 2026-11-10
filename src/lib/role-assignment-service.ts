@@ -153,6 +153,24 @@ async function requireRoleDefinition(
       `Role Definition ${roleDefinitionId} does not exist.`,
     );
   }
+  // SYSTEM role definitions are globally readable but not update-visible under
+  // tenant RLS. Lock only Organization-owned custom roles, whose owner-scoped
+  // UPDATE policy permits FOR SHARE in the already-authorized tenant context.
+  if (roleDefinition.kind === "ORGANIZATION_CUSTOM") {
+    const locked = await session.query<{ id: string }>(
+      `SELECT "id" FROM "core"."role_definition"
+       WHERE "id" = $1
+         AND "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+       FOR SHARE`,
+      [roleDefinitionId],
+    );
+    if (!locked[0]) {
+      throw new RoleAssignmentError(
+        "ROLE_DEFINITION_NOT_FOUND",
+        `Role Definition ${roleDefinitionId} does not exist.`,
+      );
+    }
+  }
   return roleDefinition;
 }
 
