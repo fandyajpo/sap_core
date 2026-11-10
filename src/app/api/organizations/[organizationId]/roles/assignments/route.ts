@@ -1,3 +1,5 @@
+import { isUuid } from "@/lib/http-validation";
+import { getCurrentSession } from "@/lib/auth-session";
 import { NextResponse } from "next/server";
 import {
   RoleAssignmentError,
@@ -23,7 +25,16 @@ function isScope(value: unknown): value is AssignableScope {
   return value === "ORGANIZATION" || value === "COMPANY" || value === "PLANT";
 }
 
+function isUserId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 128 &&
+    value.trim() === value &&
+    !Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
+}
+
 function errorResponse(error: unknown) {
+  if (error instanceof SyntaxError) {
+    return NextResponse.json({ error: "A valid JSON request body is required." }, { status: 400 });
+  }
   if (error instanceof TenantTargetContextError) {
     const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "INVALID_SCOPE" ? 400 : 403;
     return NextResponse.json({ error: "Role assignment access denied." }, { status });
@@ -47,19 +58,28 @@ export async function GET(
   context: { params: Promise<{ organizationId: string }> },
 ) {
   const { organizationId } = await context.params;
-  const query = new URL(request.url).searchParams;
-  const scope = query.get("scope");
-  const parentId = query.get("parentId");
-  const userId = query.get("userId");
-
-  if (!isScope(scope) || !parentId || !userId) {
-    return NextResponse.json(
-      { error: "scope, parentId, and userId query parameters are required." },
-      { status: 400 },
-    );
-  }
-
   try {
+    // Authenticate before reporting request-shape errors, so anonymous callers
+    // cannot use validation behavior as a substitute for the auth boundary.
+    const session = await getCurrentSession();
+    if (!session?.session?.id || !session.user?.id) {
+      return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    }
+    if (!isUuid(organizationId)) {
+      return NextResponse.json({ error: "A valid Organization ID is required." }, { status: 400 });
+    }
+    const query = new URL(request.url).searchParams;
+    const scope = query.get("scope");
+    const parentId = query.get("parentId");
+    const userId = query.get("userId");
+
+    if (!isScope(scope) || !isUuid(parentId) || !isUserId(userId)) {
+      return NextResponse.json(
+        { error: "scope, parentId, and userId query parameters are required." },
+        { status: 400 },
+      );
+    }
+
     const assignments = await listRoleAssignmentsForCurrentUser({
       organizationId, scope, parentId, userId,
     });
@@ -75,9 +95,19 @@ export async function POST(
 ) {
   const { organizationId } = await context.params;
   try {
+    // Keep authentication ahead of body parsing and validation for the same
+    // unauthenticated response contract as GET.
+    const session = await getCurrentSession();
+    if (!session?.session?.id || !session.user?.id) {
+      return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    }
+    if (!isUuid(organizationId)) {
+      return NextResponse.json({ error: "A valid Organization ID is required." }, { status: 400 });
+    }
+
     const body: unknown = await request.json();
     if (!isRecord(body) || !isScope(body.scope) ||
-        typeof body.parentId !== "string" || typeof body.roleDefinitionId !== "string" ||
+        !isUuid(body.parentId) || !isUuid(body.roleDefinitionId) ||
         Object.hasOwn(body, "actorUserId") || Object.hasOwn(body, "userId") ||
         Object.hasOwn(body, "breakGlass")) {
       return NextResponse.json(

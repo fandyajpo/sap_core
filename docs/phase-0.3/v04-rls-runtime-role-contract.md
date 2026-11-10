@@ -1,6 +1,6 @@
 # V04 Tenant RLS and Runtime Role Contract
 
-**Status:** Repository implementation and disposable-CI validation in progress  
+**Status:** Repository implementation and disposable-CI validation PASS; hosted/production provisioning remains separately gated  
 **Approved baseline:** Owner approved `v04-rls-transaction-boundary-design-proposal.md` on 2026-11-09  
 **Scope:** Core tenant-administration tables only; this is not ERP operational RLS.  
 **Hosted database:** Not accessed or modified. Production role provisioning and migration remain separately gated.

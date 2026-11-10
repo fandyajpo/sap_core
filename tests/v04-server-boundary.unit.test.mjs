@@ -13,23 +13,11 @@ test("scoped access persistence adapter is explicitly server-only", () => {
   assert.match(scopedAccess, /^import ["']server-only["'];/);
 });
 
-test("scoped access adapter exports persistence only, not unguarded lifecycle helpers", () => {
-  assert.match(scopedAccess, /export const scopedAccessDatabase/);
-  for (const name of [
-    "scopedAccess",
-    "grantCompanyMembership",
-    "suspendCompanyMembership",
-    "restoreCompanyMembership",
-    "revokeCompanyMembership",
-    "endCompanyMembership",
-    "grantPlantAssignment",
-    "suspendPlantAssignment",
-    "restorePlantAssignment",
-    "revokePlantAssignment",
-    "endPlantAssignment",
-    "hasCompanyAccess",
-    "hasPlantAccess",
-  ]) {
-    assert.doesNotMatch(scopedAccess, new RegExp(`export\\s+(?:const|function|class)\\s+${name}\\b`));
-  }
+test("production scoped access adapter requires a verified session identity", () => {
+  assert.match(scopedAccess, /createSessionBoundScopedAccessDatabase\(identity: VerifiedSessionIdentity\)/);
+  assert.match(scopedAccess, /await lockVerifiedSessionRow\(session\.query, identity\)/);
+});
+
+test("scoped access adapter does not export an unbound Prisma database", () => {
+  assert.doesNotMatch(scopedAccess, /export const scopedAccessDatabase\b/);
 });

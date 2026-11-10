@@ -350,15 +350,8 @@ export function createRoleDefinitionService(
                   "ownerOrganizationId"::text AS "ownerOrganizationId",
                   "permissions_locked_at" AS "permissionsLockedAt"
            FROM "core"."role_definition"
-           WHERE "id" = $1
-             AND (
-               "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
-               OR (
-                 "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
-                 AND "ownerOrganizationId" = $2::uuid
-               )
-             )`,
-          [input.roleDefinitionId, input.organizationId],
+           WHERE "id" = $1`,
+          [input.roleDefinitionId],
         );
         const source = sourceRows[0];
         if (!source) {

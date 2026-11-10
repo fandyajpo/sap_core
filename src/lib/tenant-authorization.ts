@@ -8,7 +8,9 @@ import {
 import { loadAuthorizationGrants } from "@/lib/authorization-grant-loader";
 import { resolveTenantTargetContext } from "@/lib/tenant-target-context";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
+import { lockVerifiedSessionRow } from "@/lib/verified-session-lock";
 import type { TenantScopeRequest } from "@/lib/tenant-scope-types";
+import { prisma } from "@/lib/prisma";
 
 export class TenantAuthorizationError extends Error {
   readonly reason: string;
@@ -26,13 +28,19 @@ export class TenantAuthorizationError extends Error {
  */
 export async function requireTenantPermission(
   tx: Prisma.TransactionClient,
-  session: { user: { id: string } } | null,
+  session: { session: { id: string }; user: { id: string } } | null,
   request: TenantScopeRequest,
   permission: AuthorizationPermission,
 ) {
-  if (!session?.user?.id) {
+  if (!session?.session?.id || !session.user?.id) {
     throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
   }
+
+  // Lock and revalidate the exact Better Auth session before tenant GUCs or authorization reads.
+  await lockVerifiedSessionRow((statement, values = []) => tx.$queryRawUnsafe<Array<{ id: string }>>(statement, ...values), {
+    sessionId: session.session.id,
+    userId: session.user.id,
+  });
 
   // Actor identity is trusted only because it comes from the verified Better Auth session.
   // The third argument makes this GUC transaction-local; never replace it with session SET.
@@ -67,6 +75,26 @@ export async function requireTenantPermission(
     denies,
   });
   if (!decision.allowed) {
+    if (decision.reason === "EXPLICIT_DENY") {
+      // Persist the denial evidence outside the protected transaction: this
+      // transaction will be rolled back when the authorization error is thrown.
+      await prisma.$executeRaw`
+        INSERT INTO "core"."tenant_deny_audit_event"
+          ("id", "organization_id", "target_membership_id", "target_user_id",
+           "permission_definition_id", "scope", "company_id", "plant_id",
+           "actor_user_id", "event_type", "outcome", "reason_code", "occurred_at")
+        SELECT gen_random_uuid(), ${context.organizationId}::uuid,
+          ${context.organizationMembershipId}::uuid, ${context.userId},
+          pd."id", ${context.scope}::"core"."RoleScope",
+          ${context.companyId}::uuid, ${context.plantId}::uuid,
+          ${context.userId},
+          'POLICY_ENFORCEMENT_DENIED'::"core"."DenyAuditEventType",
+          'DENIED'::"core"."DenyAuditOutcome",
+          'EXPLICIT_DENY', clock_timestamp()
+        FROM "core"."permission_definition" pd
+        WHERE pd."code" = ${permission}
+      `;
+    }
     throw new TenantAuthorizationError(permission, decision.reason);
   }
 

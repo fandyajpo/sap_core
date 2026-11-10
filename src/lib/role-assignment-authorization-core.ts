@@ -125,11 +125,91 @@ async function resolveTarget(
   };
 }
 
-async function loadActorGrants(
+async function lockActorGrantRows(
   session: ScopedAccessSession,
   actorUserId: string,
   target: TargetContext,
+): Promise<void> {
+  await session.query(
+    `SELECT ra."id"
+       FROM "core"."organization_role_assignment" ra
+       JOIN "core"."organization_membership" om
+         ON om."id" = ra."organizationMembershipId"
+        AND om."userId" = $1 AND om."organizationId" = $2::uuid
+        AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+       JOIN "core"."role_definition" rd
+         ON rd."id" = ra."roleDefinitionId" AND rd."scope" = ra."role_scope"
+        AND rd."scope" = 'ORGANIZATION'::"core"."RoleScope"
+        AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL
+       JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+      WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+      FOR SHARE OF ra, om, rd, g`,
+    [actorUserId, target.organizationId],
+  );
+
+  if (target.scope === "COMPANY" || target.scope === "PLANT") {
+    await session.query(
+      `SELECT ra."id"
+         FROM "core"."company_role_assignment" ra
+         JOIN "core"."company_membership" cm
+           ON cm."id" = ra."companyMembershipId"
+          AND cm."userId" = $1 AND cm."organizationId" = $2::uuid
+          AND cm."companyId" = $3::uuid
+          AND cm."status" = 'ACTIVE'::"core"."ScopedAccessStatus"
+         JOIN "core"."organization_membership" om
+           ON om."id" = cm."organizationMembershipId"
+          AND om."userId" = cm."userId" AND om."organizationId" = cm."organizationId"
+          AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+         JOIN "core"."role_definition" rd
+           ON rd."id" = ra."roleDefinitionId" AND rd."scope" = ra."role_scope"
+          AND rd."scope" = 'COMPANY'::"core"."RoleScope"
+          AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL
+         JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+        WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+        FOR SHARE OF ra, cm, om, rd, g`,
+      [actorUserId, target.organizationId, target.companyId],
+    );
+  }
+
+  if (target.scope === "PLANT") {
+    await session.query(
+      `SELECT ra."id"
+         FROM "core"."plant_role_assignment" ra
+         JOIN "core"."plant_assignment" pa
+           ON pa."id" = ra."plantAssignmentId"
+          AND pa."userId" = $1 AND pa."organizationId" = $2::uuid
+          AND pa."companyId" = $3::uuid AND pa."plantId" = $4::uuid
+          AND pa."status" = 'ACTIVE'::"core"."ScopedAccessStatus"
+         JOIN "core"."company_membership" cm
+           ON cm."id" = pa."companyMembershipId"
+          AND cm."userId" = pa."userId" AND cm."organizationId" = pa."organizationId"
+          AND cm."companyId" = pa."companyId"
+          AND cm."status" = 'ACTIVE'::"core"."ScopedAccessStatus"
+         JOIN "core"."organization_membership" om
+           ON om."id" = cm."organizationMembershipId"
+          AND om."userId" = cm."userId" AND om."organizationId" = cm."organizationId"
+          AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+         JOIN "core"."role_definition" rd
+           ON rd."id" = ra."roleDefinitionId" AND rd."scope" = ra."role_scope"
+          AND rd."scope" = 'PLANT'::"core"."RoleScope"
+          AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL
+         JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+        WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+        FOR SHARE OF ra, pa, cm, om, rd, g`,
+      [actorUserId, target.organizationId, target.companyId, target.plantId],
+    );
+  }
+}
+
+async function loadActorGrants(
+  session: ScopedAccessSession,
+  actorUserId: string,
+  actorMembershipId: string,
+  target: TargetContext,
 ): Promise<{ grants: AuthorizationRoleGrant[]; denies: ExplicitPermissionDeny[] }> {
+  await lockActorGrantRows(session, actorUserId, target);
   const rows = await session.query<PersistedGrantRow>(
     `SELECT ra."id"::text AS "assignmentId", rd."code" AS "roleCode",
        rd."kind"::text AS "roleKind", rd."scope"::text AS "roleScope",
@@ -205,6 +285,46 @@ async function loadActorGrants(
     [actorUserId, target.organizationId, target.companyId, target.plantId],
   );
 
+  // Explicit tenant DENY policies are membership-bound and separate from role grants.
+  // Match only the exact target scope and its complete Company/Plant ancestry.
+  const policyDenyRows = await session.query<{
+    scope: AuthorizationScope;
+    scopeId: string;
+    permissionCode: string;
+  }>(
+    `SELECT p."scope"::text AS "scope",
+       CASE p."scope"
+         WHEN 'ORGANIZATION'::"core"."RoleScope" THEN p."organization_id"::text
+         WHEN 'COMPANY'::"core"."RoleScope" THEN p."company_id"::text
+         WHEN 'PLANT'::"core"."RoleScope" THEN p."plant_id"::text
+       END AS "scopeId",
+       pd."code" AS "permissionCode"
+     FROM "core"."tenant_deny_policy" p
+     JOIN "core"."permission_definition" pd
+       ON pd."id" = p."permission_definition_id"
+     WHERE p."organization_id" = $1::uuid
+       AND p."target_membership_id" = $2::uuid
+       AND p."scope" = $3::"core"."RoleScope"
+       AND p."company_id" IS NOT DISTINCT FROM $4::uuid
+       AND p."plant_id" IS NOT DISTINCT FROM $5::uuid
+       AND p."revoked_at" IS NULL
+       AND (p."expires_at" IS NULL OR p."expires_at" > clock_timestamp())
+     FOR SHARE OF p`,
+    [target.organizationId, actorMembershipId, target.scope, target.companyId, target.plantId],
+  );
+  const denyEligiblePermissions = new Set([
+    "organization.read", "organization.update", "organization.members.read",
+    "organization.members.manage", "company.read", "company.manage",
+    "company.members.manage", "plant.read", "plant.manage",
+    "plant.assignments.manage", "roles.read", "roles.create",
+    "roles.revise", "roles.assign",
+  ]);
+  for (const row of policyDenyRows) {
+    if (!denyEligiblePermissions.has(row.permissionCode) || !permissionSet.has(row.permissionCode)) {
+      throw new RoleAssignmentAuthorizationError("A persisted DENY policy contains a protected or unknown permission identifier.");
+    }
+  }
+
   const byAssignment = new Map<string, {
     roleCode: string; roleKind: "SYSTEM" | "ORGANIZATION_CUSTOM"; scope: AuthorizationScope;
     scopeId: string; ownerOrganizationId: string | null;
@@ -247,6 +367,13 @@ async function loadActorGrants(
       denyIndex.set(key, permissions);
     }
   }
+  for (const row of policyDenyRows) {
+    const key = `${row.scope}:${row.scopeId}`;
+    const permissions = denyIndex.get(key) ?? new Set<AuthorizationPermission>();
+    permissions.add(row.permissionCode as AuthorizationPermission);
+    denyIndex.set(key, permissions);
+  }
+
   const denies: ExplicitPermissionDeny[] = [...denyIndex].map(([key, permissions]) => {
     const separator = key.indexOf(":");
     return {
@@ -271,14 +398,11 @@ async function authorize(
   }
 
   await session.query("SELECT set_config('app.user_id', $1, true)", [sessionUserId]);
-  // Bootstrap visibility is intentionally a plain SELECT: before the
-  // Organization GUC is installed, SELECT ... FOR SHARE also invokes the
-  // table's write-policy checks and hides this actor's own membership.
   const actorMemberships = await session.query<{ id: string }>(
     `SELECT "id" FROM "core"."organization_membership"
      WHERE "userId" = $1 AND "organizationId" = $2::uuid
        AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-     LIMIT 1`,
+     LIMIT 1 FOR SHARE`,
     [sessionUserId, organizationId],
   );
   if (!actorMemberships[0]) return false;
@@ -287,18 +411,6 @@ async function authorize(
     "SELECT set_config('app.organization_id', $1, true), set_config('app.company_id', '', true), set_config('app.plant_id', '', true)",
     [organizationId],
   );
-
-  // Re-read and lock the membership after tenant context is installed. This
-  // closes the revocation race without asking the bootstrap policy to grant
-  // write-policy visibility before the Organization context exists.
-  const lockedActorMemberships = await session.query<{ id: string }>(
-    `SELECT "id" FROM "core"."organization_membership"
-     WHERE "userId" = $1 AND "organizationId" = $2::uuid
-       AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-     LIMIT 1 FOR SHARE`,
-    [sessionUserId, organizationId],
-  );
-  if (!lockedActorMemberships[0]) return false;
   if (permission === "roles.assign") {
     const grantInput = input as RoleAssignmentGrantAuthorization;
     const definitions = await session.query<{
@@ -312,7 +424,8 @@ async function authorize(
               "ownerOrganizationId"::text AS "ownerOrganizationId",
               "disabled_at" AS "disabledAt", "permissions_locked_at" AS "permissionsLockedAt"
        FROM "core"."role_definition"
-       WHERE "id" = $1`,
+       WHERE "id" = $1
+       FOR SHARE`,
       [grantInput.roleDefinitionId],
     );
     const definition = definitions[0];
@@ -325,21 +438,6 @@ async function authorize(
       || (definition.kind === "ORGANIZATION_CUSTOM" && definition.ownerOrganizationId !== organizationId)
       || (definition.kind !== "SYSTEM" && definition.kind !== "ORGANIZATION_CUSTOM")
     ) return false;
-
-    // Global SYSTEM definitions are SELECT-visible but not UPDATE-visible in
-    // tenant RLS, so SELECT FOR SHARE would incorrectly hide them. Custom
-    // definitions remain owner-scoped and are locked to close revision races.
-    if (definition.kind === "ORGANIZATION_CUSTOM") {
-      const locked = await session.query<{ id: string }>(
-        `SELECT "id" FROM "core"."role_definition"
-         WHERE "id" = $1
-           AND "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
-           AND "ownerOrganizationId" = $2::uuid
-         FOR SHARE`,
-        [grantInput.roleDefinitionId, organizationId],
-      );
-      if (!locked[0]) return false;
-    }
   }
 
   const target = await resolveTarget(session, organizationId, input.scope, input.parentId, expectedUserId);
@@ -349,7 +447,7 @@ async function authorize(
     "SELECT set_config('app.company_id', $1, true), set_config('app.plant_id', $2, true)",
     [target.companyId ?? "", target.plantId ?? ""],
   );
-  const loaded = await loadActorGrants(session, sessionUserId, target);
+  const loaded = await loadActorGrants(session, sessionUserId, actorMemberships[0].id, target);
   const decision = evaluateAuthorization({
     permission,
     target: {

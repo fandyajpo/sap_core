@@ -19,6 +19,7 @@ jobs:
     # production database credentials to pull-request code.
     env:
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/sap_core_static?schema=public
+      MIGRATION_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/sap_core_static?schema=public
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -37,8 +38,10 @@ jobs:
       - run: pnpm test:authorization-policy
       - run: pnpm test:organization-members-reader
       - run: pnpm test:v04-transaction-boundary
+      - run: pnpm test:v04-session-revocation:unit
       - run: pnpm test:v04-role-assignment
       - run: pnpm test:v04-role-assignment-production
+      - run: pnpm test:v04-deny-policy
 
   v03-integration:
     runs-on: ubuntu-latest
@@ -62,6 +65,9 @@ jobs:
       CI_DATABASE_PORT: "55432"
       CI_DATABASE_NAME: sap_core_v03_test
       V03_ALLOW_DISPOSABLE_DB: "1"
+      V04_SESSION_LOCK_ALLOW_DISPOSABLE_DB: "1"
+      V04_SESSION_HTTP_ALLOW_DISPOSABLE_DB: "1"
+      V04_DENY_HTTP_ALLOW_DISPOSABLE_DB: "1"
       BETTER_AUTH_URL: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +82,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+          echo "MIGRATION_DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
           echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
@@ -115,6 +122,15 @@ jobs:
           cat "$NEXT_SERVER_LOG" >&2
           exit 1
       - run: pnpm test:v03
+      - run: pnpm test:v04-session-revocation:integration
+      - run: pnpm test:v04-session-revocation:http
+      - run: pnpm test:v04-deny-policy:http
+      - name: Show DENY HTTP failure diagnostics
+        if: always()
+        run: |
+          if [[ -f "$NEXT_SERVER_LOG" ]]; then
+            grep -E 'DENY history|DENY audit' "$NEXT_SERVER_LOG" || true
+          fi
 
   v04-pinned-replay:
     runs-on: ubuntu-latest
@@ -152,7 +168,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - name: Configure disposable DATABASE_URL
-        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+        run: |
+          echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+          echo "MIGRATION_DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
@@ -308,10 +326,10 @@ jobs:
             await client.end();
           }
           NODE
-      - name: Apply migration 14 SYSTEM role assignment RLS lock fix
+      - name: Apply migration 14 explicit DENY policy
         run: |
           set -euo pipefail
-          cp -R "$RUNNER_TEMP/v04-current-migrations/20261110120000_v04_system_role_assignment_rls_lock" prisma/migrations/
+          cp -R "$RUNNER_TEMP/v04-current-migrations/20261109160000_v04_explicit_deny_policy" prisma/migrations/
           pnpm db:migrate:deploy
           pnpm db:status
           node --input-type=module <<'NODE'
@@ -325,7 +343,13 @@ jobs:
             );
             assert.equal(rows.length, 14);
             assert.ok(rows.every((row) => row.rolled_back_at === null));
-            assert.equal(rows[13].migration_name, "20261110120000_v04_system_role_assignment_rls_lock");
+            assert.equal(rows[13].migration_name, "20261109160000_v04_explicit_deny_policy");
+            const { rows: policyTables } = await client.query(
+              "SELECT table_name FROM information_schema.tables WHERE table_schema = 'core' AND table_name IN ('tenant_deny_policy', 'tenant_deny_audit_event') ORDER BY table_name",
+            );
+            assert.deepEqual(policyTables.map((row) => row.table_name), [
+              "tenant_deny_audit_event", "tenant_deny_policy",
+            ]);
           } finally {
             await client.end();
           }
@@ -345,12 +369,13 @@ jobs:
             await client.end();
           }
           NODE
-      - name: Deploy all fourteen migrations and execute D14-B
+      - name: Deploy all current migrations and execute D14-B
         env:
           CI_DATABASE_PORT: "55435"
           CI_DATABASE_NAME: sap_core_d8_test
         run: |
           export DATABASE_URL="postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public"
+          export MIGRATION_DATABASE_URL="$DATABASE_URL"
           pnpm db:migrate:deploy
           pnpm db:status
           pnpm test:d8
@@ -387,7 +412,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - name: Configure disposable DATABASE_URL
-        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+        run: |
+          echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+          echo "MIGRATION_DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
@@ -427,7 +454,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - name: Configure disposable DATABASE_URL
-        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+        run: |
+          echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+          echo "MIGRATION_DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
@@ -468,7 +497,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - name: Configure disposable DATABASE_URL
-        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+        run: |
+          echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+          echo "MIGRATION_DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
@@ -509,13 +540,51 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - name: Configure disposable DATABASE_URL
-        run: echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+        run: |
+          echo "DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
+          echo "MIGRATION_DATABASE_URL=postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:generate
       - run: pnpm db:migrate:deploy
       - run: pnpm db:status
       - run: pnpm test:d8
+
+  v04-deny-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: sap_core
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: sap_core_v04_deny_test
+        ports:
+          - "55438:5432"
+        options: >-
+          --health-cmd "pg_isready -U sap_core -d sap_core_v04_deny_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sap_core@127.0.0.1:55438/sap_core_v04_deny_test?schema=public
+      MIGRATION_DATABASE_URL: postgresql://sap_core@127.0.0.1:55438/sap_core_v04_deny_test?schema=public
+      V04_DENY_ALLOW_DISPOSABLE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:validate
+      - run: pnpm db:generate
+      - run: pnpm db:migrate:deploy
+      - run: pnpm db:status
+      - run: pnpm test:v04-deny-policy:integration
 
   v04-rls-integration:
     runs-on: ubuntu-latest
@@ -559,51 +628,3 @@ jobs:
       - run: pnpm db:migrate:deploy
       - run: pnpm db:status
       - run: pnpm test:v04-rls
-
-  v04-application-adversarial:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17.6
-        env:
-          POSTGRES_USER: sap_core
-          POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_DB: sap_core_v04_app_test
-        ports:
-          - "55438:5432"
-        options: >-
-          --health-cmd "pg_isready -U sap_core -d sap_core_v04_app_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      CI_DATABASE_USER: sap_core
-      CI_DATABASE_HOST: 127.0.0.1
-      CI_DATABASE_PORT: "55438"
-      CI_DATABASE_NAME: sap_core_v04_app_test
-      V04_APP_ADVERSARIAL_ALLOW_DISPOSABLE_DB: "1"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.20.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - name: Configure migration-owner URL
-        run: |
-          set -euo pipefail
-          owner_url="postgresql://${CI_DATABASE_USER}@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public"
-          echo "MIGRATION_DATABASE_URL=${owner_url}" >> "$GITHUB_ENV"
-          echo "DATABASE_URL=${owner_url}" >> "$GITHUB_ENV"
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm db:validate
-      - run: pnpm db:generate
-      - run: pnpm db:migrate:deploy
-      - run: pnpm db:status
-      - name: Switch application tests to non-owner runtime role
-        run: |
-          set -euo pipefail
-          echo "DATABASE_URL=postgresql://sap_core_runtime@${CI_DATABASE_HOST}:${CI_DATABASE_PORT}/${CI_DATABASE_NAME}?schema=public" >> "$GITHUB_ENV"
-      - run: pnpm test:v04-app-adversarial

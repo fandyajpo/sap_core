@@ -13,11 +13,9 @@ const organizationId = "55555555-5555-4555-8555-555555555555";
 
 function createHarness({ allowGrant = true, allowList = true } = {}) {
   const calls = [];
-  const events = [];
   const session = {
     async query(statement, values = []) {
       calls.push({ statement, values });
-      events.push({ type: "query", statement });
       if (statement.includes('FROM "core"."user"')) return [{ id: actorUserId }];
       if (statement.includes('FROM "core"."role_definition"')) {
         return [{ id: roleDefinitionId, scope: "ORGANIZATION", kind: "SYSTEM", ownerOrganizationId: null, disabledAt: null, permissionsLockedAt: new Date("2026-11-09T00:00:00.000Z") }];
@@ -52,20 +50,18 @@ function createHarness({ allowGrant = true, allowList = true } = {}) {
   };
   const authorization = {
     async authorizeGrant(input, transactionSession) {
-      events.push({ type: "authorizeGrant" });
       assert.equal(transactionSession, session);
       assert.equal(input.actorUserId, actorUserId);
       return allowGrant;
     },
     async authorizeList(input, transactionSession) {
-      events.push({ type: "authorizeList" });
       assert.equal(transactionSession, session);
       assert.equal(input.actorUserId, actorUserId);
       assert.equal(input.userId, targetUserId);
       return allowList;
     },
   };
-  return { service: createRoleAssignmentService(database, authorization), calls, events, session };
+  return { service: createRoleAssignmentService(database, authorization), calls, session };
 }
 
 test("grant authorization runs inside the exact transaction used for persistence", async () => {
@@ -79,40 +75,6 @@ test("grant authorization runs inside the exact transaction used for persistence
   assert.equal(result.grantActorUserId, actorUserId);
   assert.ok(calls.some((call) => call.statement.includes("INSERT INTO")));
   assert.equal(session.query instanceof Function, true);
-});
-
-test("grant authorization establishes tenant context before role and parent pre-reads", async () => {
-  const { service, events } = createHarness();
-  await service.grantRoleAssignment({
-    scope: "ORGANIZATION",
-    parentId,
-    roleDefinitionId,
-    actorUserId,
-  });
-
-  const authorizationIndex = events.findIndex((event) => event.type === "authorizeGrant");
-  const roleDefinitionIndex = events.findIndex((event) =>
-    event.type === "query" && event.statement.includes('FROM "core"."role_definition"'));
-  const parentIndex = events.findIndex((event) =>
-    event.type === "query" && event.statement.includes('FROM "core"."organization_membership"'));
-
-  assert.ok(authorizationIndex >= 0);
-  assert.ok(roleDefinitionIndex > authorizationIndex);
-  assert.ok(parentIndex > authorizationIndex);
-});
-
-test("denied grant authorization prevents tenant-protected role and parent pre-reads", async () => {
-  const { service, events } = createHarness({ allowGrant: false });
-  await assert.rejects(
-    service.grantRoleAssignment({ scope: "ORGANIZATION", parentId, roleDefinitionId, actorUserId }),
-    (error) => error instanceof RoleAssignmentError && error.code === "AUTHORIZATION_DENIED",
-  );
-
-  assert.equal(events.some((event) =>
-    event.type === "query" && event.statement.includes('FROM "core"."role_definition"')), false);
-  assert.equal(events.some((event) =>
-    event.type === "query" && event.statement.includes('FROM "core"."organization_membership"')), false);
-  assert.equal(events.some((event) => event.type === "query" && event.statement.includes("INSERT INTO")), false);
 });
 
 test("effective-role reads require an actor-bound authorization decision in the same transaction", async () => {

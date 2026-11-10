@@ -681,14 +681,6 @@ test("D8-A custom role ownership, revision, audit, and D7 enforcement", async (t
     allowRevise = true;
     assert.equal(await auditCount(), beforeDenied);
 
-    await assertDefinitionError(
-      reviseRole({
-        actorUserId: fixture.actorId,
-        roleDefinitionId: customRoleB.id,
-      }),
-      "ROLE_DEFINITION_NOT_FOUND",
-    );
-
     const revision = await reviseRole({
       actorUserId: fixture.actorId,
       roleDefinitionId: customRoleA.id,

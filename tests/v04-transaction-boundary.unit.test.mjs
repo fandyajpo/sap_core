@@ -29,8 +29,10 @@ test("all tenant GUC writes are transaction-local and use the injected transacti
   const writes = [...authorization.matchAll(/set_config\(/g)];
   assert.equal(writes.length, 4, "one actor and three verified scope GUCs are installed");
   assert.doesNotMatch(authorization, /\bSET\s+(?:SESSION\s+)?app\./i);
-  assert.doesNotMatch(authorization, /from ["']@\/lib\/prisma["']/);
   assert.match(authorization, /tx\.\$queryRaw/);
+  // Denial evidence is intentionally committed through the shared Prisma client
+  // because the protected transaction rolls back when authorization throws.
+  assert.match(authorization, /prisma\.\$executeRaw[\s\S]*tenant_deny_audit_event/);
 });
 
 test("Company and Plant target GUCs are installed only after each descendant is verified", async () => {
@@ -48,4 +50,46 @@ test("Company and Plant target GUCs are installed only after each descendant is 
   assert.match(target, /if \(membership\) \{[\s\S]*set_config\('app\.organization_id'/);
   assert.match(target, /if \(company\) \{[\s\S]*set_config\('app\.company_id'/);
   assert.match(target, /if \(plant\) \{[\s\S]*set_config\('app\.plant_id'/);
+});
+
+
+test("custom role create and revise hold an active Organization membership lock through commit", async () => {
+  const adapter = await source("src/lib/tenant-role-definition-service.ts");
+  const membershipCheck = adapter.indexOf('FROM "core"."organization_membership"');
+  const membershipLock = adapter.indexOf("FOR SHARE", membershipCheck);
+  const membershipCheckEnd = adapter.indexOf(");", membershipCheck);
+
+  assert.notEqual(membershipCheck, -1);
+  assert.notEqual(membershipLock, -1);
+  assert.ok(membershipLock < membershipCheckEnd, "the active actor membership row is locked by the operation transaction");
+});
+
+
+test("tenant target ancestry rows are shared-locked until the protected transaction completes", async () => {
+  const target = await source("src/lib/tenant-target-context.ts");
+  assert.match(target, /FROM "core"\."organization_membership" om[\s\S]*?FOR SHARE OF om/);
+  assert.match(target, /FROM "core"\."company" c[\s\S]*?FOR SHARE OF c/);
+  assert.match(target, /FROM "core"\."plant" p[\s\S]*?FOR SHARE OF p, c/);
+});
+
+
+test("authorization grant snapshots lock effective assignments and permission rows", async () => {
+  const grantLoader = await source("src/lib/authorization-grant-loader.ts");
+  const assignmentPolicy = await source("src/lib/role-assignment-authorization-core.ts");
+  const roleDefinitionPolicy = await source("src/lib/tenant-role-definition-service.ts");
+
+  assert.match(grantLoader, /FOR SHARE OF ra, om, rd, g/);
+  assert.match(grantLoader, /FOR SHARE OF ra, cm, om, rd, g/);
+  assert.match(grantLoader, /FOR SHARE OF ra, pa, cm, om, rd, g/);
+  assert.match(assignmentPolicy, /lockActorGrantRows\(session, actorUserId, target\)/);
+  assert.match(assignmentPolicy, /FOR SHARE OF ra, pa, cm, om, rd, g/);
+  assert.match(roleDefinitionPolicy, /FOR SHARE OF ra, om, rd, g/);
+});
+
+
+test("effective role-assignment listing locks the returned assignment and membership ancestry rows", async () => {
+  const service = await source("src/lib/role-assignment-service.ts");
+  assert.match(service, /FOR SHARE OF ra, om, rd/);
+  assert.match(service, /FOR SHARE OF ra, cm, om, rd/);
+  assert.match(service, /FOR SHARE OF ra, pa, cm, om, rd/);
 });

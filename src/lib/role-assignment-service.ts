@@ -127,7 +127,7 @@ function requireAssignableScope(value: string): asserts value is AssignableRoleS
 
 async function requireHumanActor(session: ScopedAccessSession, actorUserId: string): Promise<void> {
   const rows = await session.query<{ id: string }>(
-    `SELECT "id" FROM "core"."user" WHERE "id" = $1`,
+    `SELECT "id" FROM "core"."user" WHERE "id" = $1 FOR SHARE`,
     [actorUserId],
   );
   if (!rows[0]) {
@@ -143,7 +143,8 @@ async function requireRoleDefinition(
     `SELECT "id", "scope"::text AS "scope", "kind"::text AS "kind",
             "ownerOrganizationId"::text AS "ownerOrganizationId"
      FROM "core"."role_definition"
-     WHERE "id" = $1`,
+     WHERE "id" = $1
+     FOR SHARE`,
     [roleDefinitionId],
   );
   const roleDefinition = rows[0];
@@ -152,24 +153,6 @@ async function requireRoleDefinition(
       "ROLE_DEFINITION_NOT_FOUND",
       `Role Definition ${roleDefinitionId} does not exist.`,
     );
-  }
-  // SYSTEM role definitions are globally readable but not update-visible under
-  // tenant RLS. Lock only Organization-owned custom roles, whose owner-scoped
-  // UPDATE policy permits FOR SHARE in the already-authorized tenant context.
-  if (roleDefinition.kind === "ORGANIZATION_CUSTOM") {
-    const locked = await session.query<{ id: string }>(
-      `SELECT "id" FROM "core"."role_definition"
-       WHERE "id" = $1
-         AND "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
-       FOR SHARE`,
-      [roleDefinitionId],
-    );
-    if (!locked[0]) {
-      throw new RoleAssignmentError(
-        "ROLE_DEFINITION_NOT_FOUND",
-        `Role Definition ${roleDefinitionId} does not exist.`,
-      );
-    }
   }
   return roleDefinition;
 }
@@ -240,7 +223,8 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput, enforceRo
         AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
           OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
             AND rd."ownerOrganizationId" = om."organizationId"))
-        AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}`;
+        AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}
+      FOR SHARE OF ra, om, rd`;
   }
 
   if (input.scope === "COMPANY") {
@@ -259,7 +243,8 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput, enforceRo
         AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
           OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
             AND rd."ownerOrganizationId" = cm."organizationId"))
-        AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}`;
+        AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}
+      FOR SHARE OF ra, cm, om, rd`;
   }
 
   return `SELECT ${baseColumns}
@@ -282,7 +267,8 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput, enforceRo
       AND (rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
         OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
           AND rd."ownerOrganizationId" = pa."organizationId"))
-      AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}`;
+      AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}
+      FOR SHARE OF ra, pa, cm, om, rd`;
 }
 
 
@@ -312,24 +298,7 @@ export function createRoleAssignmentService(
       }
 
       return database.transaction(async (session) => {
-        // The user table is outside the tenant RLS policy set. Establish the verified
-        // actor's tenant context before reading role definitions or typed membership
-        // parents, both of which are protected by tenant RLS.
         await requireHumanActor(session, input.actorUserId);
-
-        const authorizationInput: RoleAssignmentGrantAuthorization = {
-          scope: input.scope,
-          parentId: input.parentId,
-          roleDefinitionId: input.roleDefinitionId,
-          actorUserId: input.actorUserId,
-        };
-        if (!(await authorization.authorizeGrant(authorizationInput, session))) {
-          throw new RoleAssignmentError("AUTHORIZATION_DENIED", "The Role Assignment grant was not authorized.");
-        }
-
-        // Authorization installs transaction-local tenant GUCs and locks/validates
-        // the role definition and target ancestry. These defensive reads now run
-        // under that same validated context and retain their FOR SHARE locks.
         const roleDefinition = await requireRoleDefinition(session, input.roleDefinitionId);
         if (roleDefinition.scope === "PLATFORM") {
           throw new RoleAssignmentError(
@@ -345,6 +314,16 @@ export function createRoleAssignmentService(
         }
         const parent = await requireTypedParent(session, input.scope, input.parentId);
         assertRoleDefinitionOwnership(roleDefinition, parent.organizationId);
+
+        const authorizationInput: RoleAssignmentGrantAuthorization = {
+          scope: input.scope,
+          parentId: input.parentId,
+          roleDefinitionId: input.roleDefinitionId,
+          actorUserId: input.actorUserId,
+        };
+        if (!(await authorization.authorizeGrant(authorizationInput, session))) {
+          throw new RoleAssignmentError("AUTHORIZATION_DENIED", "The Role Assignment grant was not authorized.");
+        }
 
         const mapping = assignmentTables[input.scope];
         const rows = await session.query<RoleAssignmentRecordRow>(

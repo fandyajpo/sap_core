@@ -36,11 +36,115 @@ export class AuthorizationGrantLoadError extends Error {
 }
 
 const permissionSet = new Set<string>(authorizationPermissions);
+const denyEligiblePermissions = new Set<string>([
+  "organization.read",
+  "organization.update",
+  "organization.members.read",
+  "organization.members.manage",
+  "company.read",
+  "company.manage",
+  "company.members.manage",
+  "plant.read",
+  "plant.manage",
+  "plant.assignments.manage",
+  "roles.read",
+  "roles.create",
+  "roles.revise",
+  "roles.assign",
+]);
+
 const builtInRoles = new Set<string>([
   "ORG_OWNER", "ORG_ADMIN", "ORG_MEMBER",
   "COMPANY_ADMIN", "COMPANY_MEMBER",
   "PLANT_MANAGER", "PLANT_OPERATOR", "PLANT_VIEWER",
 ]);
+
+async function lockAuthorizationGrantRows(
+  tx: Prisma.TransactionClient,
+  context: TenantTargetContext,
+): Promise<void> {
+  await tx.$queryRaw`
+    SELECT ra."id"
+    FROM "core"."organization_role_assignment" ra
+    JOIN "core"."organization_membership" om
+      ON om."id" = ra."organizationMembershipId"
+     AND om."userId" = ${context.userId}
+     AND om."organizationId" = ${context.organizationId}::uuid
+     AND om."status" = 'ACTIVE'
+    JOIN "core"."role_definition" rd
+      ON rd."id" = ra."roleDefinitionId"
+     AND rd."scope" = ra."role_scope"
+     AND rd."scope" = 'ORGANIZATION'::"core"."RoleScope"
+     AND rd."disabled_at" IS NULL
+     AND rd."permissions_locked_at" IS NOT NULL
+    JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+    WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+    FOR SHARE OF ra, om, rd, g
+  `;
+
+  if (context.scope === "COMPANY" || context.scope === "PLANT") {
+    await tx.$queryRaw`
+      SELECT ra."id"
+      FROM "core"."company_role_assignment" ra
+      JOIN "core"."company_membership" cm
+        ON cm."id" = ra."companyMembershipId"
+       AND cm."userId" = ${context.userId}
+       AND cm."organizationId" = ${context.organizationId}::uuid
+       AND cm."companyId" = ${context.companyId}::uuid
+       AND cm."status" = 'ACTIVE'
+      JOIN "core"."organization_membership" om
+        ON om."id" = cm."organizationMembershipId"
+       AND om."userId" = cm."userId"
+       AND om."organizationId" = cm."organizationId"
+       AND om."status" = 'ACTIVE'
+      JOIN "core"."role_definition" rd
+        ON rd."id" = ra."roleDefinitionId"
+       AND rd."scope" = ra."role_scope"
+       AND rd."scope" = 'COMPANY'::"core"."RoleScope"
+       AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+       AND rd."disabled_at" IS NULL
+       AND rd."permissions_locked_at" IS NOT NULL
+      JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+      WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+      FOR SHARE OF ra, cm, om, rd, g
+    `;
+  }
+
+  if (context.scope === "PLANT") {
+    await tx.$queryRaw`
+      SELECT ra."id"
+      FROM "core"."plant_role_assignment" ra
+      JOIN "core"."plant_assignment" pa
+        ON pa."id" = ra."plantAssignmentId"
+       AND pa."userId" = ${context.userId}
+       AND pa."organizationId" = ${context.organizationId}::uuid
+       AND pa."companyId" = ${context.companyId}::uuid
+       AND pa."plantId" = ${context.plantId}::uuid
+       AND pa."status" = 'ACTIVE'
+      JOIN "core"."company_membership" cm
+        ON cm."id" = pa."companyMembershipId"
+       AND cm."userId" = pa."userId"
+       AND cm."organizationId" = pa."organizationId"
+       AND cm."companyId" = pa."companyId"
+       AND cm."status" = 'ACTIVE'
+      JOIN "core"."organization_membership" om
+        ON om."id" = cm."organizationMembershipId"
+       AND om."userId" = cm."userId"
+       AND om."organizationId" = cm."organizationId"
+       AND om."status" = 'ACTIVE'
+      JOIN "core"."role_definition" rd
+        ON rd."id" = ra."roleDefinitionId"
+       AND rd."scope" = ra."role_scope"
+       AND rd."scope" = 'PLANT'::"core"."RoleScope"
+       AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+       AND rd."disabled_at" IS NULL
+       AND rd."permissions_locked_at" IS NOT NULL
+      JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+      WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+      FOR SHARE OF ra, pa, cm, om, rd, g
+    `;
+  }
+}
 
 export async function loadAuthorizationGrants(
   tx: Prisma.TransactionClient,
@@ -57,6 +161,7 @@ export async function loadAuthorizationGrants(
     throw new AuthorizationGrantLoadError("A Plant target requires a Plant identifier.");
   }
 
+  await lockAuthorizationGrantRows(tx, context);
   const rows = await tx.$queryRaw<PersistedGrantRow[]>`
     SELECT ra."id"::text AS "assignmentId", rd."id"::text AS "roleDefinitionId",
       rd."code" AS "roleCode", rd."kind"::text AS "roleKind",
@@ -150,6 +255,40 @@ export async function loadAuthorizationGrants(
       AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
   `;
 
+
+  // Dedicated membership-bound DENY policies are loaded independently from
+  // reusable role grants. Only the exact target scope is considered.
+  const policyDenyRows = await tx.$queryRaw<Array<{
+    scope: AuthorizationScope;
+    scopeId: string;
+    permissionCode: string;
+  }>>`
+    SELECT p."scope"::text AS "scope",
+      CASE p."scope"
+        WHEN 'ORGANIZATION'::"core"."RoleScope" THEN p."organization_id"::text
+        WHEN 'COMPANY'::"core"."RoleScope" THEN p."company_id"::text
+        WHEN 'PLANT'::"core"."RoleScope" THEN p."plant_id"::text
+      END AS "scopeId",
+      pd."code" AS "permissionCode"
+    FROM "core"."tenant_deny_policy" p
+    JOIN "core"."permission_definition" pd
+      ON pd."id" = p."permission_definition_id"
+    WHERE p."organization_id" = ${context.organizationId}::uuid
+      AND p."target_membership_id" = ${context.organizationMembershipId}::uuid
+      AND p."scope" = ${context.scope}::"core"."RoleScope"
+      AND p."company_id" IS NOT DISTINCT FROM ${context.companyId}::uuid
+      AND p."plant_id" IS NOT DISTINCT FROM ${context.plantId}::uuid
+      AND p."revoked_at" IS NULL
+      AND (p."expires_at" IS NULL OR p."expires_at" > clock_timestamp())
+    FOR SHARE OF p
+  `;
+
+  for (const row of policyDenyRows) {
+    if (!denyEligiblePermissions.has(row.permissionCode) || !permissionSet.has(row.permissionCode)) {
+      throw new AuthorizationGrantLoadError("A persisted DENY policy contains a protected or unknown permission identifier.");
+    }
+  }
+
   const byAssignment = new Map<string, {
     roleCode: string;
     roleKind: "SYSTEM" | "ORGANIZATION_CUSTOM";
@@ -208,6 +347,13 @@ export async function loadAuthorizationGrants(
       for (const permission of grant.deny) permissions.add(permission);
       denyIndex.set(key, permissions);
     }
+  }
+
+  for (const row of policyDenyRows) {
+    const key = `${row.scope}:${row.scopeId}`;
+    const permissions = denyIndex.get(key) ?? new Set<AuthorizationPermission>();
+    permissions.add(row.permissionCode as AuthorizationPermission);
+    denyIndex.set(key, permissions);
   }
 
   const denies: ExplicitPermissionDeny[] = [];

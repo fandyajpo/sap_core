@@ -10,7 +10,7 @@
 | V01 | Prisma multi-schema validation | `PASS` | PostgreSQL 17.6; Prisma 7.10.1 validation and Client generation; all ten PostgreSQL schemas physically verified; initial migrations applied and database status up to date; fresh disposable database reproducibility verified |
 | V02 | Cross-schema relation validation | `PASS` | Cross-schema relation migration applied; PostgreSQL FK metadata verified; orphan reference rejected; `ON DELETE CASCADE` behavior verified; test transaction rolled back |
 | V03 | Better Auth canonical identity | `PASS` | Local suite: 5 passed, 0 failed; all 6 migrations replayed on disposable PostgreSQL 17.6 with schema up to date; both X06 FKs inspected as `ON DELETE RESTRICT`; GitHub Actions run [#19](https://github.com/fandyajpo/sap_core/actions/runs/42152029847) passed `static` and `v03-integration` |
-| V04 | Tenant isolation and RLS | `BLOCKED` | Partial V04.4 case evidence, including bounded D14 migration-8 history-protection PASS evidence (42/42 assertions) and bounded FK Catalog / Action Verification PASS on exactly migrations 1–8 (19/19 expected FKs; all ordered tuples, names, actions, and `convalidated` values matched; migration 9 excluded; SQL/TSV evidence verified and temporary resources cleaned). Separate V04.5.1 evidence records a nine-migration fresh replay and catalog counts of 10 schemas, 18 tables, 19 FKs, 55 indexes, and 9 migration records. The 55-index figure is a count, not an individual audit of every index. See the [FK audit](v04-fk-catalog-action-verification.md), [V04.4 execution record](v04.4-execution-record-2026-11-07.md), and [V04.5.1 record](v04.5.1-x06-forward-migration-note.md). Application authorization, protected operations, RLS, application tenant isolation, and remaining acceptance criteria are not established; V04 remains blocked. |
+| V04 | Tenant isolation and RLS | `BLOCKED` | Partial V04.4 case evidence, including bounded D14 migration-8 history-protection PASS evidence (42/42 assertions) and bounded FK Catalog / Action Verification PASS on exactly migrations 1–8 (19/19 expected FKs; all ordered tuples, names, actions, and `convalidated` values matched; migration 9 excluded; SQL/TSV evidence verified and temporary resources cleaned). Separate V04.5.1 evidence records a nine-migration fresh replay and catalog counts of 10 schemas, 18 tables, 19 FKs, 55 indexes, and 9 migration records. The 55-index figure is a count, not an individual audit of every index. See the [FK audit](v04-fk-catalog-action-verification.md), [V04.4 execution record](v04.4-execution-record-2026-11-07.md), and [V04.5.1 record](v04.5.1-x06-forward-migration-note.md). Application authorization and the implemented protected API slice have bounded implementation/CI evidence. Session-revocation HTTP request-first ordering, sign-out-first denial, injected database failure, and session-lock pool reuse are covered by PR #64; [Run #42597914590](https://github.com/fandyajpo/sap_core/actions/runs/42597914590) passed all eight jobs. Hosted runtime-role/deployment verification and production smoke testing remain NOT VERIFIED. V04 remains blocked pending the hosted gate. |
 | V05 | Migration/schema integrity | `BLOCKED` | Clean database migration, repeatability, drift and recovery evidence |
 | V06 | Transaction/concurrency | `BLOCKED` | Interactive transaction, rollback, idempotency, race and financial/stock integrity tests |
 | V07 | Pooling/session context | `BLOCKED` | Pooled connection reuse, transaction-local context isolation, cleanup and failure tests |
@@ -235,3 +235,68 @@ The D14-A pinned source is commit `d27af783d3e9499a451331f720ec111e6b5e7049`, co
 **Result:** the PR #20 CI evidence closes the previously recorded D1 and D6 runtime test gaps, D14-A/B execution gaps on the specified baselines, and the nine-migration staged-upgrade replay gap. Treat these as bounded CI results for the test scenarios and baselines actually executed, not as blanket proof of all tenant isolation behavior.
 
 **V04 remains `BLOCKED`.** PR #20 does not establish the remaining application-level acceptance boundary: complete application authorization and tenant context enforcement, protected operations, RLS policy design/enforcement and pooled-session isolation, or end-to-end application tenant isolation. It also does not establish hosted/production database state. V05–V10 and Phase 1 remain independently blocked pending their own criteria.
+
+
+
+## V04 application-layer findings reconciliation — 2026-11-09
+
+**Reconciled main:** `b776451684c99f085ce5141b6e55324494d2c48d` (after PR #59).  
+**CI evidence:** PR #59 head `fcc9260b9f5ac944a112f6ef0ca3e06ee8c44de6`, workflow run [#42589940309](https://github.com/fandyajpo/sap_core/actions/runs/42589940309), conclusion `success`; all eight jobs passed.  
+**Database boundary:** Disposable PostgreSQL CI only. No hosted database was accessed or modified by this reconciliation.
+
+The original application-layer source audit remains a historical record of findings at its audited revision. Its F-01–F-05 statuses are superseded by the merged implementation and evidence below; see [V04 application-layer acceptance reconciliation](v04-application-layer-acceptance-reconciliation-2026-11-09.md).
+
+| Finding | Current disposition | Evidence |
+|---|---|---|
+| F-01 — unguarded membership/assignment persistence façade | **Implementation CLOSED** | PR #55 merged as `46a5c27943af26a856d855a80743d42cd545f780`. `scoped-access.ts` is server-only and exports only the transaction-capable persistence adapter; unguarded lifecycle convenience exports were removed. |
+| F-02 — role-assignment production adapter | **Implementation CLOSED; CI PASS** | PR #56 hardened the transaction-bound service contract; PR #59 merged as `b776451684c99f085ce5141b6e55324494d2c48d`, wiring verified-session actor identity, transaction-bound authorization, guarded GET/POST endpoints, role-definition governance and adversarial HTTP tests. |
+| F-03 — application-path adversarial integration coverage | **BOUNDED PASS for implemented API slice** | PR #57 merged as `8b3a5161f2c1c6fdbb23fb9f104b917ca2086e5d`; real Better Auth HTTP handlers are tested with a third principal in a separate Organization, anonymous and foreign-session denials, cross-Organization selector substitution, foreign role writes, and non-delegable custom-role create/revision checks. PR #59 adds role-assignment HTTP coverage. |
+| F-04 — legacy non-transactional tenant resolver | **Implementation CLOSED** | PR #58 merged as `609b2cad20f108412ec83158ebfd08f818555767`; unused root-Prisma resolver and its obsolete core/test were removed. |
+| F-05 — missing server-only markers | **Implementation CLOSED** | PR #55 adds `import "server-only"` to `src/lib/prisma.ts` and `src/lib/scoped-access.ts`; `test:v04-server-boundary` asserts the boundary and absence of unguarded lifecycle exports. |
+
+### Bounded validation evidence
+
+- The PR #59 workflow completed `static`, `v03-integration`, `d1-integration`, `d6-integration`, `d7-integration`, `d8-integration`, `v04-rls-integration`, and `v04-pinned-replay`: all eight succeeded.
+- The V03 integration suite now exercises the production HTTP path with Better Auth session cookies and disposable PostgreSQL fixtures. It includes foreign-Organization member, Company, Plant and role reads; cross-Organization Company/Plant selector substitution; foreign role writes; non-delegable permission rejection; and no-persistence assertions for denied role changes.
+- The role-assignment HTTP additions cover anonymous reads/writes, actor spoofing, unauthorized grants, cross-Organization grants/reads, successful verified-session grants, effective assignment reads and break-glass rejection.
+- Local checks reported by the repository owner at PR head `fcc9260b9f5ac944a112f6ef0ca3e06ee8c44de6`: typecheck, build, role-assignment unit suite, production role-assignment authorization suite passed; lint had zero errors and one pre-existing warning in `tests/d6-scoped-access.integration.test.mjs`.
+- These are bounded results for the implemented API paths and disposable CI targets. They do not prove that unimplemented future membership/assignment mutation routes or ERP operations are protected.
+
+### Remaining boundaries
+
+1. Hosted/production database role capability and deployment configuration remain **NOT VERIFIED**. The previously observed hosted credential had `rolsuper = true`; RLS must not be represented as a security boundary against arbitrary SQL executed with that credential. The accepted architecture keeps application-layer authorization as the primary request-path boundary and RLS as defense-in-depth, with backend/credential compromise remaining a residual risk.
+2. No hosted connection, privilege change, migration, secret change, or production smoke test was performed. Any hosted-provider verification or deployment action requires separate explicit authorization.
+3. Session revocation linearization was owner-approved and merged in [PR #62](https://github.com/fandyajpo/sap_core/pull/62) (`f8995b2f84a7e34f209e358d55a976a0e8a71be8`). Its exact-session-row revalidation and `FOR SHARE` lock run before tenant GUCs and authorization work; the common protected path and role-assignment transactions use the transaction-bound lock. PR #62 CI run [#42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs. This closes the implementation/CI portion only, not the full session-revocation acceptance item. Real Better Auth HTTP request-first/revocation-first interleavings, fail-closed DB errors, and pool-reuse isolation remain pending; the existing PostgreSQL concurrency test uses a bounded lock timeout and retry, not a complete HTTP sign-out race.
+4. Current protected API coverage is limited to the implemented Organization member, Company, Plant, custom-role and role-assignment operations. Future mutation, audit, webhook, scheduled-job, background-job and ERP routes require their own actor attribution, exact-scope authorization and adversarial tests.
+5. F-03 is bounded coverage, not a blanket proof of all application tenant isolation or hosted behavior.
+
+**Disposition:** F-01, F-02, F-04 and F-05 implementation findings are closed for the reviewed code paths; F-03 has bounded passing evidence for the implemented API slice. **V04 remains BLOCKED** pending the remaining hosted/production and owner-controlled acceptance decisions. V05–V10 and Phase 1 remain independently blocked. This reconciliation changes no schema, migration, policy, database role, credential, hosted resource or gate state.
+
+
+## V04 session-revocation linearization — implementation merged; acceptance coverage incomplete
+
+The transaction-bound session-row revalidation and `FOR SHARE` lock were owner-approved and implemented in [PR #62](https://github.com/fandyajpo/sap_core/pull/62), merged as `f8995b2f84a7e34f209e358d55a976a0e8a71be8`. CI run [#42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) passed all eight jobs, including static and V03 integration. The protected API inventory includes Organization member reads, Company/Plant reads, custom-role list/create/revision, and role-assignment GET/POST.
+
+The implementation and CI evidence do not close the full acceptance item. Remaining evidence: (1) real Better Auth HTTP-cookie/sign-out request-first and revocation-first races with HTTP status and persisted-state assertions; (2) injected lock/query/database failure proving no protected work occurs; and (3) pool reuse proving no session or tenant context leakage. The current PostgreSQL request-first test uses a bounded lock timeout, then retries deletion after the protected transaction commits; it is not an end-to-end HTTP sign-out race. Rollback lock release is covered at PostgreSQL transaction level, but HTTP integration remains outstanding.
+
+V04 remains **BLOCKED**. No hosted database, credentials, schema, migration, database role, or production resource was accessed or changed by PR #63.
+
+
+## PR #62 session-revocation implementation evidence reconciliation — 2026-11-09
+
+[PR #62](https://github.com/fandyajpo/sap_core/pull/62) is merged at `f8995b2f84a7e34f209e358d55a976a0e8a71be8`; its CI run [#42594868667](https://github.com/fandyajpo/sap_core/actions/runs/42594868667) completed successfully with all eight jobs. The implementation verifies the Better Auth session ID/user ID against the exact `core.session` row, checks expiry using the database clock, and acquires `FOR SHARE` before tenant GUCs, membership/grant reads, or protected work. The lock remains held by the protected transaction. Role-assignment and custom-role transaction adapters use the same lock-bound path.
+
+Better Auth `1.7.17` session shape, sign-out deletion behavior against the same session row, and the mapped Prisma table/column names were inspected for the implementation. PostgreSQL tests cover revoked-before-lock denial, expiry and session/user mismatch denial, row-lock serialization, rollback lock release, and a request-first lock-timeout/retry schedule. The latter is not equivalent to a real HTTP sign-out race.
+
+**Still NOT RUN / incomplete:** end-to-end Better Auth HTTP request-first and revocation-first interleavings with cookie handling and HTTP/database assertions; injected database/lock failure proving fail-closed behavior before protected work; and explicit pool-reuse isolation for the session-lock path. Keep the session-revocation acceptance item open until these are evidenced. V04 remains `BLOCKED`; no gate promotion follows from PR #62 or this documentation reconciliation. No hosted database was accessed or modified.
+
+
+## PR #72 explicit DENY implementation evidence — 2026-11-10
+
+[PR #72](https://github.com/fandyajpo/sap_core/pull/72) was squash-merged to `main` as `e6bbe5671014a2f4627719e13b997e82b5d05472`. Its PR-head Technical validation run [#42719381938](https://github.com/fandyajpo/sap_core/actions/runs/42719381938), commit `6a470ec96f22f0a60eb25b483231ab1985ae2650`, completed with all 9/9 jobs successful: static, V03 integration, V04 pinned replay, V04 DENY integration, V04 RLS integration, D1, D6, D7, and D8. The V03 HTTP job also executed the DENY HTTP integration suite.
+
+The implementation adds membership-bound exact-scope DENY policy persistence and owner-only administration/history; integrates DENY into the transaction-bound authorization loader; adds append-only audit evidence with a one-way attributable revocation transition; and adds unit, disposable PostgreSQL, and HTTP tests. The audit-denial path excludes anonymous and non-member actors and rate-limits repeated events (10 per actor and 50 per Organization per event type per rolling five minutes). Advisory locks return an integer result supported by Prisma raw-query decoding.
+
+The pinned replay job applied migration 14 (`20261109160000_v04_explicit_deny_policy`) in disposable CI and verified the expected migration history and policy/audit tables. This is not hosted migration evidence.
+
+**Result:** DENY implementation and PR-head disposable CI = PASS. Hosted/production V04 acceptance remains **BLOCKED**: the hosted Prisma Postgres credential was previously observed as a superuser, so RLS must not be represented as protection against arbitrary SQL under that credential. Hosted database access, migration, role/grant changes, deployment, and production smoke tests remain separately gated. No hosted resource was touched by PR #72.
