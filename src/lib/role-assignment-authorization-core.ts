@@ -206,6 +206,7 @@ async function lockActorGrantRows(
 async function loadActorGrants(
   session: ScopedAccessSession,
   actorUserId: string,
+  actorMembershipId: string,
   target: TargetContext,
 ): Promise<{ grants: AuthorizationRoleGrant[]; denies: ExplicitPermissionDeny[] }> {
   await lockActorGrantRows(session, actorUserId, target);
@@ -284,6 +285,46 @@ async function loadActorGrants(
     [actorUserId, target.organizationId, target.companyId, target.plantId],
   );
 
+  // Explicit tenant DENY policies are membership-bound and separate from role grants.
+  // Match only the exact target scope and its complete Company/Plant ancestry.
+  const policyDenyRows = await session.query<{
+    scope: AuthorizationScope;
+    scopeId: string;
+    permissionCode: string;
+  }>(
+    `SELECT p."scope"::text AS "scope",
+       CASE p."scope"
+         WHEN 'ORGANIZATION'::"core"."RoleScope" THEN p."organization_id"::text
+         WHEN 'COMPANY'::"core"."RoleScope" THEN p."company_id"::text
+         WHEN 'PLANT'::"core"."RoleScope" THEN p."plant_id"::text
+       END AS "scopeId",
+       pd."code" AS "permissionCode"
+     FROM "core"."tenant_deny_policy" p
+     JOIN "core"."permission_definition" pd
+       ON pd."id" = p."permission_definition_id"
+     WHERE p."organization_id" = $1::uuid
+       AND p."target_membership_id" = $2::uuid
+       AND p."scope" = $3::"core"."RoleScope"
+       AND p."company_id" IS NOT DISTINCT FROM $4::uuid
+       AND p."plant_id" IS NOT DISTINCT FROM $5::uuid
+       AND p."revoked_at" IS NULL
+       AND (p."expires_at" IS NULL OR p."expires_at" > clock_timestamp())
+     FOR SHARE OF p`,
+    [target.organizationId, actorMembershipId, target.scope, target.companyId, target.plantId],
+  );
+  const denyEligiblePermissions = new Set([
+    "organization.read", "organization.update", "organization.members.read",
+    "organization.members.manage", "company.read", "company.manage",
+    "company.members.manage", "plant.read", "plant.manage",
+    "plant.assignments.manage", "roles.read", "roles.create",
+    "roles.revise", "roles.assign",
+  ]);
+  for (const row of policyDenyRows) {
+    if (!denyEligiblePermissions.has(row.permissionCode) || !permissionSet.has(row.permissionCode)) {
+      throw new RoleAssignmentAuthorizationError("A persisted DENY policy contains a protected or unknown permission identifier.");
+    }
+  }
+
   const byAssignment = new Map<string, {
     roleCode: string; roleKind: "SYSTEM" | "ORGANIZATION_CUSTOM"; scope: AuthorizationScope;
     scopeId: string; ownerOrganizationId: string | null;
@@ -326,6 +367,13 @@ async function loadActorGrants(
       denyIndex.set(key, permissions);
     }
   }
+  for (const row of policyDenyRows) {
+    const key = `${row.scope}:${row.scopeId}`;
+    const permissions = denyIndex.get(key) ?? new Set<AuthorizationPermission>();
+    permissions.add(row.permissionCode as AuthorizationPermission);
+    denyIndex.set(key, permissions);
+  }
+
   const denies: ExplicitPermissionDeny[] = [...denyIndex].map(([key, permissions]) => {
     const separator = key.indexOf(":");
     return {
@@ -399,7 +447,7 @@ async function authorize(
     "SELECT set_config('app.company_id', $1, true), set_config('app.plant_id', $2, true)",
     [target.companyId ?? "", target.plantId ?? ""],
   );
-  const loaded = await loadActorGrants(session, sessionUserId, target);
+  const loaded = await loadActorGrants(session, sessionUserId, actorMemberships[0].id, target);
   const decision = evaluateAuthorization({
     permission,
     target: {
