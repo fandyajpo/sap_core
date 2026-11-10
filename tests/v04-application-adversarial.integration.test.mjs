@@ -417,7 +417,7 @@ test("production role-assignment adapter enforces verified-session actor and ten
     }));
   });
 
-  await t.test("caller-supplied actor identity cannot override the Better Auth session", async () => {
+  await t.test("caller-supplied actor identity cannot override the verified session provider", async () => {
     const assignment = await actorAService.grantRoleAssignmentForCurrentUser({
       organizationId: ids.orgA,
       scope: "ORGANIZATION",
@@ -468,4 +468,4 @@ test("production role-assignment adapter enforces verified-session actor and ten
     assert.equal(companyRows.rows[0].count, 0, "denied sibling-Company grant leaves no row");
     assert.equal(plantRows.rows[0].count, 0, "denied sibling-Plant grant leaves no row");
   });
-});;
+});
