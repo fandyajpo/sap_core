@@ -1,5 +1,25 @@
+/*
+ * Global stylesheet. Token imports must stay first (CSS @import rule).
+ * Import order: primitives → themes → motion.
+ *
+ * SAP Core design tokens v1 (src/app/styles/) are the future public
+ * styling interface: --sc-* primitives in tokens.css, theme-mapped
+ * semantic roles (--sc-color-*) in themes.css, motion tokens in motion.css.
+ * The legacy :root variables below (--ink, --muted, --line, --blue, ...)
+ * are retained for existing pages; migrating them to the semantic tokens
+ * belongs to later PRs.
+ */
+@import "./styles/tokens.css";
+@import "./styles/themes.css";
+@import "./styles/motion.css";
+
 :root {
-  color-scheme: light;
+  /*
+   * color-scheme is owned by themes.css: light is the :root default and
+   * [data-theme="dark"] on the root element switches it to dark. Declaring
+   * it here as light would override dark at equal specificity because this
+   * legacy block comes after the theme imports.
+   */
   --ink: #172b4d;
   --muted: #61718a;
   --line: #dce4ee;

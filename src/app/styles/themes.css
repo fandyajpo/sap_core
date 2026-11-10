@@ -1,0 +1,139 @@
+/*
+ * SAP Core design tokens v1 — semantic roles.
+ *
+ * Semantic tokens are the public interface for future components: they
+ * stay role-stable across themes so consumers never reference primitives
+ * directly. Light is the default (:root); dark mappings live under
+ * [data-theme="dark"]. There is no theme toggle, persistence, provider,
+ * or runtime state in this PR — the dark block is a token foundation.
+ *
+ * Contrast notes (WCAG 2.x, normal text):
+ * - Light: foreground #0F172A on background #F8FAFC ≈ 15:1; muted
+ *   foreground #64748B ≈ 4.7:1; white on primary #2563EB ≈ 5.2:1.
+ * - Dark: foreground #F1F5F9 on background #0B1220 ≈ 15:1; muted
+ *   foreground #94A3B8 ≈ 7:1; dark #0B1220 on primary #60A5FA ≈ 7:1.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --sc-color-background: var(--sc-slate-50);
+  --sc-color-foreground: var(--sc-slate-900);
+  --sc-color-surface: var(--sc-white);
+  --sc-color-surface-secondary: var(--sc-slate-100);
+  --sc-color-surface-elevated: var(--sc-white);
+
+  /* Primary actions */
+  --sc-color-primary: var(--sc-blue-600);
+  --sc-color-primary-hover: var(--sc-blue-700);
+  --sc-color-primary-active: var(--sc-navy-900);
+  --sc-color-primary-foreground: var(--sc-white);
+
+  /* Secondary surfaces */
+  --sc-color-secondary: var(--sc-slate-100);
+  --sc-color-secondary-foreground: var(--sc-slate-700);
+
+  /* Muted content */
+  --sc-color-muted: var(--sc-slate-100);
+  --sc-color-muted-foreground: var(--sc-slate-500);
+
+  /* Borders, inputs, focus */
+  --sc-color-border: var(--sc-slate-200);
+  --sc-color-input: var(--sc-slate-300);
+  --sc-color-ring: var(--sc-blue-500);
+
+  /* Success */
+  --sc-color-success: #15803D;
+  --sc-color-success-foreground: var(--sc-white);
+  --sc-color-success-subtle: #F0FDF4;
+  --sc-color-success-border: #BBF7D0;
+
+  /* Warning */
+  --sc-color-warning: #B45309;
+  --sc-color-warning-foreground: var(--sc-white);
+  --sc-color-warning-subtle: #FEF3C7;
+  --sc-color-warning-border: #FCD34D;
+
+  /* Danger */
+  --sc-color-danger: #B91C1C;
+  --sc-color-danger-foreground: var(--sc-white);
+  --sc-color-danger-subtle: #FEF2F2;
+  --sc-color-danger-border: #FECACA;
+
+  /* Info */
+  --sc-color-info: var(--sc-blue-700);
+  --sc-color-info-foreground: var(--sc-white);
+  --sc-color-info-subtle: #EFF6FF;
+  --sc-color-info-border: #BFDBFE;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --sc-color-background: #0B1220;
+  --sc-color-foreground: var(--sc-slate-100);
+  --sc-color-surface: #111C2E;
+  --sc-color-surface-secondary: #162338;
+  --sc-color-surface-elevated: #1D2B42;
+
+  /* Primary actions */
+  --sc-color-primary: #60A5FA;
+  --sc-color-primary-hover: #93C5FD;
+  --sc-color-primary-active: var(--sc-blue-500);
+  --sc-color-primary-foreground: #0B1220;
+
+  /* Secondary surfaces */
+  --sc-color-secondary: #1D2B42;
+  --sc-color-secondary-foreground: var(--sc-slate-200);
+
+  /* Muted content */
+  --sc-color-muted: #162338;
+  --sc-color-muted-foreground: #94A3B8;
+
+  /* Borders, inputs, focus */
+  --sc-color-border: #263449;
+  --sc-color-input: #334155;
+  --sc-color-ring: #60A5FA;
+
+  /* Success */
+  --sc-color-success: #4ADE80;
+  --sc-color-success-foreground: #052E16;
+  --sc-color-success-subtle: rgba(74, 222, 128, 0.12);
+  --sc-color-success-border: rgba(74, 222, 128, 0.4);
+
+  /* Warning */
+  --sc-color-warning: #FBBF24;
+  --sc-color-warning-foreground: #451A03;
+  --sc-color-warning-subtle: rgba(251, 191, 36, 0.12);
+  --sc-color-warning-border: rgba(251, 191, 36, 0.4);
+
+  /* Danger */
+  --sc-color-danger: #F87171;
+  --sc-color-danger-foreground: #450A0A;
+  --sc-color-danger-subtle: rgba(248, 113, 113, 0.12);
+  --sc-color-danger-border: rgba(248, 113, 113, 0.4);
+
+  /* Info */
+  --sc-color-info: #60A5FA;
+  --sc-color-info-foreground: #0B1220;
+  --sc-color-info-subtle: rgba(96, 165, 250, 0.12);
+  --sc-color-info-border: rgba(96, 165, 250, 0.4);
+}
+
+/*
+ * Stronger separators for users who prefer higher contrast. Text colors
+ * already exceed AA in both themes; only edge definition is strengthened.
+ */
+@media (prefers-contrast: more) {
+  :root {
+    --sc-color-border: var(--sc-slate-300);
+    --sc-color-input: var(--sc-slate-500);
+  }
+
+  [data-theme="dark"] {
+    --sc-color-border: #3B4A63;
+    --sc-color-input: #48556C;
+  }
+}
