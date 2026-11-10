@@ -48,10 +48,31 @@ All five CSS modules (`data-table`, and the members/roles/assignments views) use
 
 ## 4. Verification status (honest)
 
-- **Not executed locally** (no execution facility): `pnpm lint`, `pnpm typecheck`, `pnpm build`, tests, `git diff --check`. CI (job `static`) on this branch is the authoritative check.
-- **Not verified visually**: the app was not rendered; the showcase and the token-adoption visual deltas (radius/tint normalizations) need maintainer review or a rendered pass.
-- **Not exercised interactively**: keyboard focus order, drag interactions, and dark rendering need a real browser pass (documented as the standing limitation).
-- Static review performed: all edited CSS re-read after write; TSX changes re-verified against component APIs; existing UI tests' asserted patterns (source regexes in `tests/*-ui.unit.test.mjs`, `data-table.unit.test.mjs`) were checked against the edits — none assert the changed CSS values, and TSX structure edits (AuthForm) match the `role="alert"`/label patterns tests or pages expect.
+### 4a. Runtime verification mission — blockers (environment)
+
+Attempted per the runtime verification mission; the following could not be run because this environment has **no shell/terminal** and **no running application server** (the repo is not published to a preview; a dev server additionally requires a Better Auth/Prisma database and session, which cannot be started here):
+
+- `pnpm lint` — NOT RUN (no shell). Blocker documented, not bypassed.
+- `pnpm typecheck` — NOT RUN (no shell).
+- `pnpm build` — NOT RUN (no shell).
+- `node --test tests/data-table.unit.test.mjs`, `tests/organization-members-ui.unit.test.mjs`, `tests/organization-roles-ui.unit.test.mjs`, `tests/role-assignments-ui.unit.test.mjs`, `tests/architecture-boundaries.unit.test.mjs`, `tests/client-data.unit.test.mjs` — NOT RUN (no shell).
+- `git diff --check` — NOT RUN (no shell); whitespace was instead reviewed in the full committed diff output (no trailing-whitespace indicators observed).
+- Visual verification of `/sign-in`, `/register`, `/ui-showcase` — NOT PERFORMED (nothing renders the app: no local server, no preview link). Light/dark rendering, card surfaces, typography, semantic colors, focus rings, spacing, responsive layouts, and overflow are therefore **unverified visually**.
+- Interaction verification (button states, input validation, auth errors, profile form, sign-out, DataTable sort/search/pagination, loading/empty states, keyboard navigation, focus management, reduced motion) — NOT PERFORMED for the same reason. `AuthForm`/`SignOutButton` real-auth behavior was deliberately not triggered; no test accounts exist or were created.
+
+### 4b. Static verification performed (via repository search tooling)
+
+- **Token integrity: PASS.** All `--sc-*` variables consumed by the five component CSS modules (239 usages extracted) were cross-checked against definitions in `src/app/styles/tokens.css` and `themes.css` (light `:root` and `[data-theme="dark"]` blocks re-read). Zero undefined token references. Confirmed defined: color-foreground/muted-foreground/secondary-foreground, color-border/surface(+secondary), color-info/warning/danger/success (+subtle/border), color-primary/ring, radius-sm/md/lg/full, border-width, shadow-sm/md, text-body/label/caption/h3/h4, focus-ring-width/offset, numeric-font-variant.
+- **Showcase class integrity: PASS.** Every `styles.*` reference in `ui-showcase-view.tsx` (page, heading, context, card, cardHeader, demoControls, demoButton, note, formGrid, formCell, chipGrid, chip, chipInfo, chipSuccess, chipWarning, chipDanger, statusActive, statusRevoked, numeric) resolves to a class in `ui-showcase.module.css`.
+- **Import integrity: PASS.** No unused or dangling imports in the showcase page/view; `DataTable` is imported from the existing barrel export.
+- **Dark scoping: PASS (static).** `themes.css` exposes semantic roles under `[data-theme="dark"]` as a plain attribute selector, so a scoped section inherits dark values to all token-driven descendants — the showcase dark section and the newly token-adopted components are dark-ready by construction.
+- **Existing test contracts: PASS (static).** The source-regex assertions in `tests/*-ui.unit.test.mjs` and `tests/data-table.unit.test.mjs` target TSX structure (`aria-label`, `aria-expanded`, hook usage) that was not modified; no test asserts the changed CSS values.
+
+### 4c. Findings from the static pass (documented, no code change required)
+
+- Duplicate `<h1>` when `AuthForm` is embedded in the showcase (its own "Welcome back" heading + the showcase page heading). Not a defect on `/sign-in` (single heading there); documented as an embedding constraint — `AuthForm` is not yet a form-only widget.
+- Duplicate `id="auth-form-error"` would occur only if two `AuthForm`s rendered simultaneously on one page — verified that no current page does (`/sign-in`, `/register`, and the showcase each render at most one).
+- A token-definition search mistakenly pointed at `src/styles` (nonexistent path) before being corrected to `src/app/styles`; zero matches were a tool-path error, not a repository defect.
 
 ## 5. Remaining known limitations
 
