@@ -143,8 +143,7 @@ async function requireRoleDefinition(
     `SELECT "id", "scope"::text AS "scope", "kind"::text AS "kind",
             "ownerOrganizationId"::text AS "ownerOrganizationId"
      FROM "core"."role_definition"
-     WHERE "id" = $1
-     FOR SHARE`,
+     WHERE "id" = $1`,
     [roleDefinitionId],
   );
   const roleDefinition = rows[0];
