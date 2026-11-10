@@ -271,11 +271,14 @@ async function authorize(
   }
 
   await session.query("SELECT set_config('app.user_id', $1, true)", [sessionUserId]);
+  // Bootstrap visibility is intentionally a plain SELECT: before the
+  // Organization GUC is installed, SELECT ... FOR SHARE also invokes the
+  // table's write-policy checks and hides this actor's own membership.
   const actorMemberships = await session.query<{ id: string }>(
     `SELECT "id" FROM "core"."organization_membership"
      WHERE "userId" = $1 AND "organizationId" = $2::uuid
        AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-     LIMIT 1 FOR SHARE`,
+     LIMIT 1`,
     [sessionUserId, organizationId],
   );
   if (!actorMemberships[0]) return false;
@@ -284,6 +287,18 @@ async function authorize(
     "SELECT set_config('app.organization_id', $1, true), set_config('app.company_id', '', true), set_config('app.plant_id', '', true)",
     [organizationId],
   );
+
+  // Re-read and lock the membership after tenant context is installed. This
+  // closes the revocation race without asking the bootstrap policy to grant
+  // write-policy visibility before the Organization context exists.
+  const lockedActorMemberships = await session.query<{ id: string }>(
+    `SELECT "id" FROM "core"."organization_membership"
+     WHERE "userId" = $1 AND "organizationId" = $2::uuid
+       AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+     LIMIT 1 FOR SHARE`,
+    [sessionUserId, organizationId],
+  );
+  if (!lockedActorMemberships[0]) return false;
   if (permission === "roles.assign") {
     const grantInput = input as RoleAssignmentGrantAuthorization;
     const definitions = await session.query<{
