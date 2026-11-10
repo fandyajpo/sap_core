@@ -325,6 +325,21 @@ async function authorize(
       || (definition.kind === "ORGANIZATION_CUSTOM" && definition.ownerOrganizationId !== organizationId)
       || (definition.kind !== "SYSTEM" && definition.kind !== "ORGANIZATION_CUSTOM")
     ) return false;
+
+    // Global SYSTEM definitions are SELECT-visible but not UPDATE-visible in
+    // tenant RLS, so SELECT FOR SHARE would incorrectly hide them. Custom
+    // definitions remain owner-scoped and are locked to close revision races.
+    if (definition.kind === "ORGANIZATION_CUSTOM") {
+      const locked = await session.query<{ id: string }>(
+        `SELECT "id" FROM "core"."role_definition"
+         WHERE "id" = $1
+           AND "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+           AND "ownerOrganizationId" = $2::uuid
+         FOR SHARE`,
+        [grantInput.roleDefinitionId, organizationId],
+      );
+      if (!locked[0]) return false;
+    }
   }
 
   const target = await resolveTarget(session, organizationId, input.scope, input.parentId, expectedUserId);
