@@ -97,7 +97,7 @@ Before production traffic, a separately approved production-readiness exercise m
 
 ## 7. Design-platform integration gate
 
-<badge>READY</badge> The repository foundation is sufficient to begin UI/design-platform integration against the implemented API slice, subject to these constraints:
+**READY:** The repository foundation is sufficient to begin UI/design-platform integration against the implemented API slice, subject to these constraints:
 
 - Use Better Auth's existing sign-in/session flow; never trust actor IDs from client state.
 - Keep all privileged tenant operations server-side and use the existing transaction-bound services.
