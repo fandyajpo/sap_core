@@ -17,6 +17,7 @@ export interface DataTableProps<TData extends RowData, TValue = unknown> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   getRowId: (row: TData) => string;
+  ariaLabel?: string;
   emptyState?: ReactNode;
   filterPlaceholder?: string;
   isLoading?: boolean;
@@ -28,6 +29,7 @@ export function DataTable<TData extends RowData, TValue = unknown>({
   columns,
   data,
   getRowId,
+  ariaLabel = "Data table",
   emptyState,
   filterPlaceholder = "Filter rows…",
   isLoading = false,
@@ -69,7 +71,7 @@ export function DataTable<TData extends RowData, TValue = unknown>({
       </div>
 
       <div className={styles.tableViewport}>
-        <table aria-busy={isLoading} aria-label="Data table" className={styles.table}>
+        <table aria-busy={isLoading} aria-label={ariaLabel} className={styles.table}>
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>

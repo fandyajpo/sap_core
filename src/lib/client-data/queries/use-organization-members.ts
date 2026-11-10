@@ -9,6 +9,8 @@ export function createOrganizationMembersQueryOptions(organizationId: string) {
     queryKey: clientDataKeys.organizationMembers(organizationId),
     queryFn: ({ signal }: { signal: AbortSignal }) => listOrganizationMembers(organizationId, signal),
     enabled: organizationId.trim().length > 0,
+    gcTime: 0,
+    staleTime: 0,
   };
 }
 
