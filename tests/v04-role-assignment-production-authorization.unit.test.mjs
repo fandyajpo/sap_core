@@ -10,7 +10,7 @@ const recipientId = "22222222-2222-4222-8222-222222222222";
 const organizationId = "33333333-3333-4333-8333-333333333333";
 const membershipId = "44444444-4444-4444-8444-444444444444";
 
-function harness({ actorMember = true, targetMember = true, deny = false } = {}) {
+function harness({ actorMember = true, targetMember = true, deny = false, explicitDeny = false } = {}) {
   const statements = [];
   const session = {
     async query(statement, values = []) {
@@ -30,6 +30,21 @@ function harness({ actorMember = true, targetMember = true, deny = false } = {})
           ownerOrganizationId: null,
           disabledAt: null,
           permissionsLockedAt: new Date("2026-11-09T00:00:00.000Z"),
+        }];
+      }
+      if (statement.includes('FROM "core"."tenant_deny_policy"')) {
+        if (!explicitDeny) return [];
+        assert.deepEqual(values, [
+          organizationId,
+          "55555555-5555-4555-8555-555555555555",
+          "ORGANIZATION",
+          null,
+          null,
+        ]);
+        return [{
+          scope: "ORGANIZATION",
+          scopeId: organizationId,
+          permissionCode: "roles.assign",
         }];
       }
       if (statement.includes('FROM "core"."organization_role_assignment"')) {
@@ -91,6 +106,18 @@ test("target-scope DENY overrides an otherwise matching role assignment permissi
     actorUserId: actorId, scope: "ORGANIZATION", parentId: membershipId,
     roleDefinitionId: "88888888-8888-4888-8888-888888888888",
   }, session), false);
+});
+
+test("membership-bound explicit DENY blocks role assignment despite an ALLOW role grant", async () => {
+  const { session, statements } = harness({ explicitDeny: true });
+  const policy = createRoleAssignmentAuthorization(actorId, organizationId);
+  assert.equal(await policy.authorizeGrant({
+    actorUserId: actorId, scope: "ORGANIZATION", parentId: membershipId,
+    roleDefinitionId: "88888888-8888-4888-8888-888888888888",
+  }, session), false);
+  const denyQuery = statements.find(({ statement }) => statement.includes('FROM "core"."tenant_deny_policy"'));
+  assert.ok(denyQuery, "authorization must query the dedicated DENY policy table");
+  assert.equal(denyQuery.values[1], "55555555-5555-4555-8555-555555555555");
 });
 
 test("effective-role listing requires roles.read and the requested user membership", async () => {
