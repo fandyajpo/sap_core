@@ -45,6 +45,7 @@ jobs:
       - run: pnpm test:v04-session-revocation:unit
       - run: pnpm test:v04-role-assignment
       - run: pnpm test:v04-role-assignment-production
+      - run: pnpm test:v04-role-definition-owner-pre-read
       - run: pnpm test:v04-deny-policy
 
   v03-integration:
