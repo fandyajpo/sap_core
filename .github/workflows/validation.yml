@@ -20,6 +20,9 @@ jobs:
     env:
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/sap_core_static?schema=public
       MIGRATION_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/sap_core_static?schema=public
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-not-for-production-0000000000000000
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -34,6 +37,7 @@ jobs:
       - run: pnpm db:generate
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm build
       - run: pnpm test:tenant-target-context
       - run: pnpm test:authorization-policy
       - run: pnpm test:organization-members-reader
