@@ -33,12 +33,57 @@ const pureDomainModules = [
   "lib/http-validation.ts",
 ];
 
+const expectedOrganizationRouteServices = new Map([
+  [
+    "app/api/organizations/[organizationId]/companies/[companyId]/plants/[plantId]/route.ts",
+    "lib/tenant-resource-reader.ts",
+  ],
+  [
+    "app/api/organizations/[organizationId]/companies/[companyId]/route.ts",
+    "lib/tenant-resource-reader.ts",
+  ],
+  [
+    "app/api/organizations/[organizationId]/deny-policies/[policyId]/route.ts",
+    "lib/tenant-deny-policy-service.ts",
+  ],
+  [
+    "app/api/organizations/[organizationId]/deny-policies/route.ts",
+    "lib/tenant-deny-policy-service.ts",
+  ],
+  [
+    "app/api/organizations/[organizationId]/members/route.ts",
+    "lib/organization-members-reader.ts",
+  ],
+  [
+    "app/api/organizations/[organizationId]/roles/assignments/route.ts",
+    "lib/tenant-role-assignment-service.ts",
+  ],
+  [
+    "app/api/organizations/[organizationId]/roles/[roleDefinitionId]/revisions/route.ts",
+    "lib/tenant-role-definition-service.ts",
+  ],
+  [
+    "app/api/organizations/[organizationId]/roles/route.ts",
+    "lib/tenant-role-definition-service.ts",
+  ],
+]);
+
 function sourceKind(filePath) {
   if (filePath.endsWith(".tsx") || filePath.endsWith(".jsx")) return ts.ScriptKind.TSX;
   if (filePath.endsWith(".js") || filePath.endsWith(".mjs") || filePath.endsWith(".cjs")) {
     return ts.ScriptKind.JS;
   }
   return ts.ScriptKind.TS;
+}
+
+// These guards enforce runtime dependency boundaries. Type-only imports and exports are erased by TypeScript and are intentionally excluded.
+function exportHasRuntimeBinding(node) {
+  if (node.isTypeOnly) return false;
+  if (!node.exportClause || !ts.isNamedExports(node.exportClause)) return true;
+  return (
+    node.exportClause.elements.length === 0 ||
+    node.exportClause.elements.some((element) => !element.isTypeOnly)
+  );
 }
 
 function parseModule(filePath, text) {
@@ -77,11 +122,11 @@ function parseModule(filePath, text) {
         !node.importClause?.isTypeOnly && !namedBindingsAreTypeOnly,
       );
     } else if (ts.isExportDeclaration(node)) {
-      addImport(node.moduleSpecifier, node, "export", !node.isTypeOnly);
+      addImport(node.moduleSpecifier, node, "export", exportHasRuntimeBinding(node));
     } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
-      addImport(node.moduleReference.expression, node, "import-equals");
+      addImport(node.moduleReference.expression, node, "import-equals", !node.isTypeOnly);
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
-      addImport(node.argument.literal, node, "import-type");
+      addImport(node.argument.literal, node, "import-type", false);
     } else if (ts.isCallExpression(node)) {
       const firstArgument = node.arguments[0];
       if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
@@ -274,6 +319,7 @@ function inspectClientBoundaries(modules, entries, aliasMappings) {
       }
 
       for (const imported of module.imports) {
+        if (!imported.runtime) continue;
         const resolution = resolveSourceImport(filePath, imported.specifier, modules, aliasMappings);
         if (isForbiddenClientDependency(imported.specifier, resolution.candidate ?? resolution.target)) {
           report({
@@ -334,6 +380,7 @@ function inspectPureDomainDependencies(modules, entryPoints, aliasMappings) {
       }
 
       for (const imported of module.imports) {
+        if (!imported.runtime) continue;
         const resolution = resolveSourceImport(filePath, imported.specifier, modules, aliasMappings);
         if (isForbiddenPureDependency(imported.specifier, resolution.candidate ?? resolution.target)) {
           violations.push({
@@ -415,18 +462,33 @@ test("privileged adapters and tenant services retain explicit server-only marker
   assert.deepEqual(missingMarkers, [], `missing server-only marker: ${missingMarkers.join(", ")}`);
 });
 
-test("organization API routes delegate through protected services, not persistence adapters", () => {
-  assert.ok(organizationRouteFiles.length > 0, "expected organization API routes to inspect");
+test("organization API routes import their expected protected service, not persistence adapters", () => {
+  const expectedRouteFiles = [...expectedOrganizationRouteServices.keys()].sort();
+  assert.deepEqual(
+    organizationRouteFiles,
+    expectedRouteFiles,
+    "every organization API route must have an explicit expected service mapping",
+  );
   const violations = [];
 
-  for (const filePath of organizationRouteFiles) {
+  for (const filePath of expectedRouteFiles) {
     const route = sourceModules.get(filePath);
-    let importsProtectedService = false;
+    const expectedService = expectedOrganizationRouteServices.get(filePath);
+    const importsExpectedService = route.imports.some((imported) =>
+      imported.runtime &&
+      resolveSourceImport(filePath, imported.specifier, sourceModules, aliasMappings).target === expectedService,
+    );
+    if (!importsExpectedService) {
+      violations.push({
+        rule: "api-route-missing-expected-service",
+        filePath,
+        expectedService,
+      });
+    }
+
     for (const imported of route.imports) {
+      if (!imported.runtime) continue;
       const resolution = resolveSourceImport(filePath, imported.specifier, sourceModules, aliasMappings);
-      if (imported.runtime && resolution.target && sourceModules.get(resolution.target)?.hasServerOnlyMarker) {
-        importsProtectedService = true;
-      }
       if (isPersistenceDependency(imported.specifier, resolution.candidate ?? resolution.target)) {
         violations.push({
           rule: "api-route-imports-persistence-adapter",
@@ -435,9 +497,6 @@ test("organization API routes delegate through protected services, not persisten
           line: imported.line,
         });
       }
-    }
-    if (!importsProtectedService) {
-      violations.push({ rule: "api-route-missing-protected-service", filePath });
     }
   }
 
@@ -449,6 +508,62 @@ test("pure domain modules and their local dependencies stay framework- and serve
   assert.deepEqual(missingModules, [], `missing pure-domain module: ${missingModules.join(", ")}`);
   const violations = inspectPureDomainDependencies(sourceModules, pureDomainModules, aliasMappings);
   assert.deepEqual(violations, [], formatViolations(violations));
+});
+
+test("type-only imports and exports are excluded while runtime re-exports remain dependencies", () => {
+  const fixtureModules = new Map([
+    [
+      "components/client-entry.tsx",
+      parseModule(
+        "components/client-entry.tsx",
+        [
+          '"use client";',
+          'import type { ImportedType } from "../lib/type-only.ts";',
+          'import { type InlineImportedType } from "../lib/type-only.ts";',
+          'type DynamicType = import("../lib/type-only.ts").ImportedType;',
+          'export type { ExportedType } from "../lib/type-only.ts";',
+          'export { type InlineExportedType } from "../lib/type-only.ts";',
+          'export { runtimeValue } from "../lib/runtime-service.ts";',
+          'export { type MixedType, runtimeValue as aliasedRuntimeValue } from "../lib/runtime-service.ts";',
+        ].join("\n"),
+      ),
+    ],
+    [
+      "lib/type-only.ts",
+      parseModule("lib/type-only.ts", 'import "server-only";\nexport type { ImportedType } from "./types.ts";'),
+    ],
+    [
+      "lib/runtime-service.ts",
+      parseModule("lib/runtime-service.ts", 'import "server-only";\nexport const runtimeValue = 1;'),
+    ],
+    ["lib/types.ts", parseModule("lib/types.ts", "export type ImportedType = string;")],
+  ]);
+  const entry = fixtureModules.get("components/client-entry.tsx");
+  const typeOnlyEdges = entry.imports.filter((imported) => imported.specifier === "../lib/type-only.ts");
+  const runtimeEdges = entry.imports.filter((imported) => imported.specifier === "../lib/runtime-service.ts");
+
+  assert.equal(typeOnlyEdges.length, 5);
+  assert.ok(typeOnlyEdges.every((imported) => !imported.runtime));
+  assert.equal(runtimeEdges.length, 2);
+  assert.ok(runtimeEdges.every((imported) => imported.runtime));
+
+  const violations = inspectClientBoundaries(
+    fixtureModules,
+    ["components/client-entry.tsx"],
+    aliasMappings,
+  );
+  assert.ok(
+    violations.some(
+      (violation) =>
+        violation.rule === "client-reaches-server-only-module" &&
+        violation.filePath === "lib/runtime-service.ts",
+    ),
+    `expected runtime re-exports to remain visible to the guard; got:\n${formatViolations(violations)}`,
+  );
+  assert.ok(
+    !violations.some((violation) => violation.filePath === "lib/type-only.ts"),
+    `type-only edges must not become runtime boundary violations; got:\n${formatViolations(violations)}`,
+  );
 });
 
 test("client boundary guard detects a transitive server-only import in a negative fixture", () => {
