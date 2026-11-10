@@ -53,9 +53,6 @@ function createSession(client) {
   return {
     async query(statement, values = []) {
       const result = await client.query(statement, values);
-      if (statement.includes("set_config") || statement.includes('"core"."organization_membership"')) {
-        console.log("V04_AUTH_QUERY", statement.replace(/\\s+/g, " ").slice(0, 220), "ROWS", JSON.stringify(result.rows));
-      }
       return result.rows;
     },
   };
@@ -234,7 +231,6 @@ before(async () => {
       JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
       WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
     `, [ids.actorA, ids.orgA]);
-    console.log("V04_MANUAL_EFFECTIVE_GRANTS", JSON.stringify(effectiveActorGrants.rows));
     assert.ok(
       effectiveActorGrants.rows.some((row) => row.roleCode === "ORG_OWNER" && row.permissionCode === "roles.assign" && row.effect === "ALLOW"),
       `runtime effective-grant query must return ORG_OWNER roles.assign; got ${JSON.stringify(effectiveActorGrants.rows)}`,
