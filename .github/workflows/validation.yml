@@ -48,6 +48,7 @@ jobs:
       - run: pnpm test:v04-role-definition-owner-pre-read
       - run: pnpm test:v04-deny-policy
       - run: pnpm test:client-data
+      - run: pnpm test:data-table
       - run: node --test tests/architecture-boundaries.unit.test.mjs
 
   v03-integration:
