@@ -243,12 +243,23 @@ before(async () => {
       effectiveActorGrants: effectiveActorGrants.rows,
     }));
     const authorization = createRoleAssignmentAuthorization(ids.actorA, ids.orgA);
+    const diagnosticSession = {
+      async query(statement, values = []) {
+        const result = await diagnosticClient.query(statement, values);
+        console.log("V04_AUTH_QUERY", JSON.stringify({
+          sql: statement.replace(/\\s+/g, " ").slice(0, 180),
+          rowCount: result.rowCount,
+          rows: result.rows?.slice(0, 2),
+        }));
+        return result.rows;
+      },
+    };
     const directDecision = await authorization.authorizeGrant({
       scope: "ORGANIZATION",
       parentId: ids.recipientMembershipA,
       roleDefinitionId: memberRoleDefinitionId,
       actorUserId: ids.actorA,
-    }, createSession(diagnosticClient));
+    }, diagnosticSession);
     console.log("V04_AUTH_DIRECT_DECISION", directDecision);
     assert.equal(directDecision, true, "authorization core must allow the fixture's sealed ORG_OWNER grant");
     await diagnosticClient.query("ROLLBACK");
