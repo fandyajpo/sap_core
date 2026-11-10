@@ -142,12 +142,16 @@ async function requireRoleDefinition(
   session: ScopedAccessSession,
   roleDefinitionId: string,
 ): Promise<RoleDefinitionRow> {
+  // SYSTEM role definitions are immutable to tenant runtime roles and are
+  // globally SELECT-visible, but RLS intentionally does not grant UPDATE
+  // visibility. PostgreSQL therefore hides them from SELECT ... FOR SHARE.
+  // Read SYSTEM definitions without a row lock; only tenant-owned custom
+  // definitions need a lock to serialize assignment against governance changes.
   const rows = await session.query<RoleDefinitionRow>(
     `SELECT "id", "scope"::text AS "scope", "kind"::text AS "kind",
             "ownerOrganizationId"::text AS "ownerOrganizationId"
      FROM "core"."role_definition"
-     WHERE "id" = $1
-     FOR SHARE`,
+     WHERE "id" = $1`,
     [roleDefinitionId],
   );
   const roleDefinition = rows[0];
@@ -157,7 +161,28 @@ async function requireRoleDefinition(
       `Role Definition ${roleDefinitionId} does not exist.`,
     );
   }
-  return roleDefinition;
+
+  if (roleDefinition.kind !== "ORGANIZATION_CUSTOM") {
+    return roleDefinition;
+  }
+
+  const lockedRows = await session.query<RoleDefinitionRow>(
+    `SELECT "id", "scope"::text AS "scope", "kind"::text AS "kind",
+            "ownerOrganizationId"::text AS "ownerOrganizationId"
+     FROM "core"."role_definition"
+     WHERE "id" = $1
+       AND "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+     FOR SHARE`,
+    [roleDefinitionId],
+  );
+  const lockedRoleDefinition = lockedRows[0];
+  if (!lockedRoleDefinition) {
+    throw new RoleAssignmentError(
+      "ROLE_DEFINITION_NOT_FOUND",
+      `Organization custom Role Definition ${roleDefinitionId} is no longer available.`,
+    );
+  }
+  return lockedRoleDefinition;
 }
 
 async function requireTypedParent(
