@@ -3,11 +3,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import pg from "pg";
-import {
-  createRoleAssignmentService,
-  RoleAssignmentError,
-} from "../src/lib/role-assignment-service.ts";
-import { createRoleAssignmentAuthorization } from "../src/lib/role-assignment-authorization-core.ts";
+import { RoleAssignmentError } from "../src/lib/role-assignment-service.ts";
+import { TenantTargetContextError } from "../src/lib/tenant-target-context-core.ts";
+import { createTenantRoleAssignmentAdapter } from "../src/lib/tenant-role-assignment-service-core.ts";
 
 const { Client, Pool } = pg;
 const migrationUrl = process.env.MIGRATION_DATABASE_URL;
@@ -101,12 +99,11 @@ const database = {
   },
 };
 
-function createService(actorUserId, organizationId) {
-  return createRoleAssignmentService(
+function createService(sessionActorId) {
+  return createTenantRoleAssignmentAdapter({
     database,
-    createRoleAssignmentAuthorization(actorUserId, organizationId),
-    { enforceRoleDefinitionGovernance: true },
-  );
+    getCurrentSession: async () => ({ user: { id: sessionActorId } }),
+  });
 }
 
 async function expectAuthorizationDenied(operation) {
@@ -353,11 +350,11 @@ after(async () => {
 });
 
 test("production role-assignment service enforces verified actor and tenant boundaries on non-owner RLS role", async (t) => {
-  const actorAService = createService(ids.actorA, ids.orgA);
-  const actorBService = createService(ids.actorB, ids.orgB);
+  const actorAService = createService(ids.actorA);
+  const actorBService = createService(ids.actorB);
 
   await t.test("authorized Organization owner grants a role to an active same-tenant member", async () => {
-    const assignment = await actorAService.grantRoleAssignment({
+    const assignment = await actorAService.grantRoleAssignmentForCurrentUser({
       scope: "ORGANIZATION",
       parentId: ids.recipientMembershipA,
       roleDefinitionId: memberRoleDefinitionId,
@@ -371,7 +368,7 @@ test("production role-assignment service enforces verified actor and tenant boun
   });
 
   await t.test("authorized actor can list the target member's effective assignment", async () => {
-    const rows = await actorAService.listEffectiveRoleAssignments({
+    const rows = await actorAService.listRoleAssignmentsForCurrentUser({
       actorUserId: ids.actorA,
       userId: ids.recipientA,
       scope: "ORGANIZATION",
@@ -382,8 +379,8 @@ test("production role-assignment service enforces verified actor and tenant boun
   });
 
   await t.test("actor from another Organization cannot grant into Organization A", async () => {
-    const foreignService = createService(ids.actorB, ids.orgA);
-    await expectAuthorizationDenied(() => foreignService.grantRoleAssignment({
+    const foreignService = createService(ids.actorB);
+    await expectAuthorizationDenied(() => foreignService.grantRoleAssignmentForCurrentUser({
       scope: "ORGANIZATION",
       parentId: ids.recipientMembershipA,
       roleDefinitionId: memberRoleDefinitionId,
@@ -392,8 +389,8 @@ test("production role-assignment service enforces verified actor and tenant boun
   });
 
   await t.test("Company admin cannot grant into a sibling Company", async () => {
-    const companyAdminService = createService(ids.actorC, ids.orgA);
-    await expectAuthorizationDenied(() => companyAdminService.grantRoleAssignment({
+    const companyAdminService = createService(ids.actorC);
+    await expectAuthorizationDenied(() => companyAdminService.grantRoleAssignmentForCurrentUser({
       scope: "COMPANY",
       parentId: ids.companyMembershipRecipientB,
       roleDefinitionId: companyMemberRoleDefinitionId,
@@ -402,8 +399,8 @@ test("production role-assignment service enforces verified actor and tenant boun
   });
 
   await t.test("Plant manager cannot grant into a sibling Plant", async () => {
-    const plantManagerService = createService(ids.actorD, ids.orgA);
-    await expectAuthorizationDenied(() => plantManagerService.grantRoleAssignment({
+    const plantManagerService = createService(ids.actorD);
+    await expectAuthorizationDenied(() => plantManagerService.grantRoleAssignmentForCurrentUser({
       scope: "PLANT",
       parentId: ids.plantAssignmentRecipientA,
       roleDefinitionId: plantViewerRoleDefinitionId,
@@ -412,8 +409,8 @@ test("production role-assignment service enforces verified actor and tenant boun
   });
 
   await t.test("actor from another Organization cannot list Organization A assignments", async () => {
-    const foreignService = createService(ids.actorB, ids.orgA);
-    await expectAuthorizationDenied(() => foreignService.listEffectiveRoleAssignments({
+    const foreignService = createService(ids.actorB);
+    await expectAuthorizationDenied(() => foreignService.listRoleAssignmentsForCurrentUser({
       actorUserId: ids.actorB,
       userId: ids.recipientA,
       scope: "ORGANIZATION",
@@ -421,16 +418,38 @@ test("production role-assignment service enforces verified actor and tenant boun
     }));
   });
 
-  await t.test("caller cannot spoof the verified actor ID", async () => {
+  await t.test("caller-supplied actor identity cannot override the Better Auth session", async () => {
+    const assignment = await actorAService.grantRoleAssignmentForCurrentUser({
+      organizationId: ids.orgA,
+      scope: "ORGANIZATION",
+      parentId: ids.recipientMembershipA,
+      roleDefinitionId: memberRoleDefinitionId,
+      actorUserId: ids.actorB,
+    });
+    assert.equal(assignment.grantActorUserId, ids.actorA);
+  });
+
+  await t.test("missing verified session is rejected before any database query", async () => {
+    const statements = [];
+    const unauthenticated = createTenantRoleAssignmentAdapter({
+      database: {
+        async query(statement, values = []) { statements.push({ statement, values }); return []; },
+        async transaction(work) {
+          return work({ query: async (statement, values = []) => { statements.push({ statement, values }); return []; } });
+        },
+      },
+      getCurrentSession: async () => null,
+    });
     await assert.rejects(
-      () => actorAService.grantRoleAssignment({
+      () => unauthenticated.grantRoleAssignmentForCurrentUser({
+        organizationId: ids.orgA,
         scope: "ORGANIZATION",
         parentId: ids.recipientMembershipA,
         roleDefinitionId: memberRoleDefinitionId,
-        actorUserId: ids.actorB,
       }),
-      (error) => error instanceof Error && /does not match the verified Better Auth session/.test(error.message),
+      (error) => error instanceof TenantTargetContextError && error.code === "UNAUTHENTICATED",
     );
+    assert.equal(statements.length, 0);
   });
 
   await t.test("denied operations leave no Organization, Company, or Plant assignment rows", async () => {
