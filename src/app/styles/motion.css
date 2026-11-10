@@ -22,11 +22,12 @@
   --sc-ease-entry: cubic-bezier(0, 0, 0.2, 1);
   --sc-ease-exit: cubic-bezier(0.4, 0, 1, 1);
   /*
-   * Spring default: critically damped — settles without bounce.
-   * Reserve underdamped springs for momentum-driven gestures in later
-   * work; no motion library is introduced in this PR.
+   * Settle: a no-overshoot cubic-bezier easing. It calms to rest the way a
+   * critically damped response does, but it is a plain easing curve — not a
+   * physical spring simulation. Reserve bouncy curves for momentum-driven
+   * gestures in later work; no motion library is introduced in this PR.
    */
-  --sc-ease-spring: cubic-bezier(0.32, 0, 0.15, 1);
+  --sc-ease-settle: cubic-bezier(0.32, 0, 0.15, 1);
 }
 
 /*

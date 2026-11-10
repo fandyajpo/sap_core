@@ -14,7 +14,12 @@
 @import "./styles/motion.css";
 
 :root {
-  color-scheme: light;
+  /*
+   * color-scheme is owned by themes.css: light is the :root default and
+   * [data-theme="dark"] on the root element switches it to dark. Declaring
+   * it here as light would override dark at equal specificity because this
+   * legacy block comes after the theme imports.
+   */
   --ink: #172b4d;
   --muted: #61718a;
   --line: #dce4ee;
