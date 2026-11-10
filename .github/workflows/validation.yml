@@ -51,6 +51,7 @@ jobs:
       - run: pnpm test:data-table
       - run: pnpm test:organization-members-ui
       - run: pnpm test:organization-roles-ui
+      - run: pnpm test:role-assignments-ui
       - run: node --test tests/architecture-boundaries.unit.test.mjs
 
   v03-integration:

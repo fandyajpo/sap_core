@@ -43,7 +43,8 @@
     "test:client-data": "node --test tests/client-data.unit.test.mjs",
     "test:data-table": "node --test tests/data-table.unit.test.mjs",
     "test:organization-members-ui": "node --test tests/organization-members-ui.unit.test.mjs",
-    "test:organization-roles-ui": "node --test tests/organization-roles-ui.unit.test.mjs"
+    "test:organization-roles-ui": "node --test tests/organization-roles-ui.unit.test.mjs",
+    "test:role-assignments-ui": "node --test tests/role-assignments-ui.unit.test.mjs"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "1.7.17",
