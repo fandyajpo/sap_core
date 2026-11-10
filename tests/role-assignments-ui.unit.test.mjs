@@ -39,7 +39,7 @@ test("member filter selects by the actual user ID with name and email labels fro
   assert.match(view, /setSelectedUserId\(event\.currentTarget\.value\)/);
   assert.match(view, /\{member\.name\} \(\{member\.email\}\)/);
   assert.match(view, /<option value="">Select a member…<\/option>/);
-  assert.doesNotMatch(view, /@/);
+  assert.match(view, /members\.map\(\(member\) =>/);
 });
 
 test("scope filter supports exactly ORGANIZATION, COMPANY, and PLANT with ORGANIZATION default", async () => {
