@@ -352,9 +352,9 @@ export function createRoleDefinitionService(
            FROM "core"."role_definition"
            WHERE "id" = $1
              AND (
-               "kind" = 'SYSTEM'::"core"."RoleDefinitionKind'
+               "kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
                OR (
-                 "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind'
+                 "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
                  AND "ownerOrganizationId" = $2::uuid
                )
              )`,
