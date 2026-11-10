@@ -47,7 +47,6 @@ const ids = {
   membershipB: randomUUID(),
 };
 let ownerConnected = false;
-let fixturesCreated = false;
 let memberRoleDefinitionId;
 
 function createSession(client) {
@@ -179,25 +178,11 @@ before(async () => {
     VALUES ($1, $2, $3, 'ORGANIZATION', $4, false)
   `, [randomUUID(), ids.membershipA, roleIds.ORG_OWNER, ids.actorA]);
 
-  fixturesCreated = true;
 });
 
 after(async () => {
-  try {
-    await runtimePool.end();
-    if (ownerConnected && fixturesCreated) {
-      await owner.query('DELETE FROM "core"."organization_role_assignment" WHERE "organizationMembershipId" = ANY($1::uuid[])', [
-        [ids.membershipA, ids.recipientMembershipA, ids.membershipB],
-      ]);
-      await owner.query('DELETE FROM "core"."organization_membership" WHERE "id" = ANY($1::uuid[])', [
-        [ids.membershipA, ids.recipientMembershipA, ids.membershipB],
-      ]);
-      await owner.query('DELETE FROM "core"."organization" WHERE "id" = ANY($1::uuid[])', [[ids.orgA, ids.orgB]]);
-      await owner.query('DELETE FROM "core"."user" WHERE "id" = ANY($1::text[])', [[ids.actorA, ids.recipientA, ids.actorB]]);
-    }
-  } finally {
-    if (ownerConnected) await owner.end();
-  }
+  await runtimePool.end();
+  if (ownerConnected) await owner.end();
 });
 
 test("production role-assignment service enforces verified actor and tenant boundaries on non-owner RLS role", async (t) => {
