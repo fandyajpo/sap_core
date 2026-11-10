@@ -60,62 +60,68 @@ a:hover {
   text-decoration: underline;
 }
 
+/*
+ * Auth pages: full-viewport composition on semantic tokens.
+ * min-height keeps content scrollable (never clipped) while 100dvh
+ * tracks the mobile browser UI and virtual keyboard. Centering uses an
+ * auto margin on the card instead of place-items: center — auto margins
+ * collapse when content outgrows the viewport, so tall forms start at the
+ * top and scroll normally instead of clipping their upper edge.
+ */
 .auth-page {
   display: grid;
   min-height: 100vh;
-  padding: 32px 20px;
-  place-items: center;
-  background:
-    radial-gradient(ellipse at 12% 8%, rgba(200, 225, 247, 0.7), transparent 38%),
-    radial-gradient(ellipse at 90% 88%, rgba(218, 235, 246, 0.8), transparent 35%),
-    var(--canvas);
+  min-height: 100dvh;
+  padding: clamp(16px, 4vw, 48px);
+  background: var(--sc-color-background);
 }
 
 .auth-card {
   width: min(100%, 440px);
-  padding: 40px;
-  border: 1px solid rgba(220, 228, 238, 0.9);
-  border-radius: 18px;
-  background: var(--surface);
-  box-shadow: 0 20px 60px rgba(23, 43, 77, 0.09);
+  margin: auto;
+  padding: clamp(24px, 5vw, 40px);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-xl);
+  background: var(--sc-color-surface);
+  box-shadow: var(--sc-shadow-lg);
 }
 
 .brand-lockup {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: var(--sc-space-3);
 }
 
 .brand-mark {
   display: grid;
   width: 38px;
   height: 38px;
-  border-radius: 10px;
-  background: #e8f3fb;
-  color: var(--blue-dark);
-  font-size: 13px;
-  font-weight: 800;
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-info-subtle);
+  color: var(--sc-color-primary-active);
+  font-size: var(--sc-text-label);
+  font-weight: var(--sc-font-weight-bold);
   letter-spacing: 0.04em;
   place-items: center;
 }
 
 .brand-name {
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 700;
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-body-large);
+  font-weight: var(--sc-font-weight-bold);
   letter-spacing: 0.01em;
 }
 
 .auth-heading {
-  margin-top: 36px;
+  margin-top: var(--sc-space-6);
 }
 
 .eyebrow {
-  margin: 0 0 9px;
-  color: var(--blue);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.13em;
+  margin: 0 0 var(--sc-space-2);
+  color: var(--sc-color-primary);
+  font-size: var(--sc-text-caption);
+  font-weight: var(--sc-font-weight-bold);
+  letter-spacing: var(--sc-tracking-eyebrow);
   text-transform: uppercase;
 }
 
@@ -129,67 +135,80 @@ a:hover {
 }
 
 .auth-description {
-  margin: 12px 0 0;
-  color: var(--muted);
-  font-size: 14px;
+  margin: var(--sc-space-3) 0 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-body);
   line-height: 1.6;
 }
 
 .auth-form {
   display: grid;
-  gap: 19px;
-  margin-top: 30px;
+  gap: var(--sc-space-5);
+  margin-top: var(--sc-space-6);
 }
 
 .field-label {
   display: grid;
-  gap: 8px;
-  color: #344761;
-  font-size: 13px;
-  font-weight: 700;
+  gap: var(--sc-space-2);
+  color: var(--sc-color-secondary-foreground);
+  font-size: var(--sc-text-label);
+  font-weight: var(--sc-font-weight-bold);
 }
 
 .text-input {
   width: 100%;
-  min-height: 46px;
-  padding: 0 13px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--ink);
-  outline: none;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  min-height: 44px;
+  padding: 0 var(--sc-space-3);
+  border: var(--sc-border-width) solid var(--sc-color-input);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
+  color: var(--sc-color-foreground);
+  font: inherit;
+  transition: border-color var(--sc-duration-micro) var(--sc-ease-standard),
+    box-shadow var(--sc-duration-micro) var(--sc-ease-standard);
 }
 
-.text-input:focus {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(23, 105, 170, 0.14);
+.text-input:focus-visible {
+  border-color: var(--sc-color-ring);
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
 }
 
 .text-input:disabled {
-  background: #f5f7fa;
+  background: var(--sc-color-surface-secondary);
 }
 
 .primary-button,
 .secondary-button {
-  min-height: 46px;
+  min-height: 44px;
   padding: 0 18px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--sc-radius-md);
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  transition: background-color 140ms ease, opacity 140ms ease;
+  font-size: var(--sc-text-body);
+  font-weight: var(--sc-font-weight-bold);
+  transition: background-color var(--sc-duration-micro) var(--sc-ease-standard),
+    opacity var(--sc-duration-micro) var(--sc-ease-standard);
+}
+
+.primary-button:focus-visible,
+.secondary-button:focus-visible {
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
 }
 
 .primary-button {
   margin-top: 2px;
-  background: var(--blue);
-  color: #fff;
+  background: var(--sc-color-primary);
+  color: var(--sc-color-primary-foreground);
 }
 
 .primary-button:hover:not(:disabled) {
-  background: var(--blue-dark);
+  background: var(--sc-color-primary-hover);
+}
+
+.primary-button:active:not(:disabled) {
+  background: var(--sc-color-primary-active);
 }
 
 .primary-button:disabled,
@@ -199,26 +218,37 @@ a:hover {
 }
 
 .auth-switch {
-  margin: 24px 0 0;
-  color: var(--muted);
-  font-size: 13px;
+  margin: var(--sc-space-5) 0 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-label);
   text-align: center;
 }
 
+/* Auth-card links match the primary action color (global <a> stays legacy). */
+.auth-switch a {
+  color: var(--sc-color-primary);
+  font-weight: var(--sc-font-weight-bold);
+}
+
+.auth-switch a:focus-visible {
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
+}
+
 .auth-boundary {
-  margin: 25px 0 0;
-  padding-top: 18px;
-  border-top: 1px solid #edf1f5;
-  color: var(--muted);
-  font-size: 11px;
+  margin: var(--sc-space-5) 0 0;
+  padding-top: var(--sc-space-4);
+  border-top: var(--sc-border-width) solid var(--sc-color-border);
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-caption);
   line-height: 1.6;
   text-align: center;
 }
 
 .auth-error {
   margin: 0;
-  color: #a32d2d;
-  font-size: 13px;
+  color: var(--sc-color-danger);
+  font-size: var(--sc-text-label);
   line-height: 1.5;
 }
 
@@ -246,13 +276,13 @@ a:hover {
 
 .secondary-button {
   min-height: 40px;
-  border: 1px solid var(--line);
-  background: #fff;
-  color: #344761;
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  background: var(--sc-color-surface);
+  color: var(--sc-color-secondary-foreground);
 }
 
 .secondary-button:hover:not(:disabled) {
-  background: #f7f9fc;
+  background: var(--sc-color-surface-secondary);
 }
 
 .welcome-card {
@@ -309,7 +339,7 @@ a:hover {
 
 @media (max-width: 520px) {
   .auth-card {
-    padding: 30px 24px;
+    padding: var(--sc-space-5) var(--sc-space-4);
   }
 
   .app-page {
@@ -325,5 +355,38 @@ a:hover {
     align-items: flex-end;
     flex-direction: column;
     gap: 8px;
+  }
+}
+
+/*
+ * Short viewports (landscape phones, small laptops, visible keyboards):
+ * tighten auth spacing so register never clips — content still scrolls
+ * as a last resort, but the compact rhythm makes that rare.
+ */
+@media (max-height: 720px) {
+  .auth-page {
+    padding: var(--sc-space-4);
+  }
+
+  .auth-card {
+    padding: var(--sc-space-5) var(--sc-space-6);
+  }
+
+  .auth-heading {
+    margin-top: var(--sc-space-4);
+  }
+
+  .auth-description {
+    margin-top: var(--sc-space-2);
+  }
+
+  .auth-form {
+    margin-top: var(--sc-space-4);
+    gap: var(--sc-space-4);
+  }
+
+  .auth-boundary {
+    margin-top: var(--sc-space-4);
+    padding-top: var(--sc-space-3);
   }
 }
