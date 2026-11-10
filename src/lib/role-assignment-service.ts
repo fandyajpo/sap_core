@@ -127,7 +127,7 @@ function requireAssignableScope(value: string): asserts value is AssignableRoleS
 
 async function requireHumanActor(session: ScopedAccessSession, actorUserId: string): Promise<void> {
   const rows = await session.query<{ id: string }>(
-    `SELECT "id" FROM "core"."user" WHERE "id" = $1 FOR SHARE`,
+    `SELECT "id" FROM "core"."user" WHERE "id" = $1`,
     [actorUserId],
   );
   if (!rows[0]) {
@@ -143,8 +143,7 @@ async function requireRoleDefinition(
     `SELECT "id", "scope"::text AS "scope", "kind"::text AS "kind",
             "ownerOrganizationId"::text AS "ownerOrganizationId"
      FROM "core"."role_definition"
-     WHERE "id" = $1
-     FOR SHARE`,
+     WHERE "id" = $1`,
     [roleDefinitionId],
   );
   const roleDefinition = rows[0];
@@ -153,6 +152,24 @@ async function requireRoleDefinition(
       "ROLE_DEFINITION_NOT_FOUND",
       `Role Definition ${roleDefinitionId} does not exist.`,
     );
+  }
+  // SYSTEM role definitions are globally readable but not update-visible under
+  // tenant RLS. Lock only Organization-owned custom roles, whose owner-scoped
+  // UPDATE policy permits FOR SHARE in the already-authorized tenant context.
+  if (roleDefinition.kind === "ORGANIZATION_CUSTOM") {
+    const locked = await session.query<{ id: string }>(
+      `SELECT "id" FROM "core"."role_definition"
+       WHERE "id" = $1
+         AND "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+       FOR SHARE`,
+      [roleDefinitionId],
+    );
+    if (!locked[0]) {
+      throw new RoleAssignmentError(
+        "ROLE_DEFINITION_NOT_FOUND",
+        `Role Definition ${roleDefinitionId} does not exist.`,
+      );
+    }
   }
   return roleDefinition;
 }
