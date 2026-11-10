@@ -178,6 +178,30 @@ before(async () => {
     VALUES ($1, $2, $3, 'ORGANIZATION', $4, false)
   `, [randomUUID(), ids.membershipA, roleIds.ORG_OWNER, ids.actorA]);
 
+  const diagnosticClient = await runtimePool.connect();
+  try {
+    await diagnosticClient.query("BEGIN");
+    await diagnosticClient.query("SELECT set_config('app.user_id', $1, true)", [ids.actorA]);
+    const actorMembership = await diagnosticClient.query(
+      'SELECT "id" FROM "core"."organization_membership" WHERE "userId" = $1 AND "organizationId" = $2 AND "status" = \'ACTIVE\'',
+      [ids.actorA, ids.orgA],
+    );
+    assert.equal(actorMembership.rowCount, 1, "runtime RLS must expose the actor's own active membership");
+    await diagnosticClient.query("SELECT set_config('app.organization_id', $1, true)", [ids.orgA]);
+    const ownerAssignment = await diagnosticClient.query(
+      'SELECT ra."id" FROM "core"."organization_role_assignment" ra JOIN "core"."organization_membership" om ON om."id" = ra."organizationMembershipId" WHERE om."userId" = $1 AND om."organizationId" = $2',
+      [ids.actorA, ids.orgA],
+    );
+    assert.equal(ownerAssignment.rowCount, 1, "runtime RLS must expose the actor's Organization role assignment");
+    const ownerPermissions = await diagnosticClient.query(
+      'SELECT pd."code" FROM "core"."role_permission_grant" g JOIN "core"."role_definition" rd ON rd."id" = g."role_definition_id" JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id" WHERE rd."code" = \'ORG_OWNER\' AND pd."code" = \'roles.assign\' AND g."effect" = \'ALLOW\'',
+    );
+    assert.equal(ownerPermissions.rowCount, 1, "runtime RLS must expose the sealed ORG_OWNER roles.assign permission");
+    await diagnosticClient.query("ROLLBACK");
+  } finally {
+    diagnosticClient.release();
+  }
+
 });
 
 after(async () => {
@@ -247,15 +271,10 @@ test("production role-assignment service enforces verified actor and tenant boun
   });
 
   await t.test("denied operations leave no extra assignment rows", async () => {
-    const client = await owner.connect();
-    try {
-      const { rows } = await client.query(
-        'SELECT COUNT(*)::int AS count FROM "core"."organization_role_assignment" WHERE "organizationMembershipId" = $1',
-        [ids.recipientMembershipA],
-      );
-      assert.equal(rows[0].count, 1);
-    } finally {
-      client.release();
-    }
+    const { rows } = await owner.query(
+      'SELECT COUNT(*)::int AS count FROM "core"."organization_role_assignment" WHERE "organizationMembershipId" = $1',
+      [ids.recipientMembershipA],
+    );
+    assert.equal(rows[0].count, 0);
   });
 });
