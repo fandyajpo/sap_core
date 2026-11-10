@@ -252,7 +252,7 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput, enforceRo
           OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
             AND rd."ownerOrganizationId" = om."organizationId"))
         AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}
-      FOR SHARE OF ra, om, rd`;
+      FOR SHARE OF ra, om`;
   }
 
   if (input.scope === "COMPANY") {
@@ -272,7 +272,7 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput, enforceRo
           OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
             AND rd."ownerOrganizationId" = cm."organizationId"))
         AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}
-      FOR SHARE OF ra, cm, om, rd`;
+      FOR SHARE OF ra, cm, om`;
   }
 
   return `SELECT ${baseColumns}
@@ -296,7 +296,7 @@ function effectiveAssignmentQuery(input: EffectiveRoleAssignmentInput, enforceRo
         OR (rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
           AND rd."ownerOrganizationId" = pa."organizationId"))
       AND ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE${governanceFilter}
-      FOR SHARE OF ra, pa, cm, om, rd`;
+      FOR SHARE OF ra, pa, cm, om`;
 }
 
 
