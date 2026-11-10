@@ -82,14 +82,19 @@ test("authorization grant snapshots lock effective assignments and permission ro
   assert.match(grantLoader, /FOR SHARE OF ra, cm, om, rd, g/);
   assert.match(grantLoader, /FOR SHARE OF ra, pa, cm, om, rd, g/);
   assert.match(assignmentPolicy, /lockActorGrantRows\(session, actorUserId, target\)/);
-  assert.match(assignmentPolicy, /FOR SHARE OF ra, pa, cm, om, rd, g/);
+  assert.match(assignmentPolicy, /FOR SHARE OF ra, pa, cm, om/);
+  assert.match(assignmentPolicy, /FOR SHARE OF rd/);
+  assert.doesNotMatch(assignmentPolicy, /FOR SHARE OF ra, pa, cm, om, rd, g/);
   assert.match(roleDefinitionPolicy, /FOR SHARE OF ra, om, rd, g/);
 });
 
 
 test("effective role-assignment listing locks the returned assignment and membership ancestry rows", async () => {
   const service = await source("src/lib/role-assignment-service.ts");
-  assert.match(service, /FOR SHARE OF ra, om, rd/);
-  assert.match(service, /FOR SHARE OF ra, cm, om, rd/);
-  assert.match(service, /FOR SHARE OF ra, pa, cm, om, rd/);
+  assert.match(service, /FOR SHARE OF ra, om/);
+  assert.match(service, /FOR SHARE OF ra, cm, om/);
+  assert.match(service, /FOR SHARE OF ra, pa, cm, om/);
+  assert.doesNotMatch(service, /FOR SHARE OF ra, om, rd/);
+  assert.doesNotMatch(service, /FOR SHARE OF ra, cm, om, rd/);
+  assert.doesNotMatch(service, /FOR SHARE OF ra, pa, cm, om, rd/);
 });
