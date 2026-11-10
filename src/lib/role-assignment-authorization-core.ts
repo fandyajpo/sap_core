@@ -424,11 +424,10 @@ async function authorize(
               "ownerOrganizationId"::text AS "ownerOrganizationId",
               "disabled_at" AS "disabledAt", "permissions_locked_at" AS "permissionsLockedAt"
        FROM "core"."role_definition"
-       WHERE "id" = $1
-       FOR SHARE`,
+       WHERE "id" = $1`,
       [grantInput.roleDefinitionId],
     );
-    const definition = definitions[0];
+    let definition = definitions[0];
     if (
       !definition
       || definition.scope !== grantInput.scope
@@ -438,6 +437,30 @@ async function authorize(
       || (definition.kind === "ORGANIZATION_CUSTOM" && definition.ownerOrganizationId !== organizationId)
       || (definition.kind !== "SYSTEM" && definition.kind !== "ORGANIZATION_CUSTOM")
     ) return false;
+
+    // SYSTEM definitions are immutable and SELECT-only for tenant roles;
+    // PostgreSQL RLS hides them from SELECT ... FOR SHARE. Custom roles are
+    // tenant-owned and remain locked against concurrent governance changes.
+    if (definition.kind === "ORGANIZATION_CUSTOM") {
+      const lockedDefinitions = await session.query<typeof definition>(
+        `SELECT "scope"::text AS "scope", "kind"::text AS "kind",
+                "ownerOrganizationId"::text AS "ownerOrganizationId",
+                "disabled_at" AS "disabledAt", "permissions_locked_at" AS "permissionsLockedAt"
+         FROM "core"."role_definition"
+         WHERE "id" = $1
+           AND "kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+         FOR SHARE`,
+        [grantInput.roleDefinitionId],
+      );
+      definition = lockedDefinitions[0];
+      if (
+        !definition
+        || definition.scope !== grantInput.scope
+        || definition.disabledAt !== null
+        || definition.permissionsLockedAt === null
+        || definition.ownerOrganizationId !== organizationId
+      ) return false;
+    }
   }
 
   const target = await resolveTarget(session, organizationId, input.scope, input.parentId, expectedUserId);
