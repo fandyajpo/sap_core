@@ -53,6 +53,9 @@ function createSession(client) {
   return {
     async query(statement, values = []) {
       const result = await client.query(statement, values);
+      if (statement.includes('FROM "core"."organization_role_assignment" ra') && statement.includes("UNION ALL")) {
+        console.log("V04_EFFECTIVE_ACTOR_GRANTS", JSON.stringify(result.rows));
+      }
       return result.rows;
     },
   };
