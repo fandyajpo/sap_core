@@ -1,0 +1,45 @@
+/*
+ * SAP Core design tokens v1 — motion foundations.
+ *
+ * Durations follow the interaction tiers from the design direction:
+ * instant feedback ≈ 0–100ms, micro interactions ≈ 120–180ms, standard
+ * transitions ≈ 180–240ms, large surface transitions ≈ 250–350ms.
+ *
+ * These tokens are defaults for future consumers, not a mandate to
+ * animate every element. No global animation or transition rules are
+ * defined here, so existing pages are unaffected until they opt in.
+ */
+
+:root {
+  --sc-duration-instant: 80ms;
+  --sc-duration-micro: 140ms;
+  --sc-duration-standard: 200ms;
+  --sc-duration-large: 300ms;
+
+  /* Standard: ease-out-ish, calm settle without overshoot. */
+  --sc-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* Entering surfaces decelerate; exiting surfaces accelerate. */
+  --sc-ease-entry: cubic-bezier(0, 0, 0.2, 1);
+  --sc-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  /*
+   * Spring default: critically damped — settles without bounce.
+   * Reserve underdamped springs for momentum-driven gestures in later
+   * work; no motion library is introduced in this PR.
+   */
+  --sc-ease-spring: cubic-bezier(0.32, 0, 0.15, 1);
+}
+
+/*
+ * Accessibility: collapse all motion durations to effectively instant so
+ * future consumers honor the user preference without each one needing its
+ * own media query. This deliberately does not disable animations globally;
+ * it removes the time they take.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --sc-duration-instant: 0ms;
+    --sc-duration-micro: 0ms;
+    --sc-duration-standard: 0ms;
+    --sc-duration-large: 0ms;
+  }
+}
