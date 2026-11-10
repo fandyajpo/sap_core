@@ -39,6 +39,7 @@ jobs:
       - run: pnpm test:v04-transaction-boundary
       - run: pnpm test:v04-role-assignment
       - run: pnpm test:v04-role-assignment-production
+      - run: pnpm test:v04-role-definition-owner-pre-read
 
   v03-integration:
     runs-on: ubuntu-latest
