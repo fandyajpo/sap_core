@@ -235,32 +235,13 @@ before(async () => {
       effectiveActorGrants.rows.some((row) => row.roleCode === "ORG_OWNER" && row.permissionCode === "roles.assign" && row.effect === "ALLOW"),
       `runtime effective-grant query must return ORG_OWNER roles.assign; got ${JSON.stringify(effectiveActorGrants.rows)}`,
     );
-    console.log("V04_AUTH_DIAGNOSTIC", JSON.stringify({
-      actorMembership: actorMembership.rows,
-      targetMembership: targetMembership.rows,
-      ownerAssignment: ownerAssignment.rows,
-      ownerPermissions: ownerPermissions.rows,
-      effectiveActorGrants: effectiveActorGrants.rows,
-    }));
     const authorization = createRoleAssignmentAuthorization(ids.actorA, ids.orgA);
-    const diagnosticSession = {
-      async query(statement, values = []) {
-        const result = await diagnosticClient.query(statement, values);
-        console.log("V04_AUTH_QUERY", JSON.stringify({
-          sql: statement.replace(/\\s+/g, " ").slice(0, 180),
-          rowCount: result.rowCount,
-          rows: result.rows?.slice(0, 2),
-        }));
-        return result.rows;
-      },
-    };
     const directDecision = await authorization.authorizeGrant({
       scope: "ORGANIZATION",
       parentId: ids.recipientMembershipA,
       roleDefinitionId: memberRoleDefinitionId,
       actorUserId: ids.actorA,
-    }, diagnosticSession);
-    console.log("V04_AUTH_DIRECT_DECISION", directDecision);
+    }, createSession(diagnosticClient));
     assert.equal(directDecision, true, "authorization core must allow the fixture's sealed ORG_OWNER grant");
     await diagnosticClient.query("ROLLBACK");
   } finally {
