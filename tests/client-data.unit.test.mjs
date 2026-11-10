@@ -274,7 +274,7 @@ test("browser QueryClient is a singleton while server render layout remains a Se
   assert.match(layout, /<AppProviders>\{children\}<\/AppProviders>/);
   assert.match(provider, /^"use client";/);
   assert.deepEqual(providerFiles.map((file) => file.path), ["app/providers.tsx"]);
-  assert.equal((provider.match(/QueryClientProvider/g) ?? []).length, 2);
+  assert.equal((provider.match(/<QueryClientProvider\b/g) ?? []).length, 1);
 });
 
 test("mutation hooks call only existing writes and invalidate their corresponding feature reads", async () => {
