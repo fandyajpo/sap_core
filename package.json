@@ -32,7 +32,8 @@
     "test:v04-server-boundary": "node --test tests/v04-server-boundary.unit.test.mjs",
     "test:v04-role-assignment": "node --test tests/v04-role-assignment-authorization.unit.test.mjs",
     "test:v04-role-assignment-production": "node --test tests/v04-role-assignment-production-authorization.unit.test.mjs",
-    "test:v04-app-adversarial": "node --test tests/v04-application-adversarial.integration.test.mjs"
+    "test:v04-app-adversarial": "node --test tests/v04-application-adversarial.integration.test.mjs",
+    "test:v04-role-definition-owner-pre-read": "node --test tests/v04-role-definition-owner-pre-read.unit.test.mjs"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "1.7.17",
