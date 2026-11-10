@@ -49,6 +49,7 @@ jobs:
       - run: pnpm test:v04-deny-policy
       - run: pnpm test:client-data
       - run: pnpm test:data-table
+      - run: pnpm test:organization-members-ui
       - run: node --test tests/architecture-boundaries.unit.test.mjs
 
   v03-integration:
