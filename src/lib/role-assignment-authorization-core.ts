@@ -419,19 +419,33 @@ async function authorize(
   }
 
   await session.query("SELECT set_config('app.user_id', $1, true)", [sessionUserId]);
-  const actorMemberships = await session.query<{ id: string }>(
+
+  // The bootstrap SELECT policy exposes only the actor's own membership before
+  // tenant context exists. Discover its ID without a row lock, establish the
+  // verified Organization GUC, then lock and revalidate that exact membership
+  // under the tenant UPDATE policy.
+  const actorMembershipCandidates = await session.query<{ id: string }>(
     `SELECT "id" FROM "core"."organization_membership"
      WHERE "userId" = $1 AND "organizationId" = $2::uuid
        AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-     LIMIT 1 FOR SHARE`,
+     LIMIT 1`,
     [sessionUserId, organizationId],
   );
-  if (!actorMemberships[0]) return false;
+  if (!actorMembershipCandidates[0]) return false;
 
   await session.query(
     "SELECT set_config('app.organization_id', $1, true), set_config('app.company_id', '', true), set_config('app.plant_id', '', true)",
     [organizationId],
   );
+
+  const actorMemberships = await session.query<{ id: string }>(
+    `SELECT "id" FROM "core"."organization_membership"
+     WHERE "id" = $1 AND "userId" = $2 AND "organizationId" = $3::uuid
+       AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+     FOR SHARE`,
+    [actorMembershipCandidates[0].id, sessionUserId, organizationId],
+  );
+  if (!actorMemberships[0]) return false;
   if (permission === "roles.assign") {
     const grantInput = input as RoleAssignmentGrantAuthorization;
     const definitions = await session.query<{
