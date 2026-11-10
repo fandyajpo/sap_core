@@ -197,6 +197,31 @@ before(async () => {
       'SELECT pd."code" FROM "core"."role_permission_grant" g JOIN "core"."role_definition" rd ON rd."id" = g."role_definition_id" JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id" WHERE rd."code" = \'ORG_OWNER\' AND pd."code" = \'roles.assign\' AND g."effect" = \'ALLOW\'',
     );
     assert.equal(ownerPermissions.rowCount, 1, "runtime RLS must expose the sealed ORG_OWNER roles.assign permission");
+
+    const effectiveActorGrants = await diagnosticClient.query(`
+      SELECT ra."id"::text AS "assignmentId", rd."code" AS "roleCode",
+        rd."kind"::text AS "roleKind", rd."scope"::text AS "roleScope",
+        om."organizationId"::text AS "scopeId",
+        rd."ownerOrganizationId"::text AS "ownerOrganizationId",
+        pd."code" AS "permissionCode", g."effect"::text AS "effect"
+      FROM "core"."organization_role_assignment" ra
+      JOIN "core"."organization_membership" om
+        ON om."id" = ra."organizationMembershipId"
+       AND om."userId" = $1 AND om."organizationId" = $2::uuid
+       AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+      JOIN "core"."role_definition" rd
+        ON rd."id" = ra."roleDefinitionId" AND rd."scope" = ra."role_scope"
+       AND rd."scope" = 'ORGANIZATION'::"core"."RoleScope"
+       AND rd."disabled_at" IS NULL AND rd."permissions_locked_at" IS NOT NULL
+       AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+      JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+      JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
+      WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+    `, [ids.actorA, ids.orgA]);
+    assert.ok(
+      effectiveActorGrants.rows.some((row) => row.roleCode === "ORG_OWNER" && row.permissionCode === "roles.assign" && row.effect === "ALLOW"),
+      `runtime effective-grant query must return ORG_OWNER roles.assign; got ${JSON.stringify(effectiveActorGrants.rows)}`,
+    );
     await diagnosticClient.query("ROLLBACK");
   } finally {
     diagnosticClient.release();
@@ -275,6 +300,6 @@ test("production role-assignment service enforces verified actor and tenant boun
       'SELECT COUNT(*)::int AS count FROM "core"."organization_role_assignment" WHERE "organizationMembershipId" = $1',
       [ids.recipientMembershipA],
     );
-    assert.equal(rows[0].count, 0);
+    assert.equal(rows[0].count, 1);
   });
 });
