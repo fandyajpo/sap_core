@@ -56,6 +56,9 @@ test("DENY policy administration uses a verified session and exact active ORG_OW
   assert.match(service, /prisma\.\$transaction/);
   assert.match(service, /targetMembershipId/);
   assert.match(service, /clock_timestamp\(\)/);
+  const permissionLookup = service.match(/FROM "core"\."permission_definition"[\s\S]*?\n    `;/);
+  assert.ok(permissionLookup, "DENY creation must resolve the immutable permission catalog");
+  assert.doesNotMatch(permissionLookup[0], /FOR SHARE|FOR UPDATE/);
 });
 
 test("DENY history reads are owner-only and successful/denied reads are audited", async () => {
