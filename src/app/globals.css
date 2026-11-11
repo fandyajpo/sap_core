@@ -63,22 +63,34 @@ a:hover {
 /*
  * Auth pages: full-viewport composition on semantic tokens.
  * min-height keeps content scrollable (never clipped) while 100dvh
- * tracks the mobile browser UI and virtual keyboard. Centering uses an
- * auto margin on the card instead of place-items: center — auto margins
- * collapse when content outgrows the viewport, so tall forms start at the
- * top and scroll normally instead of clipping their upper edge.
+ * tracks the mobile browser UI and virtual keyboard. Border-box sizing
+ * keeps min-height honest; the card fits inside it.
+ *
+ * Vertical breathing room lives in collapsible spacer rows
+ * (minmax(space-4, 1fr)) instead of fixed container padding: the rows
+ * center the card when space allows and shrink to space-4 when the card
+ * is tall, so padding can never push a fitting card past the viewport.
+ * That was the register-page scrollbar: card + fixed 48px top/bottom
+ * padding exceeded the viewport by a few pixels even though the form
+ * itself fit. Only genuine overflow (card taller than the viewport
+ * minus the 16px breathing room) produces scrolling, naturally.
  */
 .auth-page {
   display: grid;
+  grid-template-rows:
+    minmax(var(--sc-space-4), 1fr)
+    auto
+    minmax(var(--sc-space-4), 1fr);
   min-height: 100vh;
   min-height: 100dvh;
-  padding: clamp(16px, 4vw, 48px);
+  padding-inline: clamp(16px, 4vw, 48px);
   background: var(--sc-color-background);
 }
 
 .auth-card {
+  grid-row: 2;
+  justify-self: center;
   width: min(100%, 440px);
-  margin: auto;
   padding: clamp(24px, 5vw, 40px);
   border: var(--sc-border-width) solid var(--sc-color-border);
   border-radius: var(--sc-radius-xl);
@@ -361,11 +373,13 @@ a:hover {
 /*
  * Short viewports (landscape phones, small laptops, visible keyboards):
  * tighten auth spacing so register never clips — content still scrolls
- * as a last resort, but the compact rhythm makes that rare.
+ * as a last resort, but the compact rhythm makes that rare. Vertical
+ * breathing room stays owned by the spacer rows; only inline padding is
+ * adjusted here.
  */
 @media (max-height: 720px) {
   .auth-page {
-    padding: var(--sc-space-4);
+    padding-inline: var(--sc-space-4);
   }
 
   .auth-card {
