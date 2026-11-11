@@ -26,15 +26,28 @@ export async function resolveTenantTargetContext(
             AND om."organizationId" = ${organizationId}::uuid
             AND om."status" = 'ACTIVE'
           LIMIT 1
+        `;
+        const bootstrapMembership = rows[0] ?? null;
+        if (!bootstrapMembership) return null;
+
+        // Bootstrap visibility is SELECT-only. Install the Organization GUC
+        // from the actor's own active membership before attempting a row lock.
+        await tx.$queryRaw`SELECT set_config('app.organization_id', ${bootstrapMembership.organizationId}, true)`;
+
+        // Re-read and lock the exact membership under the tenant write policy.
+        // This closes the revoke race without requiring UPDATE visibility during
+        // the bootstrap lookup.
+        const lockedRows = await tx.$queryRaw<Array<{ id: string; organizationId: string }>>`
+          SELECT om."id", om."organizationId"
+          FROM "core"."organization_membership" om
+          WHERE om."id" = ${bootstrapMembership.id}::uuid
+            AND om."userId" = ${userId}
+            AND om."organizationId" = ${organizationId}::uuid
+            AND om."status" = 'ACTIVE'
+          LIMIT 1
           FOR SHARE OF om
         `;
-        const membership = rows[0] ?? null;
-        if (membership) {
-          // Bootstrap policy permits only the actor's own ACTIVE membership before
-          // this verified Organization context is installed.
-          await tx.$queryRaw`SELECT set_config('app.organization_id', ${membership.organizationId}, true)`;
-        }
-        return membership;
+        return lockedRows[0] ?? null;
       },
       async findCompanyTarget(organizationId, companyId) {
         const rows = await tx.$queryRaw<Array<{ id: string; organizationId: string }>>`
