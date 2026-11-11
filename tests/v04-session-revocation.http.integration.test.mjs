@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import pg from "pg";
-import { assertDisposablePostgresUrl, assertLocalHttpOrigin } from "./v04-integration-safety.mjs";
+import { assertDisposablePostgresUrl, assertLocalHttpOrigin, assertLocalHttpRequestUrl } from "./v04-integration-safety.mjs";
 
 const { Pool } = pg;
 // Strict target guards: only the exact disposable database and loopback auth
@@ -57,12 +57,12 @@ function sessionCookie(response) {
 // session cookie to another host. httpFetch pins redirect: "error" onto
 // every request so no caller can bypass it.
 function httpFetch(url, init = {}) {
-  const target = new URL(url, authURL);
-  if (target.origin !== authOrigin || target.username !== "" || target.password !== "") {
-    throw new Error(
-      `HTTP integration request must stay on validated origin ${authOrigin} without URL credentials; got "${target.origin}".`,
-    );
-  }
+  const target = assertLocalHttpRequestUrl({
+    value: url,
+    baseUrl: authURL,
+    expectedOrigin: authOrigin,
+    suiteLabel: "V04 HTTP integration tests",
+  });
   return fetch(target, { ...init, redirect: "error" });
 }
 
