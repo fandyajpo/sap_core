@@ -454,6 +454,19 @@ test("tenant DENY policy and audit tables enforce Organization RLS for runtime r
     );
     assert.deepEqual(events.rows, [{ organizationId: ids.orgA }]);
 
+    // The runtime role has narrowly scoped UPDATE privileges, but the
+    // Organization RLS policy must hide another tenant's policy row before
+    // the immutable-policy trigger or UPDATE can touch it.
+    const crossTenantPolicyUpdate = await client.query(`
+      UPDATE "core"."tenant_deny_policy"
+         SET "revoked_at" = clock_timestamp(),
+             "revoked_by_user_id" = $1,
+             "revoke_reason" = 'cross-tenant attempt'
+       WHERE "organization_id" = $2
+       RETURNING "id"
+    `, [ids.actorA, ids.orgB]);
+    assert.deepEqual(crossTenantPolicyUpdate.rows, [], "runtime must not update a policy owned by another Organization");
+
     await assert.rejects(
       client.query(`
         INSERT INTO "core"."tenant_deny_audit_event"
