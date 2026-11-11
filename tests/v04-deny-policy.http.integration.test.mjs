@@ -230,8 +230,11 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
   const outsiderRevoke = await denyRequest(outsider, "PATCH", `/${policyId}`, { reason: "foreign tenant revoke" }, owner.organizationId);
   assert.equal(outsiderRevoke.status, 403);
 
-  // A valid owner in a different Organization must not learn or revoke a
-  // policy by supplying its UUID; tenant-scoped lookup deliberately returns 404.
+  // A valid owner in a different Organization has no membership in the
+  // requested tenant. Tenant-context authorization rejects the request before
+  // policy lookup, so the caller cannot learn whether the supplied policy UUID
+  // exists in that tenant. This boundary intentionally returns generic 403;
+  // 404 is reserved for policy lookup after tenant authorization succeeds.
   const crossOrganizationRevoke = await denyRequest(
     foreignOwner,
     "PATCH",
@@ -239,7 +242,7 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
     { reason: "cross-organization revoke" },
     owner.organizationId,
   );
-  assert.equal(crossOrganizationRevoke.status, 404);
+  assert.equal(crossOrganizationRevoke.status, 403);
 
   // Anonymous attempts have no verified actor and are deliberately not stored.
   const anonymous = await httpFetch(`${authURL}/api/organizations/${owner.organizationId}/deny-policies`, {
