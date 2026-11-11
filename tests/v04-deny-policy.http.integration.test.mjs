@@ -54,7 +54,13 @@ function sessionCookie(response) {
 // session cookie to another host. httpFetch pins redirect: "error" onto
 // every request so no caller can bypass it.
 function httpFetch(url, init = {}) {
-  return fetch(url, { ...init, redirect: "error" });
+  const target = new URL(url, authURL);
+  if (target.origin !== authOrigin || target.username !== "" || target.password !== "") {
+    throw new Error(
+      `HTTP integration request must stay on validated origin ${authOrigin} without URL credentials; got "${target.origin}".`,
+    );
+  }
+  return fetch(target, { ...init, redirect: "error" });
 }
 
 async function createActor(label, roleCode, existingOrganizationId) {
