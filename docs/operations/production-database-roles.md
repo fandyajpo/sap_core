@@ -98,7 +98,7 @@ This document is not a claim that every application call-site or every adversari
 
 ### Explicit DENY policy status
 
-The policy evaluator implements exact-target DENY precedence, and the persisted-grant loader can interpret a `DENY` effect. However, there is deliberately no supported tenant-facing write path for creating a persisted DENY: built-in SYSTEM role snapshots are sealed, Organization custom-role snapshots accept ALLOW only, and the role-definition API creates ALLOW grants only. The permission-persistence migration describes DENY as reserved for governed policy use. Do not bypass those guards to manufacture an HTTP fixture. A governed DENY policy model, its authorized administrators, scope semantics, audit requirements, and lifecycle must be designed and approved before adding persistence or an HTTP test.
+The governed tenant DENY policy model is now implemented separately from role-definition permission snapshots. It persists exact-scope policies in `core.tenant_deny_policy`, with an immutable append-only `core.tenant_deny_audit_event` history, database-enforced permission/scope eligibility, membership identity and Company/Plant ancestry constraints, one-time attributable revocation, and an ORG_OWNER-only service/API boundary. Both tables have Organization-context RLS in migration `20261111120000_v04_deny_policy_rls`; this RLS is validated against a non-owner runtime role in disposable PostgreSQL CI. This does not make RLS a hosted Prisma Postgres security boundary: its provider-managed credentials have full database privileges. Hosted tenant authorization therefore continues to rely primarily on the verified-session, transaction-bound application layer described above.
 
 ## Vercel environment
 
