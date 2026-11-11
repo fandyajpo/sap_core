@@ -41,11 +41,17 @@ let runtimeRoleCreated = false;
 // Custom role ids created by seedOwnerFixtures; teardown deletes their grants,
 // audit rows and definitions before anything that references them.
 const customRoleIds = [];
+// User ids actually inserted by this run; teardown deletes exactly these and
+// never any other user.
+const createdUserIds = [];
 
+// Fixture ids are unique per run (prefixed random UUIDs) so teardown deletes
+// only rows created by this run and can never collide with pre-existing rows.
+const runId = randomUUID();
 const ids = {
-  actorA: "v04-rls-actor-a",
-  memberA: "v04-rls-member-a",
-  actorB: "v04-rls-actor-b",
+  actorA: `v04-rls-${runId}-actor-a`,
+  memberA: `v04-rls-${runId}-member-a`,
+  actorB: `v04-rls-${runId}-actor-b`,
   orgA: randomUUID(),
   orgB: randomUUID(),
   companyA1: randomUUID(),
@@ -83,6 +89,7 @@ async function seedOwnerFixtures() {
      VALUES ($1,'Actor A',$2,false,NOW(),NOW()),($3,'Member A',$4,false,NOW(),NOW()),($5,'Actor B',$6,false,NOW(),NOW())`,
     [ids.actorA, `v04-rls-${randomUUID()}-a@example.test`, ids.memberA, `v04-rls-${randomUUID()}-m@example.test`, ids.actorB, `v04-rls-${randomUUID()}-b@example.test`],
   );
+  createdUserIds.push(ids.actorA, ids.memberA, ids.actorB);
   await owner.query(
     `INSERT INTO "core"."organization" ("id","updated_at") VALUES ($1,NOW()),($2,NOW())`,
     [ids.orgA, ids.orgB],
@@ -433,10 +440,13 @@ after(async () => {
         'DELETE FROM "core"."organization" WHERE "id" = ANY($1::uuid[])',
         [[ids.orgA, ids.orgB]],
       );
-      await owner.query(
-        'DELETE FROM "core"."user" WHERE "id" = ANY($1::text[])',
-        [[ids.actorA, ids.memberA, ids.actorB]],
-      );
+      // Only users this run actually created are deleted.
+      if (createdUserIds.length > 0) {
+        await owner.query(
+          'DELETE FROM "core"."user" WHERE "id" = ANY($1::text[])',
+          [createdUserIds],
+        );
+      }
     } catch (error) {
       errors.push(error);
     }

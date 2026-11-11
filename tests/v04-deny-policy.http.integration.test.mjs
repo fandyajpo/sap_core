@@ -37,7 +37,7 @@ function authRequest(path, { method = "GET", body, cookie } = {}) {
   const headers = { origin: authOrigin };
   if (body !== undefined) headers["content-type"] = "application/json";
   if (cookie) headers.cookie = cookie;
-  return fetch(`${authURL}/api/auth${path}`, {
+  return httpFetch(`${authURL}/api/auth${path}`, {
     method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }
@@ -47,6 +47,14 @@ function sessionCookie(response) {
     ? response.headers.getSetCookie()
     : [response.headers.get("set-cookie") ?? ""];
   return cookies.map(value => value.split(";", 1)[0]).filter(Boolean).join("; ");
+}
+
+// Every HTTP request in this suite must stay on the validated loopback
+// origin and must never follow a redirect: a redirect could carry the
+// session cookie to another host. httpFetch pins redirect: "error" onto
+// every request so no caller can bypass it.
+function httpFetch(url, init = {}) {
+  return fetch(url, { ...init, redirect: "error" });
 }
 
 async function createActor(label, roleCode, existingOrganizationId) {
@@ -60,9 +68,19 @@ async function createActor(label, roleCode, existingOrganizationId) {
   const userId = JSON.parse(text)?.user?.id;
   assert.equal(typeof userId, "string");
   const cookie = sessionCookie(signup);
+  // Track the actor as soon as Better Auth confirms the user exists, before
+  // any fixture SQL runs, so a partially completed setup is still signed out
+  // and diagnosable in teardown. This suite never deletes rows (append-only
+  // DENY policies), so tracking drives sign-out and diagnostics only.
+  const actor = { userId, email, cookie, organizationId: null, membershipId: null };
+  actors.push(actor);
   assert.match(cookie, /session_token=/);
   const organizationId = existingOrganizationId ?? randomUUID();
   const membershipId = randomUUID();
+  // Record the generated IDs before attempting their inserts so teardown can
+  // diagnose a partial setup.
+  actor.organizationId = organizationId;
+  actor.membershipId = membershipId;
   if (!existingOrganizationId) {
     organizationIds.push(organizationId);
     await pool.query(
@@ -91,13 +109,11 @@ async function createActor(label, roleCode, existingOrganizationId) {
      VALUES ($1,$2,$3,'ORGANIZATION'::"core"."RoleScope",$4,FALSE,NOW())`,
     [randomUUID(),membershipId,roles[0].id,userId],
   );
-  const actor = { userId, email, cookie, organizationId, membershipId };
-  actors.push(actor);
   return actor;
 }
 
 async function denyRequest(actor, method, path, body, organizationId = actor.organizationId) {
-  const response = await fetch(`${authURL}/api/organizations/${organizationId}/deny-policies${path}`, {
+  const response = await httpFetch(`${authURL}/api/organizations/${organizationId}/deny-policies${path}`, {
     method,
     headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -118,8 +134,10 @@ after(async () => {
   // append-only semantics. Complete cleanup is therefore impossible by design,
   // and the safety boundary is strict disposable-database isolation: the guard
   // above only accepts the exact fresh database CI provisions for this job.
-  // Teardown only signs the HTTP actors out and closes the pool, and every
-  // failure is preserved and rethrown instead of swallowed.
+  // Teardown only signs the HTTP actors out (every actor is tracked from the
+  // moment its signup succeeds, so a partial setup is still signed out) and
+  // closes the pool; every failure is preserved and rethrown instead of
+  // swallowed.
   const errors = [];
   for (const actor of actors) {
     try {
@@ -172,7 +190,7 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
   assert.equal(outsiderWrite.status, 403);
 
   // Anonymous attempts have no verified actor and are deliberately not stored.
-  const anonymous = await fetch(`${authURL}/api/organizations/${owner.organizationId}/deny-policies`, {
+  const anonymous = await httpFetch(`${authURL}/api/organizations/${owner.organizationId}/deny-policies`, {
     method: "POST",
     headers: { origin: authOrigin, "content-type": "application/json" },
     body: JSON.stringify(input),
