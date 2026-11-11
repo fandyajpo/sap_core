@@ -113,19 +113,26 @@ test("request-first row lock makes session revocation wait and then complete wit
     // session-row lock must not survive commit and block a later revocation.
     await insertSession(`session-reuse-${randomUUID()}`);
     const reused = await pool.connect();
-    const backendBefore = await reused.query("SELECT pg_backend_pid() AS pid");
-    const reusableSessionId = (await reused.query(
-      'SELECT "id" FROM "core"."session" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 1',
-      [userId],
-    )).rows[0].id;
-    await reused.query("BEGIN");
-    const reuseLock = await reused.query(lockSql, [reusableSessionId, userId]);
-    assert.equal(reuseLock.rowCount, 1);
-    await reused.query("COMMIT");
-    const backendAfter = await reused.query("SELECT pg_backend_pid() AS pid");
-    assert.equal(backendAfter.rows[0].pid, backendBefore.rows[0].pid);
-    await reused.query('DELETE FROM "core"."session" WHERE "id" = $1', [reusableSessionId]);
-    reused.release();
+    let reusedTransactionOpen = false;
+    try {
+      const backendBefore = await reused.query("SELECT pg_backend_pid() AS pid");
+      const reusableSessionId = (await reused.query(
+        'SELECT "id" FROM "core"."session" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 1',
+        [userId],
+      )).rows[0].id;
+      await reused.query("BEGIN");
+      reusedTransactionOpen = true;
+      const reuseLock = await reused.query(lockSql, [reusableSessionId, userId]);
+      assert.equal(reuseLock.rowCount, 1);
+      await reused.query("COMMIT");
+      reusedTransactionOpen = false;
+      const backendAfter = await reused.query("SELECT pg_backend_pid() AS pid");
+      assert.equal(backendAfter.rows[0].pid, backendBefore.rows[0].pid);
+      await reused.query('DELETE FROM "core"."session" WHERE "id" = $1', [reusableSessionId]);
+    } finally {
+      if (reusedTransactionOpen) await reused.query("ROLLBACK").catch(() => {});
+      reused.release();
+    }
 
     const rollbackId = `session-rollback-${randomUUID()}`;
     await insertSession(rollbackId);
