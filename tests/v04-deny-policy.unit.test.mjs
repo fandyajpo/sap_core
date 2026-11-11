@@ -38,11 +38,17 @@ test("DENY at one Company scope does not propagate to a sibling Company or Plant
 
 test("the persisted DENY loader binds policy rows to the actor's exact membership and target scope", async () => {
   const loader = await source("src/lib/authorization-grant-loader.ts");
+  assert.match(loader, /p\."id"::text AS "policyId"/);
+  assert.match(loader, /denyPolicyIds: policyDenyRows\.map/);
   assert.match(loader, /"target_membership_id" = \${context\.organizationMembershipId}::uuid/);
   assert.match(loader, /p\."scope" = \${context\.scope}::"core"\."RoleScope"/);
   assert.match(loader, /p\."revoked_at" IS NULL/);
   assert.match(loader, /p\."expires_at" > clock_timestamp\(\)/);
   assert.match(loader, /FOR SHARE OF p/);
+  const enforcement = await source("src/lib/tenant-authorization.ts");
+  assert.match(enforcement, /denyPolicyIds\.find/);
+  assert.match(enforcement, /"policy_id"/);
+  assert.match(enforcement, /\$\{denyPolicyId\}::uuid/);
   assert.match(loader, /denyEligiblePermissions/);
 });
 
