@@ -77,7 +77,10 @@ async function resolveOwnerContext(
     WHERE ra."organizationMembershipId" = ${context.organizationMembershipId}::uuid
       AND ra."revoked_at" IS NULL
       AND ra."is_break_glass" = FALSE
-    FOR SHARE OF ra, rd
+    -- Lock the mutable assignment, not the immutable SYSTEM catalog row.
+    -- SELECT ... FOR SHARE on role_definition also requires UPDATE-policy
+    -- visibility, which SYSTEM definitions intentionally do not have under RLS.
+    FOR SHARE OF ra
   `;
 
   if (!owners[0]) {
