@@ -361,7 +361,6 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
     'INSERT INTO "core"."organization" ("id", "created_at", "updated_at") VALUES ($1, NOW(), NOW())',
     [foreignOrganizationId],
   );
-  organizationIds.push(foreignOrganizationId);
 
   const requests = [
     httpFetch(`${authURL}/api/organizations/${foreignOrganizationId}/members`, {
