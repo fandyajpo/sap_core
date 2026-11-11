@@ -38,9 +38,9 @@ const owner = new Client({ connectionString: migrationUrl });
 const runtime = new Client({ connectionString: runtimeUrl });
 let connected = false;
 let runtimeRoleCreated = false;
-// Custom role ids created by seedOwnerFixtures; teardown deletes their grants.
-// The custom definitions and role-definition audit rows remain because database
-// triggers enforce immutable definitions and append-only audit history.
+// Custom role ids created by seedOwnerFixtures. Their permission grants,
+// definitions and audit rows are immutable/append-only and remain in this
+// dedicated disposable database, which CI discards after the suite.
 const customRoleIds = [];
 // User ids actually inserted by this run; teardown deletes exactly these and
 // never any other user.
@@ -393,10 +393,6 @@ after(async () => {
       await owner.query(
         'DELETE FROM "core"."break_glass_access_audit" WHERE "actor_user_id" = ANY($1::text[])',
         [[ids.actorA, ids.actorB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."role_permission_grant" WHERE "role_definition_id" = ANY($1::uuid[])',
-        [customRoleIds],
       );
       await owner.query(
         'DELETE FROM "core"."plant_role_assignment" WHERE "plantAssignmentId" = ANY($1::uuid[])',
