@@ -38,7 +38,7 @@ function authRequest(path, { method = "GET", body, cookie } = {}) {
   const headers = { origin: authOrigin };
   if (body !== undefined) headers["content-type"] = "application/json";
   if (cookie) headers.cookie = cookie;
-  return fetch(`${authURL}/api/auth${path}`, {
+  return httpFetch(`${authURL}/api/auth${path}`, {
     method,
     headers,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -50,6 +50,14 @@ function sessionCookie(response) {
     ? response.headers.getSetCookie()
     : [response.headers.get("set-cookie") ?? ""];
   return cookies.map((value) => value.split(";", 1)[0]).filter(Boolean).join("; ");
+}
+
+// Every HTTP request in this suite must stay on the validated loopback
+// origin and must never follow a redirect: a redirect could carry the
+// session cookie to another host. httpFetch pins redirect: "error" onto
+// every request so no caller can bypass it.
+function httpFetch(url, init = {}) {
+  return fetch(url, { ...init, redirect: "error" });
 }
 
 async function waitForActivity(pattern, label, timeoutMs = 10_000) {
@@ -86,6 +94,11 @@ async function createActor(label, organizationRoleCode = "ORG_OWNER") {
   const userId = signupBody?.user?.id;
   assert.equal(typeof userId, "string");
   const cookie = sessionCookie(signup);
+  // Track the actor as soon as Better Auth confirms the user exists, before
+  // any fixture SQL runs, so a partially completed setup is still signed out
+  // and deleted by teardown instead of leaking an untracked user.
+  const actor = { userId, email, cookie, sessionId: null, organizationId: null, membershipId: null };
+  actors.push(actor);
   assert.match(cookie, /session_token=/);
 
   const { rows: sessions } = await pool.query(
@@ -93,10 +106,14 @@ async function createActor(label, organizationRoleCode = "ORG_OWNER") {
     [userId],
   );
   assert.equal(sessions.length, 1);
-  const sessionId = sessions[0].id;
+  actor.sessionId = sessions[0].id;
 
   const organizationId = randomUUID();
   const membershipId = randomUUID();
+  // Record the generated IDs before attempting their inserts so teardown can
+  // clean up even when an insert fails partway through.
+  actor.organizationId = organizationId;
+  actor.membershipId = membershipId;
   organizationIds.push(organizationId);
   await pool.query(
     'INSERT INTO "core"."organization" ("id", "created_at", "updated_at") VALUES ($1, NOW(), NOW())',
@@ -134,8 +151,6 @@ async function createActor(label, organizationRoleCode = "ORG_OWNER") {
     [randomUUID(), membershipId, organizationRoles[0].id, userId],
   );
 
-  const actor = { userId, email, cookie, sessionId, organizationId, membershipId };
-  actors.push(actor);
   return actor;
 }
 
@@ -197,8 +212,10 @@ after(async () => {
   // order — assignment and membership children before their parents — strictly
   // by those test-generated IDs. No broad pattern DELETEs; rows the suite did
   // not create (system role definitions, permission catalog) are never touched.
-  // The pool closes even when cleanup fails, and every cleanup error is
-  // preserved and rethrown instead of swallowed.
+  // Actors are tracked the moment signup confirms their user, so a partially
+  // completed actor setup is still signed out and deleted. The pool closes
+  // even when cleanup fails, and every cleanup error is preserved and
+  // rethrown instead of swallowed.
   const errors = [];
   for (const actor of actors) {
     try {
@@ -262,7 +279,7 @@ test("real Better Auth HTTP sign-out waits behind a protected request that acqui
     blockerOpen = true;
     await blocker.query('LOCK TABLE "core"."organization_membership" IN ACCESS EXCLUSIVE MODE');
 
-    requestPromise = fetch(
+    requestPromise = httpFetch(
       `${authURL}/api/organizations/${actor.organizationId}/members`,
       { headers: { cookie: actor.cookie } },
     );
@@ -297,7 +314,7 @@ test("real Better Auth HTTP sign-out waits behind a protected request that acqui
     );
     assert.equal(rows.length, 0, "sign-out must delete the session after the protected transaction releases its lock");
 
-    const afterRevocation = await fetch(
+    const afterRevocation = await httpFetch(
       `${authURL}/api/organizations/${actor.organizationId}/members`,
       { headers: { cookie: actor.cookie } },
     );
@@ -326,7 +343,7 @@ test("revocation-first HTTP ordering rejects the cookie before tenant protected 
   );
   assert.equal(rows.length, 0);
 
-  const protectedResponse = await fetch(
+  const protectedResponse = await httpFetch(
     `${authURL}/api/organizations/${actor.organizationId}/members`,
     { headers: { cookie: actor.cookie } },
   );
@@ -345,7 +362,7 @@ test("database connection failure while acquiring the session row lock fails the
       [actor.sessionId],
     );
 
-    const requestPromise = fetch(
+    const requestPromise = httpFetch(
       `${authURL}/api/organizations/${actor.organizationId}/members`,
       { headers: { cookie: actor.cookie } },
     );
@@ -384,19 +401,19 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
   organizationIds.push(foreignOrganizationId);
 
   const requests = [
-    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/members`, {
+    httpFetch(`${authURL}/api/organizations/${foreignOrganizationId}/members`, {
       headers: { cookie: actor.cookie },
     }),
-    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/roles`, {
+    httpFetch(`${authURL}/api/organizations/${foreignOrganizationId}/roles`, {
       headers: { cookie: actor.cookie },
     }),
-    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}`, {
+    httpFetch(`${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}`, {
       headers: { cookie: actor.cookie },
     }),
-    fetch(`${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}/plants/${randomUUID()}`, {
+    httpFetch(`${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}/plants/${randomUUID()}`, {
       headers: { cookie: actor.cookie },
     }),
-    fetch(
+    httpFetch(
       `${authURL}/api/organizations/${foreignOrganizationId}/roles/assignments?scope=ORGANIZATION&parentId=${randomUUID()}&userId=${actor.userId}`,
       { headers: { cookie: actor.cookie } },
     ),
@@ -407,7 +424,7 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
     assert.equal(response.status, 403, body.slice(0, 500));
   }
 
-  const spoofedAssignment = await fetch(
+  const spoofedAssignment = await httpFetch(
     `${authURL}/api/organizations/${actor.organizationId}/roles/assignments`,
     {
       method: "POST",
@@ -424,12 +441,12 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
   const spoofedBody = await spoofedAssignment.text();
   assert.equal(spoofedAssignment.status, 400, spoofedBody.slice(0, 500));
 
-  const invalidOrganization = await fetch(`${authURL}/api/organizations/not-a-uuid/members`, {
+  const invalidOrganization = await httpFetch(`${authURL}/api/organizations/not-a-uuid/members`, {
     headers: { cookie: actor.cookie },
   });
   assert.equal(invalidOrganization.status, 400);
 
-  const malformedJson = await fetch(
+  const malformedJson = await httpFetch(
     `${authURL}/api/organizations/${actor.organizationId}/roles/assignments`,
     {
       method: "POST",
@@ -439,7 +456,7 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
   );
   assert.equal(malformedJson.status, 400);
 
-  const malformedRevision = await fetch(
+  const malformedRevision = await httpFetch(
     `${authURL}/api/organizations/${actor.organizationId}/roles/${ownerRoleId}/revisions`,
     {
       method: "POST",
@@ -462,7 +479,7 @@ test("membership suspension waits for a protected tenant request that locked mem
     blockerOpen = true;
     await blocker.query('LOCK TABLE "core"."role_permission_grant" IN ACCESS EXCLUSIVE MODE');
 
-    requestPromise = fetch(
+    requestPromise = httpFetch(
       `${authURL}/api/organizations/${actor.organizationId}/members`,
       { headers: { cookie: actor.cookie } },
     );
@@ -579,17 +596,17 @@ test("effective role-assignment locks serialize protected reads against concurre
 });
 
 test("unauthenticated HTTP requests are rejected before role-assignment request validation", async () => {
-  const members = await fetch(
+  const members = await httpFetch(
     `${authURL}/api/organizations/${randomUUID()}/members`,
   );
   assert.equal(members.status, 401);
 
-  const assignmentsGet = await fetch(
+  const assignmentsGet = await httpFetch(
     `${authURL}/api/organizations/${randomUUID()}/roles/assignments?scope=ORGANIZATION&parentId=${randomUUID()}&userId=anonymous`,
   );
   assert.equal(assignmentsGet.status, 401);
 
-  const assignmentsPost = await fetch(
+  const assignmentsPost = await httpFetch(
     `${authURL}/api/organizations/${randomUUID()}/roles/assignments`,
     {
       method: "POST",
@@ -611,11 +628,11 @@ test("suspended Organization membership is denied by protected HTTP readers", as
   );
 
   const [members, assignments] = await Promise.all([
-    fetch(
+    httpFetch(
       `${authURL}/api/organizations/${actor.organizationId}/members`,
       { headers: { cookie: actor.cookie } },
     ),
-    fetch(
+    httpFetch(
       `${authURL}/api/organizations/${actor.organizationId}/roles/assignments?scope=ORGANIZATION&parentId=${actor.membershipId}&userId=${actor.userId}`,
       { headers: { cookie: actor.cookie } },
     ),
@@ -628,16 +645,16 @@ test("suspended Organization membership is denied by protected HTTP readers", as
 test("Company and Plant HTTP readers isolate sibling scopes using persisted scoped grants", async () => {
   const actor = await createCompanyPlantScopedActor("sibling-scope-boundary");
   const [companyAllowed, companySibling, plantAllowed, plantSibling] = await Promise.all([
-    fetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}`, {
+    httpFetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}`, {
       headers: { cookie: actor.cookie },
     }),
-    fetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyB}`, {
+    httpFetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyB}`, {
       headers: { cookie: actor.cookie },
     }),
-    fetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}/plants/${actor.plantA}`, {
+    httpFetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}/plants/${actor.plantA}`, {
       headers: { cookie: actor.cookie },
     }),
-    fetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}/plants/${actor.plantB}`, {
+    httpFetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}/plants/${actor.plantB}`, {
       headers: { cookie: actor.cookie },
     }),
   ]);
@@ -650,7 +667,7 @@ test("Company and Plant HTTP readers isolate sibling scopes using persisted scop
 
 test("Organization custom-role HTTP creation rejects permissions outside the approved delegation allowlist", async () => {
   const actor = await createActor("nondelegable-role-permission");
-  const response = await fetch(
+  const response = await httpFetch(
     `${authURL}/api/organizations/${actor.organizationId}/roles`,
     {
       method: "POST",

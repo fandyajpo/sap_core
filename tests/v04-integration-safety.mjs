@@ -13,6 +13,11 @@
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
+// Only query parameters explicitly provisioned by CI are allowed. Anything
+// else — notably the connection-overriding pg-connection-string parameters
+// (host, port, db, user, password) — is rejected before the URL is used.
+const ALLOWED_QUERY_PARAMS = new Set(["schema"]);
+
 function assertOptIn(envName, suiteLabel) {
   if (process.env[envName] !== "1") {
     throw new Error(
@@ -25,8 +30,10 @@ function assertOptIn(envName, suiteLabel) {
  * Validates a PostgreSQL connection URL against the exact disposable target a
  * suite is allowed to touch. Throws unless the suite's opt-in variable is set,
  * the URL parses, the host is loopback, the port, database name and username
- * match the values CI provisions for this suite, and the URL carries no
- * password.
+ * match the values CI provisions for this suite, the URL carries no
+ * password, and the query string contains no unapproved connection
+ * parameters (pg-connection-string lets query parameters override the
+ * parsed authority, so they are restricted by allow-list).
  */
 export function assertDisposablePostgresUrl({
   value,
@@ -58,6 +65,22 @@ export function assertDisposablePostgresUrl({
   }
   if (parsed.password !== "") {
     throw new Error(`${suiteLabel}: database URL must not embed a password; the disposable CI target authenticates without one.`);
+  }
+  // pg-connection-string accepts connection settings as query parameters
+  // (host, port, db, user, password, ...) which would override the authority
+  // validated above. Only approved parameters are accepted, and no parameter
+  // may appear twice.
+  const seenQueryKeys = new Set();
+  for (const key of parsed.searchParams.keys()) {
+    if (seenQueryKeys.has(key)) {
+      throw new Error(`${suiteLabel}: database URL has duplicate query parameter "${key}".`);
+    }
+    seenQueryKeys.add(key);
+    if (!ALLOWED_QUERY_PARAMS.has(key)) {
+      throw new Error(
+        `${suiteLabel}: database URL query parameter "${key}" is not approved. Query parameters could override the validated host, port, database or username; only ${[...ALLOWED_QUERY_PARAMS].map((name) => `"${name}"`).join(", ")} (as provisioned by CI) is allowed.`,
+      );
+    }
   }
   if (parsed.port !== String(expectedPort)) {
     throw new Error(`${suiteLabel}: database port must be ${expectedPort}, got "${parsed.port || "(none)"}".`);
