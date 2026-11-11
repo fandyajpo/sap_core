@@ -423,7 +423,6 @@ test("tenant role-definition adapter creates and revises custom roles under runt
       [role.id],
     );
     assert.deepEqual(audit, [{ event_type: "CREATE", version: 1 }]);
-    t.context = { role };
   });
 
   await t.test("verified Organization owner revises the same custom role family", async () => {
