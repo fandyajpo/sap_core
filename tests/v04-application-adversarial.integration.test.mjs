@@ -398,6 +398,7 @@ after(async () => {
 
 test("tenant role-definition adapter creates and revises custom roles under runtime RLS", async (t) => {
   const ownerService = createRoleDefinitionServiceForActor(ids.actorA);
+  let createdRole;
 
   await t.test("verified Organization owner creates a delegated custom role", async () => {
     const role = await ownerService.createCustomRoleForCurrentUser({
@@ -410,6 +411,7 @@ test("tenant role-definition adapter creates and revises custom roles under runt
     assert.equal(role.ownerOrganizationId, ids.orgA);
     assert.equal(role.version, 1);
     assert.ok(role.permissionsLockedAt instanceof Date);
+    createdRole = role;
     const { rows } = await owner.query(
       `SELECT pd."code" FROM "core"."role_permission_grant" g
        JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
@@ -426,23 +428,15 @@ test("tenant role-definition adapter creates and revises custom roles under runt
   });
 
   await t.test("verified Organization owner revises the same custom role family", async () => {
-    const created = await owner.query(
-      `SELECT rd."id"::text AS "id", rd."role_family_id"::text AS "roleFamilyId", rd."code"
-       FROM "core"."role_definition" rd
-       WHERE rd."ownerOrganizationId" = $1
-         AND rd."code" LIKE 'v04-runtime-role-%'
-       ORDER BY rd."created_at" DESC LIMIT 1`,
-      [ids.orgA],
-    );
-    assert.equal(created.rows.length, 1);
+    assert.ok(createdRole, "the create subtest must establish the role family first");
     const revision = await ownerService.reviseCustomRoleForCurrentUser({
       organizationId: ids.orgA,
-      roleDefinitionId: created.rows[0].id,
-      code: `${created.rows[0].code}-v2`,
+      roleDefinitionId: createdRole.id,
+      code: `${createdRole.code}-v2`,
     });
     assert.equal(revision.kind, "ORGANIZATION_CUSTOM");
     assert.equal(revision.ownerOrganizationId, ids.orgA);
-    assert.equal(revision.roleFamilyId, created.rows[0].roleFamilyId);
+    assert.equal(revision.roleFamilyId, createdRole.roleFamilyId);
     assert.equal(revision.version, 2);
     const { rows: audit } = await owner.query(
       `SELECT "event_type", "version" FROM "core"."role_definition_audit"
