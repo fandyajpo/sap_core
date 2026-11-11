@@ -74,3 +74,18 @@ test("DENY audit history is append-only and policy records permit only one-way r
   assert.match(migration, /immutable except for one attributable revocation transition/);
   assert.match(migration, /Permission is not DENY-eligible/);
 });
+
+test("authorization grant loader locks mutable rows without locking SYSTEM catalog or permission snapshots", async () => {
+  const loader = await source("src/lib/authorization-grant-loader.ts");
+  const start = loader.indexOf("async function lockAuthorizationGrantRows(");
+  const end = loader.indexOf("export async function loadAuthorizationGrants(", start);
+  assert.ok(start >= 0 && end > start, "the authorization lock helper must remain explicit");
+  const lockHelper = loader.slice(start, end);
+
+  assert.match(lockHelper, /FOR SHARE OF ra, om/);
+  assert.match(lockHelper, /FOR SHARE OF rd/);
+  assert.match(lockHelper, /ORGANIZATION_CUSTOM/);
+  assert.doesNotMatch(lockHelper, /FOR SHARE OF [^\n;]*\brd\b/);
+  assert.doesNotMatch(lockHelper, /FOR SHARE OF [^\n;]*\bg\b/);
+  assert.doesNotMatch(lockHelper, /JOIN "core"\."role_permission_grant"/);
+});
