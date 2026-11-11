@@ -69,6 +69,8 @@ const ids = {
   plantAssignmentA1: randomUUID(),
   plantAssignmentA2: randomUUID(),
   plantAssignmentB1: randomUUID(),
+  denyPolicyA: randomUUID(),
+  denyPolicyB: randomUUID(),
 };
 
 async function count(client, table, where = "") {
@@ -195,6 +197,32 @@ async function seedOwnerFixtures() {
       [randomUUID(), actor, randomUUID(), scope, parent],
     );
   }
+
+  // Seed one DENY policy and one immutable audit event per Organization.
+  // The runtime role must see only the rows selected by app.organization_id.
+  const { rows: denyPermission } = await owner.query(
+    `SELECT "id"::text AS id FROM "core"."permission_definition" WHERE "code" = 'organization.read'`,
+  );
+  assert.equal(denyPermission.length, 1);
+  for (const [organizationId, membershipId, targetUserId, issuerUserId, policyId] of [
+    [ids.orgA, ids.orgMembershipMemberA, ids.memberA, ids.actorA, ids.denyPolicyA],
+    [ids.orgB, ids.orgMembershipB, ids.actorB, ids.actorB, ids.denyPolicyB],
+  ]) {
+    await owner.query(
+      `INSERT INTO "core"."tenant_deny_policy"
+       ("id","organization_id","target_membership_id","target_user_id",
+        "permission_definition_id","scope","reason","issued_by_user_id")
+       VALUES ($1,$2,$3,$4,$5,'ORGANIZATION','RLS integration fixture',$6)`,
+      [policyId, organizationId, membershipId, targetUserId, denyPermission[0].id, issuerUserId],
+    );
+    await owner.query(
+      `INSERT INTO "core"."tenant_deny_audit_event"
+       ("id","policy_id","organization_id","target_membership_id","target_user_id",
+        "permission_definition_id","scope","actor_user_id","event_type","outcome","reason_code")
+       VALUES ($1,$2,$3,$4,$5,$6,'ORGANIZATION',$7,'POLICY_CREATED','SUCCESS','RLS_FIXTURE')`,
+      [randomUUID(), policyId, organizationId, membershipId, targetUserId, denyPermission[0].id, issuerUserId],
+    );
+  }
 }
 
 test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and identity-table exclusion", async () => {
@@ -226,6 +254,8 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     "core"."role_definition", "core"."role_permission_grant"
     TO sap_core_runtime`);
   await owner.query(`GRANT SELECT, INSERT ON "core"."role_definition_audit", "core"."break_glass_access_audit" TO sap_core_runtime`);
+  await owner.query(`GRANT SELECT, INSERT, UPDATE ON "core"."tenant_deny_policy" TO sap_core_runtime`);
+  await owner.query(`GRANT SELECT, INSERT ON "core"."tenant_deny_audit_event" TO sap_core_runtime`);
   await owner.query(`GRANT SELECT ON "core"."permission_definition", "core"."permission_delegation_policy" TO sap_core_runtime`);
   await owner.query(`GRANT SELECT, INSERT, UPDATE ON "core"."user" TO sap_core_runtime`);
   await owner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON "core"."session", "core"."account", "core"."verification" TO sap_core_runtime`);
@@ -259,9 +289,10 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
       "organization","company","plant","organization_membership","company_membership","plant_assignment",
       "organization_role_assignment","company_role_assignment","plant_role_assignment","role_definition",
       "role_permission_grant","role_definition_audit","break_glass_access_audit",
+      "tenant_deny_policy","tenant_deny_audit_event",
     ]],
   );
-  assert.equal(rlsTables[0].n, 13);
+  assert.equal(rlsTables[0].n, 15);
 
   await runtime.connect();
   try {
@@ -270,6 +301,8 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     assert.equal(await count(runtime, '"core"."company"'), 0);
     assert.equal(await count(runtime, '"core"."plant"'), 0);
     assert.equal(await count(runtime, '"core"."organization_membership"'), 0);
+    assert.equal(await count(runtime, '"core"."tenant_deny_policy"'), 0, "DENY policies are hidden without Organization context");
+    assert.equal(await count(runtime, '"core"."tenant_deny_audit_event"'), 0, "DENY audit events are hidden without Organization context");
     const { rows: visibleIdentityFixtures } = await runtime.query(
       `SELECT COUNT(*)::int AS n FROM "core"."user" WHERE "id" = ANY($1::text[])`,
       [[ids.actorA, ids.memberA, ids.actorB]],
@@ -323,6 +356,11 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     assert.equal(await count(runtime, '"core"."company_membership"'), 2);
     assert.equal(await count(runtime, '"core"."plant_assignment"'), 2);
     assert.equal(await count(runtime, '"core"."organization_role_assignment"'), 1);
+    assert.equal(await count(runtime, '"core"."tenant_deny_policy"'), 1, "Organization context reveals only its DENY policy");
+    assert.equal(await count(runtime, '"core"."tenant_deny_policy"', `WHERE "id" = '${ids.denyPolicyA}'::uuid`), 1);
+    assert.equal(await count(runtime, '"core"."tenant_deny_policy"', `WHERE "id" = '${ids.denyPolicyB}'::uuid`), 0, "foreign Organization DENY policy remains hidden");
+    assert.equal(await count(runtime, '"core"."tenant_deny_audit_event"'), 1, "Organization context reveals only its DENY audit event");
+    assert.equal(await count(runtime, '"core"."tenant_deny_audit_event"', `WHERE "organization_id" = '${ids.orgB}'::uuid`), 0, "foreign Organization DENY audit remains hidden");
 
     // SYSTEM role definitions are SELECT-visible but intentionally not
     // UPDATE-visible under RLS. A row lock on the catalog therefore hides
