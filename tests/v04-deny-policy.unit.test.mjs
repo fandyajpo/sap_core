@@ -85,7 +85,7 @@ test("authorization grant loader locks mutable rows without locking SYSTEM catal
   assert.match(lockHelper, /FOR SHARE OF ra, om/);
   assert.match(lockHelper, /FOR SHARE OF rd/);
   assert.match(lockHelper, /ORGANIZATION_CUSTOM/);
-  assert.doesNotMatch(lockHelper, /FOR SHARE OF [^\n;]*\brd\b/);
-  assert.doesNotMatch(lockHelper, /FOR SHARE OF [^\n;]*\bg\b/);
+  assert.doesNotMatch(lockHelper, /FOR SHARE OF (?:ra|pa|cm|om)[^\n;]*\brd\b/);
+  assert.doesNotMatch(lockHelper, /FOR SHARE OF (?:ra|pa|cm|om)[^\n;]*\bg\b/);
   assert.doesNotMatch(lockHelper, /JOIN "core"\."role_permission_grant"/);
 });
