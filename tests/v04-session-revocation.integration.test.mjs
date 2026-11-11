@@ -60,12 +60,16 @@ after(async () => {
   if (errors.length) throw new AggregateError(errors, "Session-lock teardown failed; the disposable database must be discarded.");
 });
 
+function toUtcTimestamp(date) {
+  return date.toISOString().replace("T", " ").replace("Z", "");
+}
+
 async function insertSession(id, expiresAt = new Date(Date.now() + 60_000)) {
   await pool.query(
     `INSERT INTO "core"."session"
        ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
      VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
-    [id, expiresAt, randomUUID(), userId],
+    [id, toUtcTimestamp(expiresAt), randomUUID(), userId],
   );
 }
 

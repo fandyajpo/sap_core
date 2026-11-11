@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import pg from "pg";
-import { assertDisposablePostgresUrl, assertLocalHttpOrigin, assertLocalHttpRequestUrl } from "./v04-integration-safety.mjs";
+import {
+  assertDisposablePostgresUrl,
+  assertLocalHttpOrigin,
+  assertLocalHttpRequestUrl,
+} from "./v04-integration-safety.mjs";
 
 const { Pool } = pg;
 // Strict target guards: only the exact disposable database and loopback auth
@@ -46,10 +50,14 @@ function authRequest(path, { method = "GET", body, cookie } = {}) {
 }
 
 function sessionCookie(response) {
-  const cookies = typeof response.headers.getSetCookie === "function"
-    ? response.headers.getSetCookie()
-    : [response.headers.get("set-cookie") ?? ""];
-  return cookies.map((value) => value.split(";", 1)[0]).filter(Boolean).join("; ");
+  const cookies =
+    typeof response.headers.getSetCookie === "function"
+      ? response.headers.getSetCookie()
+      : [response.headers.get("set-cookie") ?? ""];
+  return cookies
+    .map((value) => value.split(";", 1)[0])
+    .filter(Boolean)
+    .join("; ");
 }
 
 // Every HTTP request in this suite must stay on the validated loopback
@@ -95,7 +103,11 @@ async function createActor(label, organizationRoleCode = "ORG_OWNER") {
     body: { name: `V04 ${label}`, email, password },
   });
   const signupText = await signup.text();
-  assert.equal(signup.status, 200, `signup failed: ${signupText.slice(0, 500)}`);
+  assert.equal(
+    signup.status,
+    200,
+    `signup failed: ${signupText.slice(0, 500)}`,
+  );
   const signupBody = signupText ? JSON.parse(signupText) : null;
   const userId = signupBody?.user?.id;
   assert.equal(typeof userId, "string");
@@ -103,7 +115,14 @@ async function createActor(label, organizationRoleCode = "ORG_OWNER") {
   // Track the actor as soon as Better Auth confirms the user exists, before
   // any fixture SQL runs, so a partially completed setup is still signed out
   // and deleted by teardown instead of leaking an untracked user.
-  const actor = { userId, email, cookie, sessionId: null, organizationId: null, membershipId: null };
+  const actor = {
+    userId,
+    email,
+    cookie,
+    sessionId: null,
+    organizationId: null,
+    membershipId: null,
+  };
   actors.push(actor);
   assert.match(cookie, /session_token=/);
 
@@ -148,7 +167,11 @@ async function createActor(label, organizationRoleCode = "ORG_OWNER") {
         AND "code" = $1`,
     [organizationRoleCode],
   );
-  assert.equal(organizationRoles.length, 1, `the seeded ${organizationRoleCode} role must exist`);
+  assert.equal(
+    organizationRoles.length,
+    1,
+    `the seeded ${organizationRoleCode} role must exist`,
+  );
   await pool.query(
     `INSERT INTO "core"."organization_role_assignment"
        ("id", "organizationMembershipId", "roleDefinitionId", "role_scope",
@@ -183,13 +206,26 @@ async function createCompanyPlantScopedActor(label) {
     `INSERT INTO "core"."company_membership"
        ("id", "userId", "organizationMembershipId", "organizationId", "companyId", "status", "created_at", "updated_at")
      VALUES ($1, $2, $3, $4, $5, 'ACTIVE'::"core"."ScopedAccessStatus", NOW(), NOW())`,
-    [companyMembershipId, actor.userId, actor.membershipId, actor.organizationId, companyA],
+    [
+      companyMembershipId,
+      actor.userId,
+      actor.membershipId,
+      actor.organizationId,
+      companyA,
+    ],
   );
   await pool.query(
     `INSERT INTO "core"."plant_assignment"
        ("id", "userId", "companyMembershipId", "organizationId", "companyId", "plantId", "status", "created_at", "updated_at")
      VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE'::"core"."ScopedAccessStatus", NOW(), NOW())`,
-    [plantAssignmentId, actor.userId, companyMembershipId, actor.organizationId, companyA, plantA],
+    [
+      plantAssignmentId,
+      actor.userId,
+      companyMembershipId,
+      actor.organizationId,
+      companyA,
+      plantA,
+    ],
   );
   await pool.query(
     `INSERT INTO "core"."company_role_assignment"
@@ -212,66 +248,34 @@ before(async () => {
 });
 
 after(async () => {
-  // Fixture lifecycle: every row this suite creates is parented to IDs captured
-  // below (actors[].userId, actors[].membershipId, organizationIds[]). Teardown
-  // signs each actor out over HTTP, then deletes the suite's rows in FK-safe
-  // order — assignment and membership children before their parents — strictly
-  // by those test-generated IDs. No broad pattern DELETEs; rows the suite did
-  // not create (system role definitions, permission catalog) are never touched.
-  // Actors are tracked the moment signup confirms their user, so a partially
-  // completed actor setup is still signed out and deleted. The pool closes
-  // even when cleanup fails, and every cleanup error is preserved and
-  // rethrown instead of swallowed.
+  // Fixture lifecycle: actors are tracked as soon as signup succeeds.
+  // Teardown signs each actor out over HTTP.
+  // Role assignments are immutable historical records, so their dependent
+  // tenant fixtures remain in this disposable database.
+  // The database container is discarded after both HTTP suites complete.
+  // The pool closes even when sign-out fails, and cleanup errors are preserved.
   const errors = [];
   for (const actor of actors) {
     try {
-      await authRequest("/sign-out", { method: "POST", cookie: actor.cookie, body: {} });
+      await authRequest("/sign-out", {
+        method: "POST",
+        cookie: actor.cookie,
+        body: {},
+      });
     } catch (error) {
       errors.push(error);
     }
-  }
-  try {
-    if (organizationIds.length > 0) {
-      await pool.query(
-        `DELETE FROM "core"."organization_role_assignment"
-          WHERE "organizationMembershipId" IN (
-            SELECT "id" FROM "core"."organization_membership" WHERE "organizationId" = ANY($1::uuid[]))`,
-        [organizationIds],
-      );
-      await pool.query(
-        `DELETE FROM "core"."company_role_assignment"
-          WHERE "companyMembershipId" IN (
-            SELECT "id" FROM "core"."company_membership" WHERE "organizationId" = ANY($1::uuid[]))`,
-        [organizationIds],
-      );
-      await pool.query(
-        `DELETE FROM "core"."plant_role_assignment"
-          WHERE "plantAssignmentId" IN (
-            SELECT "id" FROM "core"."plant_assignment" WHERE "organizationId" = ANY($1::uuid[]))`,
-        [organizationIds],
-      );
-      await pool.query('DELETE FROM "core"."plant_assignment" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
-      await pool.query('DELETE FROM "core"."company_membership" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
-      await pool.query('DELETE FROM "core"."plant" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
-      await pool.query('DELETE FROM "core"."company" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
-      await pool.query('DELETE FROM "core"."organization_membership" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
-      await pool.query('DELETE FROM "core"."organization" WHERE "id" = ANY($1::uuid[])', [organizationIds]);
-    }
-    const userIds = actors.map((actor) => actor.userId);
-    if (userIds.length > 0) {
-      await pool.query('DELETE FROM "core"."session" WHERE "userId" = ANY($1::text[])', [userIds]);
-      await pool.query('DELETE FROM "core"."account" WHERE "userId" = ANY($1::text[])', [userIds]);
-      await pool.query('DELETE FROM "core"."user" WHERE "id" = ANY($1::text[])', [userIds]);
-    }
-  } catch (error) {
-    errors.push(error);
   }
   try {
     await pool.end();
   } catch (error) {
     errors.push(error);
   }
-  if (errors.length) throw new AggregateError(errors, "V04 session HTTP fixture cleanup failed; the disposable database must be discarded.");
+  if (errors.length)
+    throw new AggregateError(
+      errors,
+      "V04 session HTTP fixture cleanup failed; the disposable database must be discarded.",
+    );
 });
 
 test("real Better Auth HTTP sign-out waits behind a protected request that acquired the session lock first", async () => {
@@ -283,7 +287,9 @@ test("real Better Auth HTTP sign-out waits behind a protected request that acqui
   try {
     await blocker.query("BEGIN");
     blockerOpen = true;
-    await blocker.query('LOCK TABLE "core"."organization_membership" IN ACCESS EXCLUSIVE MODE');
+    await blocker.query(
+      'LOCK TABLE "core"."organization_membership" IN ACCESS EXCLUSIVE MODE',
+    );
 
     requestPromise = httpFetch(
       `${authURL}/api/organizations/${actor.organizationId}/members`,
@@ -292,19 +298,28 @@ test("real Better Auth HTTP sign-out waits behind a protected request that acqui
 
     // The protected request has passed Better Auth getSession and acquired
     // FOR SHARE on its exact session row before it blocks on membership lookup.
-    await waitForActivity('%organization_membership%', "protected request waiting on membership table");
+    await waitForActivity(
+      "%organization_membership%",
+      "protected request waiting on membership table",
+    );
 
     signoutPromise = authRequest("/sign-out", {
       method: "POST",
       cookie: actor.cookie,
       body: {},
     });
-    await waitForActivity('%DELETE%session%', "Better Auth sign-out waiting on the locked session row");
+    await waitForActivity(
+      "%DELETE%session%",
+      "Better Auth sign-out waiting on the locked session row",
+    );
 
     await blocker.query("COMMIT");
     blockerOpen = false;
 
-    const [protectedResponse, signoutResponse] = await Promise.all([requestPromise, signoutPromise]);
+    const [protectedResponse, signoutResponse] = await Promise.all([
+      requestPromise,
+      signoutPromise,
+    ]);
     const protectedBody = await protectedResponse.text();
     assert.equal(protectedResponse.status, 200, protectedBody.slice(0, 500));
     const members = JSON.parse(protectedBody);
@@ -318,13 +333,21 @@ test("real Better Auth HTTP sign-out waits behind a protected request that acqui
       'SELECT "id" FROM "core"."session" WHERE "id" = $1',
       [actor.sessionId],
     );
-    assert.equal(rows.length, 0, "sign-out must delete the session after the protected transaction releases its lock");
+    assert.equal(
+      rows.length,
+      0,
+      "sign-out must delete the session after the protected transaction releases its lock",
+    );
 
     const afterRevocation = await httpFetch(
       `${authURL}/api/organizations/${actor.organizationId}/members`,
       { headers: { cookie: actor.cookie } },
     );
-    assert.equal(afterRevocation.status, 401, "a later protected HTTP request must reject the revoked cookie");
+    assert.equal(
+      afterRevocation.status,
+      401,
+      "a later protected HTTP request must reject the revoked cookie",
+    );
   } finally {
     if (blockerOpen) await blocker.query("ROLLBACK").catch(() => {});
     blocker.release();
@@ -372,12 +395,19 @@ test("database connection failure while acquiring the session row lock fails the
       `${authURL}/api/organizations/${actor.organizationId}/members`,
       { headers: { cookie: actor.cookie } },
     );
-    const waitingLock = await waitForActivity('%FOR SHARE OF s%', "session row lock query waiting on a conflicting update");
+    const waitingLock = await waitForActivity(
+      "%FOR SHARE OF s%",
+      "session row lock query waiting on a conflicting update",
+    );
     const { rows: terminated } = await pool.query(
       "SELECT pg_terminate_backend($1) AS terminated",
       [waitingLock.pid],
     );
-    assert.equal(terminated[0].terminated, true, "the blocked request backend must be terminated to inject a DB failure");
+    assert.equal(
+      terminated[0].terminated,
+      true,
+      "the blocked request backend must be terminated to inject a DB failure",
+    );
 
     const response = await requestPromise;
     const body = await response.text();
@@ -389,13 +419,16 @@ test("database connection failure while acquiring the session row lock fails the
       'SELECT "id" FROM "core"."session" WHERE "id" = $1',
       [actor.sessionId],
     );
-    assert.equal(rows.length, 1, "terminating the protected transaction must not revoke the still-valid session");
+    assert.equal(
+      rows.length,
+      1,
+      "terminating the protected transaction must not revoke the still-valid session",
+    );
   } finally {
     if (holderOpen) await holder.query("ROLLBACK").catch(() => {});
     holder.release();
   }
 });
-
 
 test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-assignment actors", async () => {
   const actor = await createActor("tenant-route-boundary");
@@ -413,12 +446,18 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
     httpFetch(`${authURL}/api/organizations/${foreignOrganizationId}/roles`, {
       headers: { cookie: actor.cookie },
     }),
-    httpFetch(`${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}`, {
-      headers: { cookie: actor.cookie },
-    }),
-    httpFetch(`${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}/plants/${randomUUID()}`, {
-      headers: { cookie: actor.cookie },
-    }),
+    httpFetch(
+      `${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}`,
+      {
+        headers: { cookie: actor.cookie },
+      },
+    ),
+    httpFetch(
+      `${authURL}/api/organizations/${foreignOrganizationId}/companies/${randomUUID()}/plants/${randomUUID()}`,
+      {
+        headers: { cookie: actor.cookie },
+      },
+    ),
     httpFetch(
       `${authURL}/api/organizations/${foreignOrganizationId}/roles/assignments?scope=ORGANIZATION&parentId=${randomUUID()}&userId=${actor.userId}`,
       { headers: { cookie: actor.cookie } },
@@ -434,7 +473,11 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
     `${authURL}/api/organizations/${actor.organizationId}/roles/assignments`,
     {
       method: "POST",
-      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      headers: {
+        cookie: actor.cookie,
+        origin: authOrigin,
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         scope: "ORGANIZATION",
         parentId: actor.membershipId,
@@ -447,16 +490,23 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
   const spoofedBody = await spoofedAssignment.text();
   assert.equal(spoofedAssignment.status, 400, spoofedBody.slice(0, 500));
 
-  const invalidOrganization = await httpFetch(`${authURL}/api/organizations/not-a-uuid/members`, {
-    headers: { cookie: actor.cookie },
-  });
+  const invalidOrganization = await httpFetch(
+    `${authURL}/api/organizations/not-a-uuid/members`,
+    {
+      headers: { cookie: actor.cookie },
+    },
+  );
   assert.equal(invalidOrganization.status, 400);
 
   const malformedJson = await httpFetch(
     `${authURL}/api/organizations/${actor.organizationId}/roles/assignments`,
     {
       method: "POST",
-      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      headers: {
+        cookie: actor.cookie,
+        origin: authOrigin,
+        "content-type": "application/json",
+      },
       body: "{",
     },
   );
@@ -466,13 +516,16 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
     `${authURL}/api/organizations/${actor.organizationId}/roles/${ownerRoleId}/revisions`,
     {
       method: "POST",
-      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      headers: {
+        cookie: actor.cookie,
+        origin: authOrigin,
+        "content-type": "application/json",
+      },
       body: "{",
     },
   );
   assert.equal(malformedRevision.status, 400);
 });
-
 
 test("membership suspension waits for a protected tenant request that locked membership first", async () => {
   const actor = await createActor("membership-request-first");
@@ -483,13 +536,18 @@ test("membership suspension waits for a protected tenant request that locked mem
   try {
     await blocker.query("BEGIN");
     blockerOpen = true;
-    await blocker.query('LOCK TABLE "core"."role_permission_grant" IN ACCESS EXCLUSIVE MODE');
+    await blocker.query(
+      'LOCK TABLE "core"."role_permission_grant" IN ACCESS EXCLUSIVE MODE',
+    );
 
     requestPromise = httpFetch(
       `${authURL}/api/organizations/${actor.organizationId}/members`,
       { headers: { cookie: actor.cookie } },
     );
-    await waitForActivity("%role_permission_grant%", "protected request waiting after target membership lock");
+    await waitForActivity(
+      "%role_permission_grant%",
+      "protected request waiting after target membership lock",
+    );
 
     suspensionPromise = pool.query(
       `UPDATE "core"."organization_membership"
@@ -498,11 +556,17 @@ test("membership suspension waits for a protected tenant request that locked mem
         WHERE "id" = $1`,
       [actor.membershipId],
     );
-    await waitForActivity('%UPDATE%organization_membership%', "membership suspension waiting behind protected request");
+    await waitForActivity(
+      "%UPDATE%organization_membership%",
+      "membership suspension waiting behind protected request",
+    );
 
     await blocker.query("COMMIT");
     blockerOpen = false;
-    const [protectedResponse] = await Promise.all([requestPromise, suspensionPromise]);
+    const [protectedResponse] = await Promise.all([
+      requestPromise,
+      suspensionPromise,
+    ]);
     const protectedBody = await protectedResponse.text();
     assert.equal(protectedResponse.status, 200, protectedBody.slice(0, 500));
 
@@ -526,7 +590,11 @@ test("effective role-assignment locks serialize protected reads against concurre
       WHERE "organizationMembershipId" = $1 AND "revoked_at" IS NULL`,
     [actor.membershipId],
   );
-  assert.equal(rows.length, 1, "the actor must have exactly one active Organization role assignment");
+  assert.equal(
+    rows.length,
+    1,
+    "the actor must have exactly one active Organization role assignment",
+  );
 
   const protectedClient = await pool.connect();
   const revokeClient = await pool.connect();
@@ -560,7 +628,10 @@ test("effective role-assignment locks serialize protected reads against concurre
         FOR SHARE OF ra, om, rd, g`,
       [actor.userId, actor.organizationId, rows[0].id],
     );
-    assert.ok(locked.rowCount > 0, "the protected transaction must lock the actor's effective grant");
+    assert.ok(
+      locked.rowCount > 0,
+      "the protected transaction must lock the actor's effective grant",
+    );
 
     const protectedRead = await protectedClient.query(
       `SELECT om."id"
@@ -569,7 +640,10 @@ test("effective role-assignment locks serialize protected reads against concurre
         WHERE om."organizationId" = $1 AND om."status" = 'ACTIVE'`,
       [actor.organizationId],
     );
-    assert.ok(protectedRead.rowCount > 0, "the protected read must complete while the effective grant is locked");
+    assert.ok(
+      protectedRead.rowCount > 0,
+      "the protected read must complete while the effective grant is locked",
+    );
 
     await revokeClient.query("BEGIN");
     revokeOpen = true;
@@ -579,7 +653,10 @@ test("effective role-assignment locks serialize protected reads against concurre
         WHERE "id" = $1 AND "revoked_at" IS NULL`,
       [rows[0].id],
     );
-    await waitForActivity('%UPDATE%organization_role_assignment%', "role-assignment revocation waiting behind protected grant lock");
+    await waitForActivity(
+      "%UPDATE%organization_role_assignment%",
+      "role-assignment revocation waiting behind protected grant lock",
+    );
 
     await protectedClient.query("COMMIT");
     protectedOpen = false;
@@ -591,7 +668,10 @@ test("effective role-assignment locks serialize protected reads against concurre
       'SELECT "revoked_at" FROM "core"."organization_role_assignment" WHERE "id" = $1',
       [rows[0].id],
     );
-    assert.ok(after[0]?.revoked_at, "revocation must complete after the protected transaction releases its locks");
+    assert.ok(
+      after[0]?.revoked_at,
+      "revocation must complete after the protected transaction releases its locks",
+    );
   } finally {
     if (protectedOpen) await protectedClient.query("ROLLBACK").catch(() => {});
     if (revokeOpen) await revokeClient.query("ROLLBACK").catch(() => {});
@@ -634,10 +714,9 @@ test("suspended Organization membership is denied by protected HTTP readers", as
   );
 
   const [members, assignments] = await Promise.all([
-    httpFetch(
-      `${authURL}/api/organizations/${actor.organizationId}/members`,
-      { headers: { cookie: actor.cookie } },
-    ),
+    httpFetch(`${authURL}/api/organizations/${actor.organizationId}/members`, {
+      headers: { cookie: actor.cookie },
+    }),
     httpFetch(
       `${authURL}/api/organizations/${actor.organizationId}/roles/assignments?scope=ORGANIZATION&parentId=${actor.membershipId}&userId=${actor.userId}`,
       { headers: { cookie: actor.cookie } },
@@ -645,30 +724,63 @@ test("suspended Organization membership is denied by protected HTTP readers", as
   ]);
 
   assert.equal(members.status, 403, (await members.text()).slice(0, 500));
-  assert.equal(assignments.status, 403, (await assignments.text()).slice(0, 500));
+  assert.equal(
+    assignments.status,
+    403,
+    (await assignments.text()).slice(0, 500),
+  );
 });
 
 test("Company and Plant HTTP readers isolate sibling scopes using persisted scoped grants", async () => {
   const actor = await createCompanyPlantScopedActor("sibling-scope-boundary");
-  const [companyAllowed, companySibling, plantAllowed, plantSibling] = await Promise.all([
-    httpFetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}`, {
-      headers: { cookie: actor.cookie },
-    }),
-    httpFetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyB}`, {
-      headers: { cookie: actor.cookie },
-    }),
-    httpFetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}/plants/${actor.plantA}`, {
-      headers: { cookie: actor.cookie },
-    }),
-    httpFetch(`${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}/plants/${actor.plantB}`, {
-      headers: { cookie: actor.cookie },
-    }),
-  ]);
+  const [companyAllowed, companySibling, plantAllowed, plantSibling] =
+    await Promise.all([
+      httpFetch(
+        `${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}`,
+        {
+          headers: { cookie: actor.cookie },
+        },
+      ),
+      httpFetch(
+        `${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyB}`,
+        {
+          headers: { cookie: actor.cookie },
+        },
+      ),
+      httpFetch(
+        `${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}/plants/${actor.plantA}`,
+        {
+          headers: { cookie: actor.cookie },
+        },
+      ),
+      httpFetch(
+        `${authURL}/api/organizations/${actor.organizationId}/companies/${actor.companyA}/plants/${actor.plantB}`,
+        {
+          headers: { cookie: actor.cookie },
+        },
+      ),
+    ]);
 
-  assert.equal(companyAllowed.status, 200, (await companyAllowed.text()).slice(0, 500));
-  assert.equal(companySibling.status, 403, (await companySibling.text()).slice(0, 500));
-  assert.equal(plantAllowed.status, 200, (await plantAllowed.text()).slice(0, 500));
-  assert.equal(plantSibling.status, 403, (await plantSibling.text()).slice(0, 500));
+  assert.equal(
+    companyAllowed.status,
+    200,
+    (await companyAllowed.text()).slice(0, 500),
+  );
+  assert.equal(
+    companySibling.status,
+    403,
+    (await companySibling.text()).slice(0, 500),
+  );
+  assert.equal(
+    plantAllowed.status,
+    200,
+    (await plantAllowed.text()).slice(0, 500),
+  );
+  assert.equal(
+    plantSibling.status,
+    403,
+    (await plantSibling.text()).slice(0, 500),
+  );
 });
 
 test("Organization custom-role HTTP creation rejects permissions outside the approved delegation allowlist", async () => {
@@ -677,7 +789,11 @@ test("Organization custom-role HTTP creation rejects permissions outside the app
     `${authURL}/api/organizations/${actor.organizationId}/roles`,
     {
       method: "POST",
-      headers: { cookie: actor.cookie, origin: authOrigin, "content-type": "application/json" },
+      headers: {
+        cookie: actor.cookie,
+        origin: authOrigin,
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         code: "HTTP_NONDELEGABLE_ROLES_ASSIGN",
         scope: "ORGANIZATION",
