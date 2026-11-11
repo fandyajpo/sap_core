@@ -9,7 +9,7 @@
 
 - `DATABASE_URL` is the application runtime connection. It must authenticate as a non-superuser, non-table-owner role with `BYPASSRLS = false`.
 - `MIGRATION_DATABASE_URL` is the migration/owner connection used by Prisma CLI. It must never be supplied to application request handlers.
-- `prisma.config.ts` prefers `MIGRATION_DATABASE_URL` for migrations and falls back to `DATABASE_URL` for existing local/CI workflows that have not configured a separate migration URL.
+- `prisma.config.ts` requires `MIGRATION_DATABASE_URL` for every Prisma CLI command and fails closed when it is absent; it does not fall back to `DATABASE_URL`.
 - The runtime Prisma client in `src/lib/prisma.ts` reads only `DATABASE_URL`.
 - CI creates a disposable `sap_core_runtime` role and uses separate owner/runtime URLs. It asserts the runtime role is neither superuser nor `BYPASSRLS`, and owns none of the RLS tables.
 
@@ -38,6 +38,7 @@ RLS is enabled for:
 - Role assignments: `core.organization_role_assignment`, `core.company_role_assignment`, `core.plant_role_assignment`.
 - Role definitions/grants: `core.role_definition`, `core.role_permission_grant`.
 - Audit: `core.role_definition_audit`, `core.break_glass_access_audit`.
+- Explicit DENY governance: `core.tenant_deny_policy`, `core.tenant_deny_audit_event`. Both tables are protected by Organization-context RLS in the forward migration `20261111120000_v04_deny_policy_rls`.
 
 The immutable permission catalog is paired with an owner-controlled `core.permission_delegation_policy` table. It is seeded with `is_delegable = false` for every permission and is read-only to the runtime role. Custom-role create/revise authorization reads this separate policy table in addition to the creator's persisted Organization role grants; a permission is delegable only when it is both effectively ALLOW and explicitly marked delegable with approval metadata. DENY removes it from the delegable set. Until an owner-approved permission classification is applied through a forward migration, custom-role creation/revision fails closed.
 
@@ -57,6 +58,7 @@ SYSTEM role definitions and their permission snapshots are a global read-only ca
 - Company context narrows Company/Plant and Company/Plant membership/assignment rows to that Company.
 - Plant context narrows Plant/Plant Assignment rows to that Plant.
 - Organization, Company, and Plant audit visibility is constrained to the selected target scope and descendants; child scope does not expose parent-scope audit rows.
+- DENY policy rows are visible and writable only when `app.organization_id` matches their `organization_id`; DENY audit rows are visible and insertable only for that Organization. The DENY service layer separately enforces owner-only policy management, while append-only triggers protect audit history.
 - Custom role insertion is limited to Organization-owned custom roles; grant insertion is allowed only before the permission snapshot is sealed.
 - Append-only grant/audit triggers and application-level permission evaluation remain authoritative.
 - RLS is defense-in-depth, not a replacement for the server-side authorization evaluator.
