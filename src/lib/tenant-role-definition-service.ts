@@ -3,9 +3,7 @@ import "server-only";
 import { getCurrentSession } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import { createSessionBoundScopedAccessDatabase } from "@/lib/scoped-access";
-import {
-  createTenantRoleDefinitionAdapter,
-} from "@/lib/tenant-role-definition-service-core";
+import { createTenantRoleDefinitionAdapter } from "@/lib/tenant-role-definition-service-core";
 import type {
   CustomRoleCreateInput,
   CustomRoleReviseInput,
@@ -13,6 +11,14 @@ import type {
 } from "@/lib/role-definition-service";
 import { requireTenantPermission } from "@/lib/tenant-authorization";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
+
+async function getVerifiedSession() {
+  const session = await getCurrentSession();
+  if (!session?.user?.id || !session.session?.id) {
+    throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
+  }
+  return session;
+}
 
 export async function createCustomRoleForCurrentUser(
   input: Omit<CustomRoleCreateInput, "actorUserId">,
@@ -40,37 +46,6 @@ export async function reviseCustomRoleForCurrentUser(
     database,
     getCurrentSession: async () => session,
   }).reviseCustomRoleForCurrentUser(input);
-}
-
-async function getVerifiedSession() {
-  const session = await getCurrentSession();
-  if (!session?.user?.id) {
-    throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
-  }
-  if (!session.session?.id) {
-    throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
-  }
-  return session;
-}
-
-export async function createCustomRoleForCurrentUser(
-  input: Omit<CustomRoleCreateInput, "actorUserId">,
-): Promise<RoleDefinitionRecord> {
-  const session = await getVerifiedSession();
-  const actorUserId = session.user.id;
-  const database = createSessionBoundScopedAccessDatabase({ sessionId: session.session.id, userId: actorUserId });
-  const service = createRoleDefinitionService(database, createAuthorization(actorUserId));
-  return service.createCustomRole({ ...input, actorUserId });
-}
-
-export async function reviseCustomRoleForCurrentUser(
-  input: Omit<CustomRoleReviseInput, "actorUserId">,
-): Promise<RoleDefinitionRecord> {
-  const session = await getVerifiedSession();
-  const actorUserId = session.user.id;
-  const database = createSessionBoundScopedAccessDatabase({ sessionId: session.session.id, userId: actorUserId });
-  const service = createRoleDefinitionService(database, createAuthorization(actorUserId));
-  return service.reviseCustomRole({ ...input, actorUserId });
 }
 
 export interface OrganizationRoleSummary {
