@@ -38,32 +38,41 @@ test("all tenant GUC writes are transaction-local and use the injected transacti
 test("Company and Plant target GUCs are installed only after each descendant is verified", async () => {
   const target = await source("src/lib/tenant-target-context.ts");
   const membershipQuery = target.indexOf("async findOrganizationMembership");
+  const organizationBootstrap = target.indexOf("bootstrapMembership");
   const organizationGuc = target.indexOf("set_config('app.organization_id'");
+  const membershipLock = target.indexOf("FOR SHARE OF om");
   const companyQuery = target.indexOf("async findCompanyTarget");
   const companyGuc = target.indexOf("set_config('app.company_id'");
   const plantQuery = target.indexOf("async findPlantTarget");
   const plantGuc = target.indexOf("set_config('app.plant_id'");
 
-  assert.ok(membershipQuery < organizationGuc && organizationGuc < companyQuery);
+  assert.ok(membershipQuery < organizationBootstrap);
+  assert.ok(organizationBootstrap < organizationGuc && organizationGuc < membershipLock);
+  assert.ok(membershipLock < companyQuery);
   assert.ok(companyQuery < companyGuc && companyGuc < plantQuery);
   assert.ok(plantQuery < plantGuc);
-  assert.match(target, /if \(membership\) \{[\s\S]*set_config\('app\.organization_id'/);
   assert.match(target, /if \(company\) \{[\s\S]*set_config\('app\.company_id'/);
   assert.match(target, /if \(plant\) \{[\s\S]*set_config\('app\.plant_id'/);
+  assert.match(target, /bootstrapMembership[\s\S]*set_config\('app\.organization_id'/);
+  assert.match(target, /lockedRows[\s\S]*FOR SHARE OF om/);
 });
 
-
-test("custom role create and revise hold an active Organization membership lock through commit", async () => {
+test("custom role create and revise bootstrap membership before locking it under tenant context", async () => {
   const adapter = await source("src/lib/tenant-role-definition-service.ts");
-  const membershipCheck = adapter.indexOf('FROM "core"."organization_membership"');
-  const membershipLock = adapter.indexOf("FOR SHARE", membershipCheck);
-  const membershipCheckEnd = adapter.indexOf(");", membershipCheck);
+  const bootstrap = adapter.indexOf("const memberships =");
+  const organizationGuc = adapter.indexOf("set_config('app.organization_id'");
+  const lockedMemberships = adapter.indexOf("const lockedMemberships =");
+  const membershipLock = adapter.indexOf("FOR SHARE", lockedMemberships);
 
-  assert.notEqual(membershipCheck, -1);
+  assert.notEqual(bootstrap, -1);
+  assert.notEqual(organizationGuc, -1);
+  assert.notEqual(lockedMemberships, -1);
   assert.notEqual(membershipLock, -1);
-  assert.ok(membershipLock < membershipCheckEnd, "the active actor membership row is locked by the operation transaction");
+  assert.ok(bootstrap < organizationGuc, "bootstrap membership is read before tenant context is installed");
+  assert.ok(organizationGuc < lockedMemberships, "tenant context is installed before the exact membership is re-read");
+  assert.ok(lockedMemberships < membershipLock, "the verified active membership is locked in the operation transaction");
+  assert.match(adapter, /WHERE "id" = \$1::uuid[\s\S]*FOR SHARE/);
 });
-
 
 test("tenant target ancestry rows are shared-locked until the protected transaction completes", async () => {
   const target = await source("src/lib/tenant-target-context.ts");
@@ -72,22 +81,26 @@ test("tenant target ancestry rows are shared-locked until the protected transact
   assert.match(target, /FROM "core"\."plant" p[\s\S]*?FOR SHARE OF p, c/);
 });
 
-
-test("authorization grant snapshots lock effective assignments and permission rows", async () => {
+test("authorization grant snapshots lock mutable assignments and memberships, plus mutable custom definitions separately", async () => {
   const grantLoader = await source("src/lib/authorization-grant-loader.ts");
   const assignmentPolicy = await source("src/lib/role-assignment-authorization-core.ts");
   const roleDefinitionPolicy = await source("src/lib/tenant-role-definition-service.ts");
 
-  assert.match(grantLoader, /FOR SHARE OF ra, om, rd, g/);
-  assert.match(grantLoader, /FOR SHARE OF ra, cm, om, rd, g/);
-  assert.match(grantLoader, /FOR SHARE OF ra, pa, cm, om, rd, g/);
+  assert.match(grantLoader, /FOR SHARE OF ra, om/);
+  assert.match(grantLoader, /FOR SHARE OF ra, cm, om/);
+  assert.match(grantLoader, /FOR SHARE OF ra, pa, cm, om/);
+  assert.match(grantLoader, /FOR SHARE OF rd/);
+  assert.doesNotMatch(grantLoader, /FOR SHARE OF ra, om, rd, g/);
+  assert.doesNotMatch(grantLoader, /FOR SHARE OF ra, cm, om, rd, g/);
+  assert.doesNotMatch(grantLoader, /FOR SHARE OF ra, pa, cm, om, rd, g/);
   assert.match(assignmentPolicy, /lockActorGrantRows\(session, actorUserId, target\)/);
   assert.match(assignmentPolicy, /FOR SHARE OF ra, pa, cm, om/);
   assert.match(assignmentPolicy, /FOR SHARE OF rd/);
   assert.doesNotMatch(assignmentPolicy, /FOR SHARE OF ra, pa, cm, om, rd, g/);
-  assert.match(roleDefinitionPolicy, /FOR SHARE OF ra, om, rd, g/);
+  assert.match(roleDefinitionPolicy, /FOR SHARE OF rd/);
+  assert.match(roleDefinitionPolicy, /FOR SHARE OF ra, om/);
+  assert.doesNotMatch(roleDefinitionPolicy, /FOR SHARE OF ra, om, rd, g/);
 });
-
 
 test("effective role-assignment listing locks the returned assignment and membership ancestry rows", async () => {
   const service = await source("src/lib/role-assignment-service.ts");
