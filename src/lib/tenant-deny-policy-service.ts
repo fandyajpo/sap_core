@@ -147,7 +147,7 @@ export async function createTenantDenyPolicy(
   let expiresAt: Date | null = null;
   if (input.expiresAt !== undefined && input.expiresAt !== null) {
     const isoDateTime = typeof input.expiresAt === "string"
-      && /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(input.expiresAt);
+      && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(input.expiresAt);
     const parsedExpiry = isoDateTime ? new Date(input.expiresAt as string) : null;
     if (!parsedExpiry || Number.isNaN(parsedExpiry.getTime())) {
       throw new TenantDenyPolicyError("INVALID_INPUT", "Expiry must be a valid ISO date-time with an explicit timezone.");
