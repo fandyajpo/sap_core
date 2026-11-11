@@ -224,12 +224,30 @@ async function lockActorGrantRows(
   }
 }
 
+interface ExplicitDenyEvidence {
+  actorUserId: string;
+  actorMembershipId: string;
+  organizationId: string;
+  scope: AssignableScope;
+  scopeId: string;
+  companyId: string | null;
+  plantId: string | null;
+  permission: AuthorizationPermission;
+  policyId: string | null;
+}
+
+type ExplicitDenyRecorder = (evidence: ExplicitDenyEvidence) => Promise<void>;
+
 async function loadActorGrants(
   session: ScopedAccessSession,
   actorUserId: string,
   actorMembershipId: string,
   target: TargetContext,
-): Promise<{ grants: AuthorizationRoleGrant[]; denies: ExplicitPermissionDeny[] }> {
+): Promise<{
+  grants: AuthorizationRoleGrant[];
+  denies: ExplicitPermissionDeny[];
+  denyPolicyIds: Array<{ policyId: string; scope: AuthorizationScope; scopeId: string; permissionCode: string }>;
+}> {
   await lockActorGrantRows(session, actorUserId, target);
   const rows = await session.query<PersistedGrantRow>(
     `SELECT ra."id"::text AS "assignmentId", rd."code" AS "roleCode",
@@ -309,11 +327,13 @@ async function loadActorGrants(
   // Explicit tenant DENY policies are membership-bound and separate from role grants.
   // Match only the exact target scope and its complete Company/Plant ancestry.
   const policyDenyRows = await session.query<{
+    policyId: string;
     scope: AuthorizationScope;
     scopeId: string;
     permissionCode: string;
   }>(
-    `SELECT p."scope"::text AS "scope",
+    `SELECT p."id"::text AS "policyId",
+       p."scope"::text AS "scope",
        CASE p."scope"
          WHEN 'ORGANIZATION'::"core"."RoleScope" THEN p."organization_id"::text
          WHEN 'COMPANY'::"core"."RoleScope" THEN p."company_id"::text
@@ -403,7 +423,16 @@ async function loadActorGrants(
       permissions: [...permissions],
     };
   });
-  return { grants, denies };
+  return {
+    grants,
+    denies,
+    denyPolicyIds: policyDenyRows.map((row) => ({
+      policyId: row.policyId,
+      scope: row.scope,
+      scopeId: row.scopeId,
+      permissionCode: row.permissionCode,
+    })),
+  };
 }
 
 async function authorize(
@@ -413,6 +442,7 @@ async function authorize(
   permission: "roles.assign" | "roles.read",
   session: ScopedAccessSession,
   expectedUserId?: string,
+  recordExplicitDeny?: ExplicitDenyRecorder,
 ): Promise<boolean> {
   if (input.actorUserId !== sessionUserId) {
     throw new RoleAssignmentAuthorizationError("The supplied actor does not match the verified Better Auth session.");
@@ -517,10 +547,32 @@ async function authorize(
     grants: loaded.grants,
     denies: loaded.denies,
   });
+  if (!decision.allowed && decision.reason === "EXPLICIT_DENY" && recordExplicitDeny) {
+    const policy = loaded.denyPolicyIds.find((row) =>
+      row.permissionCode === permission
+      && row.scope === target.scope
+      && row.scopeId === target.scopeId,
+    );
+    await recordExplicitDeny({
+      actorUserId: sessionUserId,
+      actorMembershipId: actorMemberships[0].id,
+      organizationId: target.organizationId,
+      scope: target.scope,
+      scopeId: target.scopeId,
+      companyId: target.companyId,
+      plantId: target.plantId,
+      permission,
+      policyId: policy?.policyId ?? null,
+    });
+  }
   return decision.allowed;
 }
 
-export function createRoleAssignmentAuthorization(sessionUserId: string, organizationId: string) {
+export function createRoleAssignmentAuthorization(
+  sessionUserId: string,
+  organizationId: string,
+  recordExplicitDeny?: ExplicitDenyRecorder,
+) {
   if (!sessionUserId || !organizationId) {
     throw new Error("A verified session user and Organization ID are required.");
   }
@@ -528,10 +580,10 @@ export function createRoleAssignmentAuthorization(sessionUserId: string, organiz
     authorizeGrant: (
       input: RoleAssignmentGrantAuthorization,
       session: ScopedAccessSession,
-    ) => authorize(sessionUserId, organizationId, input, "roles.assign", session),
+    ) => authorize(sessionUserId, organizationId, input, "roles.assign", session, undefined, recordExplicitDeny),
     authorizeList: (
       input: RoleAssignmentListAuthorization,
       session: ScopedAccessSession,
-    ) => authorize(sessionUserId, organizationId, input, "roles.read", session, input.userId),
+    ) => authorize(sessionUserId, organizationId, input, "roles.read", session, input.userId, recordExplicitDeny),
   };
 }
