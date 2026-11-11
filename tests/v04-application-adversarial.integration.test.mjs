@@ -7,6 +7,8 @@ import { assertDisposablePostgresUrl } from "./v04-integration-safety.mjs";
 import { RoleAssignmentError } from "../src/lib/role-assignment-service.ts";
 import { TenantTargetContextError } from "../src/lib/tenant-target-context-core.ts";
 import { createTenantRoleAssignmentAdapter } from "../src/lib/tenant-role-assignment-service-core.ts";
+import { createTenantRoleDefinitionAdapter } from "../src/lib/tenant-role-definition-service-core.ts";
+import { RoleDefinitionError } from "../src/lib/role-definition-service.ts";
 
 const { Client, Pool } = pg;
 const migrationUrl = process.env.MIGRATION_DATABASE_URL;
@@ -112,6 +114,21 @@ function createService(sessionActorId) {
   });
 }
 
+function createRoleDefinitionServiceForActor(sessionActorId) {
+  return createTenantRoleDefinitionAdapter({
+    database,
+    getCurrentSession: async () => ({ user: { id: sessionActorId } }),
+  });
+}
+
+async function expectRoleDefinitionDenied(operation) {
+  await assert.rejects(operation, (error) => {
+    assert.ok(error instanceof RoleDefinitionError);
+    assert.equal(error.code, "AUTHORIZATION_DENIED");
+    return true;
+  });
+}
+
 async function expectAuthorizationDenied(operation) {
   await assert.rejects(operation, (error) => {
     assert.ok(error instanceof RoleAssignmentError);
@@ -151,7 +168,8 @@ before(async () => {
       "core"."role_permission_grant"
     TO sap_core_runtime
   `);
-  await owner.query('GRANT SELECT ON "core"."permission_definition" TO sap_core_runtime');
+  await owner.query('GRANT SELECT ON "core"."permission_definition", "core"."permission_delegation_policy" TO sap_core_runtime');
+  await owner.query('GRANT SELECT, INSERT ON "core"."role_definition_audit" TO sap_core_runtime');
   await owner.query('GRANT SELECT ON "core"."tenant_deny_policy" TO sap_core_runtime');
   await owner.query('GRANT UPDATE ("revoked_at", "revoked_by_user_id", "revoke_reason") ON "core"."tenant_deny_policy" TO sap_core_runtime');
   await owner.query(`
@@ -376,6 +394,101 @@ after(async () => {
     if (outcome.status === "rejected") errors.push(outcome.reason);
   }
   if (errors.length) throw new AggregateError(errors, "V04 application adversarial teardown failed; the disposable database must be discarded.");
+});
+
+test("tenant role-definition adapter creates and revises custom roles under runtime RLS", async (t) => {
+  const ownerService = createRoleDefinitionServiceForActor(ids.actorA);
+
+  await t.test("verified Organization owner creates a delegated custom role", async () => {
+    const role = await ownerService.createCustomRoleForCurrentUser({
+      organizationId: ids.orgA,
+      code: `v04-runtime-role-${randomUUID()}`,
+      scope: "ORGANIZATION",
+      permissions: ["organization.read"],
+    });
+    assert.equal(role.kind, "ORGANIZATION_CUSTOM");
+    assert.equal(role.ownerOrganizationId, ids.orgA);
+    assert.equal(role.version, 1);
+    assert.ok(role.permissionsLockedAt instanceof Date);
+    const { rows } = await owner.query(
+      `SELECT pd."code" FROM "core"."role_permission_grant" g
+       JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
+       WHERE g."role_definition_id" = $1 AND g."effect" = 'ALLOW'`,
+      [role.id],
+    );
+    assert.deepEqual(rows, [{ code: "organization.read" }]);
+    const { rows: audit } = await owner.query(
+      `SELECT "event_type", "version" FROM "core"."role_definition_audit"
+       WHERE "role_definition_id" = $1`,
+      [role.id],
+    );
+    assert.deepEqual(audit, [{ event_type: "CREATE", version: 1 }]);
+    t.context = { role };
+  });
+
+  await t.test("verified Organization owner revises the same custom role family", async () => {
+    const created = await owner.query(
+      `SELECT rd."id"::text AS "id", rd."role_family_id"::text AS "roleFamilyId", rd."code"
+       FROM "core"."role_definition" rd
+       WHERE rd."ownerOrganizationId" = $1
+         AND rd."code" LIKE 'v04-runtime-role-%'
+       ORDER BY rd."created_at" DESC LIMIT 1`,
+      [ids.orgA],
+    );
+    assert.equal(created.rows.length, 1);
+    const revision = await ownerService.reviseCustomRoleForCurrentUser({
+      organizationId: ids.orgA,
+      roleDefinitionId: created.rows[0].id,
+      code: `${created.rows[0].code}-v2`,
+    });
+    assert.equal(revision.kind, "ORGANIZATION_CUSTOM");
+    assert.equal(revision.ownerOrganizationId, ids.orgA);
+    assert.equal(revision.roleFamilyId, created.rows[0].roleFamilyId);
+    assert.equal(revision.version, 2);
+    const { rows: audit } = await owner.query(
+      `SELECT "event_type", "version" FROM "core"."role_definition_audit"
+       WHERE "role_family_id" = $1 ORDER BY "version"`,
+      [revision.roleFamilyId],
+    );
+    assert.deepEqual(audit, [
+      { event_type: "CREATE", version: 1 },
+      { event_type: "REVISE", version: 2 },
+    ]);
+  });
+
+  await t.test("foreign Organization actor cannot create a role in Organization A", async () => {
+    const foreignService = createRoleDefinitionServiceForActor(ids.actorB);
+    await expectRoleDefinitionDenied(() => foreignService.createCustomRoleForCurrentUser({
+      organizationId: ids.orgA,
+      code: `v04-runtime-denied-${randomUUID()}`,
+      scope: "ORGANIZATION",
+      permissions: ["organization.read"],
+    }));
+  });
+
+  await t.test("missing verified session is rejected before opening a database transaction", async () => {
+    let transactionCalls = 0;
+    const unauthenticated = createTenantRoleDefinitionAdapter({
+      database: {
+        async query() { throw new Error("Root database query is forbidden."); },
+        async transaction(work) {
+          transactionCalls += 1;
+          return work({ async query() { return []; } });
+        },
+      },
+      getCurrentSession: async () => null,
+    });
+    await assert.rejects(
+      () => unauthenticated.createCustomRoleForCurrentUser({
+        organizationId: ids.orgA,
+        code: `v04-runtime-unauthenticated-${randomUUID()}`,
+        scope: "ORGANIZATION",
+        permissions: ["organization.read"],
+      }),
+      (error) => error instanceof TenantTargetContextError && error.code === "UNAUTHENTICATED",
+    );
+    assert.equal(transactionCalls, 0);
+  });
 });
 
 test("production role-assignment adapter enforces verified-session actor and tenant boundaries on non-owner RLS role", async (t) => {
