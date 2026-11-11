@@ -128,7 +128,7 @@ async function lockAuthorizationGrantRows(
        AND rd."disabled_at" IS NULL
        AND rd."permissions_locked_at" IS NOT NULL
       WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
-      FOR SHARE OF ra, cm, om, rd, g
+      FOR SHARE OF ra, cm, om
     `;
   }
 
@@ -162,7 +162,7 @@ async function lockAuthorizationGrantRows(
        AND rd."disabled_at" IS NULL
        AND rd."permissions_locked_at" IS NOT NULL
       WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
-      FOR SHARE OF ra, pa, cm, om, rd, g
+      FOR SHARE OF ra, pa, cm, om
     `;
   }
 }
