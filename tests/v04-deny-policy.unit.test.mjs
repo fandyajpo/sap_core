@@ -92,3 +92,54 @@ test("authorization grant loader locks mutable rows without locking SYSTEM catal
   assert.doesNotMatch(lockHelper, /FOR SHARE OF (?:ra|pa|cm|om)[^\n;]*\bg\b/);
   assert.doesNotMatch(lockHelper, /JOIN "core"\."role_permission_grant"/);
 });
+
+test("DENY-eligible permission allowlists stay identical across service, runtime loader, and database trigger", async () => {
+  const [service, loader, migration] = await Promise.all([
+    source("src/lib/tenant-deny-policy-service.ts"),
+    source("src/lib/authorization-grant-loader.ts"),
+    source("prisma/migrations/20261109160000_v04_explicit_deny_policy/migration.sql"),
+  ]);
+
+  const extractSet = (text, pattern, label) => {
+    const match = text.match(pattern);
+    assert.ok(match, `${label} allowlist must remain explicit`);
+    return [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]).sort();
+  };
+
+  const servicePermissions = extractSet(
+    service,
+    /const denyEligiblePermissions = new Set\\(\\[([\\s\\S]*?)\\]\\);/,
+    "service",
+  );
+  const loaderPermissions = extractSet(
+    loader,
+    /const denyEligiblePermissions = new Set\\(\\[([\\s\\S]*?)\\]\\);/,
+    "runtime loader",
+  );
+  const databasePermissions = extractSet(
+    migration,
+    /IF permission_code NOT IN \\(([\\s\\S]*?)\\) THEN/,
+    "database trigger",
+  );
+
+  const approved = [
+    "organization.read",
+    "organization.update",
+    "organization.members.read",
+    "organization.members.manage",
+    "company.read",
+    "company.manage",
+    "company.members.manage",
+    "plant.read",
+    "plant.manage",
+    "plant.assignments.manage",
+    "roles.read",
+    "roles.create",
+    "roles.revise",
+    "roles.assign",
+  ].sort();
+
+  assert.deepEqual(servicePermissions, approved);
+  assert.deepEqual(loaderPermissions, approved);
+  assert.deepEqual(databasePermissions, approved);
+});
