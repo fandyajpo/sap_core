@@ -224,7 +224,7 @@ async function lockActorGrantRows(
   }
 }
 
-interface ExplicitDenyEvidence {
+export interface ExplicitDenyEvidence {
   actorUserId: string;
   actorMembershipId: string;
   organizationId: string;
