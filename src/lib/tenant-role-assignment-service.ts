@@ -10,8 +10,13 @@ import { resolveTenantTargetContext } from "@/lib/tenant-target-context";
 import type { TenantScopeRequest } from "@/lib/tenant-scope-types";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
 
+type VerifiedRoleAssignmentSession = {
+  session: { id: string };
+  user: { id: string };
+};
+
 async function recordRoleAssignmentExplicitDeny(
-  session: NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>,
+  session: VerifiedRoleAssignmentSession,
   evidence: ExplicitDenyEvidence,
 ) {
   const request: TenantScopeRequest = evidence.scope === "ORGANIZATION"
