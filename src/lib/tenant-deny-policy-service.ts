@@ -144,9 +144,15 @@ export async function createTenantDenyPolicy(
   }
 
   const reason = requireReason(input.reason, "Reason");
-  const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
-  if (input.expiresAt && (!expiresAt || Number.isNaN(expiresAt.getTime()))) {
-    throw new TenantDenyPolicyError("INVALID_INPUT", "Expiry must be a valid ISO date-time.");
+  let expiresAt: Date | null = null;
+  if (input.expiresAt !== undefined && input.expiresAt !== null) {
+    const isoDateTime = typeof input.expiresAt === "string"
+      && /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(input.expiresAt);
+    const parsedExpiry = isoDateTime ? new Date(input.expiresAt as string) : null;
+    if (!parsedExpiry || Number.isNaN(parsedExpiry.getTime())) {
+      throw new TenantDenyPolicyError("INVALID_INPUT", "Expiry must be a valid ISO date-time with an explicit timezone.");
+    }
+    expiresAt = parsedExpiry;
   }
 
   const session = await getCurrentSession();
