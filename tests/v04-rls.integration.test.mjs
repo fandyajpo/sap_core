@@ -299,6 +299,50 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     assert.equal(await count(runtime, '"core"."company_membership"'), 2);
     assert.equal(await count(runtime, '"core"."plant_assignment"'), 2);
     assert.equal(await count(runtime, '"core"."organization_role_assignment"'), 1);
+
+    // SYSTEM role definitions are SELECT-visible but intentionally not
+    // UPDATE-visible under RLS. A row lock on the catalog therefore hides
+    // ORG_OWNER; lock only the mutable assignment row instead.
+    const { rows: visibleOwnerCatalog } = await runtime.query(
+      `SELECT rd."id"::text AS "id"
+         FROM "core"."organization_role_assignment" ra
+         JOIN "core"."role_definition" rd
+           ON rd."id" = ra."roleDefinitionId"
+          AND rd."scope" = ra."role_scope"
+          AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND rd."code" = 'ORG_OWNER'
+        WHERE ra."organizationMembershipId" = $1
+          AND ra."revoked_at" IS NULL
+          AND ra."is_break_glass" = FALSE`,
+      [ids.orgMembershipA],
+    );
+    assert.equal(visibleOwnerCatalog.length, 1, "SYSTEM ORG_OWNER is globally SELECT-visible");
+
+    const { rows: lockedOwnerAssignment } = await runtime.query(
+      `SELECT ra."id"::text AS "id"
+         FROM "core"."organization_role_assignment" ra
+         JOIN "core"."role_definition" rd
+           ON rd."id" = ra."roleDefinitionId"
+          AND rd."scope" = ra."role_scope"
+          AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND rd."code" = 'ORG_OWNER'
+        WHERE ra."organizationMembershipId" = $1
+          AND ra."revoked_at" IS NULL
+          AND ra."is_break_glass" = FALSE
+        FOR SHARE OF ra`,
+      [ids.orgMembershipA],
+    );
+    assert.equal(lockedOwnerAssignment.length, 1, "runtime may lock mutable owner assignment without locking SYSTEM catalog");
+
+    const { rows: hiddenLockedCatalog } = await runtime.query(
+      `SELECT rd."id"::text AS "id"
+         FROM "core"."role_definition" rd
+        WHERE rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND rd."code" = 'ORG_OWNER'
+        FOR SHARE`,
+    );
+    assert.equal(hiddenLockedCatalog.length, 0, "FOR SHARE on SYSTEM catalog is hidden by RLS UPDATE-policy visibility");
+
     assert.equal(await count(runtime, '"core"."company_role_assignment"'), 2);
     assert.equal(await count(runtime, '"core"."plant_role_assignment"'), 2);
     assert.equal(await count(runtime, '"core"."role_definition"' , 'WHERE "code" = \'CUSTOM_B\''), 0);
