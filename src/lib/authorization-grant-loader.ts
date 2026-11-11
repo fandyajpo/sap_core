@@ -26,6 +26,7 @@ export interface LoadedAuthorizationGrants {
   actorUserId: string;
   grants: readonly AuthorizationRoleGrant[];
   denies: readonly ExplicitPermissionDeny[];
+  denyPolicyIds: readonly { scope: AuthorizationScope; scopeId: string; permissionCode: string; policyId: string }[];
 }
 
 export class AuthorizationGrantLoadError extends Error {
@@ -280,11 +281,12 @@ export async function loadAuthorizationGrants(
   // Dedicated membership-bound DENY policies are loaded independently from
   // reusable role grants. Only the exact target scope is considered.
   const policyDenyRows = await tx.$queryRaw<Array<{
+    policyId: string;
     scope: AuthorizationScope;
     scopeId: string;
     permissionCode: string;
   }>>`
-    SELECT p."scope"::text AS "scope",
+    SELECT p."id"::text AS "policyId", p."scope"::text AS "scope",
       CASE p."scope"
         WHEN 'ORGANIZATION'::"core"."RoleScope" THEN p."organization_id"::text
         WHEN 'COMPANY'::"core"."RoleScope" THEN p."company_id"::text
@@ -387,5 +389,10 @@ export async function loadAuthorizationGrants(
     });
   }
 
-  return { actorUserId, grants, denies };
+  return { actorUserId, grants, denies, denyPolicyIds: policyDenyRows.map((row) => ({
+    policyId: row.policyId,
+    scope: row.scope,
+    scopeId: row.scopeId,
+    permissionCode: row.permissionCode,
+  })) };
 }
