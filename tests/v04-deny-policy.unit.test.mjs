@@ -103,7 +103,7 @@ test("DENY-eligible permission allowlists stay identical across service, runtime
   const extractSet = (text, pattern, label) => {
     const match = text.match(pattern);
     assert.ok(match, `${label} allowlist must remain explicit`);
-    return [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]).sort();
+    return [...match[1].matchAll(/['\"]([^'\"]+)['\"]/g)].map((entry) => entry[1]).sort();
   };
 
   const servicePermissions = extractSet(
