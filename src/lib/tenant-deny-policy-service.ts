@@ -187,10 +187,11 @@ export async function createTenantDenyPolicy(
       if (!plants[0]) throw new TenantDenyPolicyError("INVALID_INPUT", "The Plant is not a descendant of the selected Company and Organization.");
     }
 
+    // Permission definitions are immutable global catalog rows and the
+    // runtime role intentionally has SELECT-only access. Read without a row lock.
     const permissionRows = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT "id"::text AS "id" FROM "core"."permission_definition"
       WHERE "code" = ${input.permissionCode}
-      FOR SHARE
     `;
     if (!permissionRows[0]) throw new TenantDenyPolicyError("INVALID_INPUT", "The permission definition does not exist.");
 
