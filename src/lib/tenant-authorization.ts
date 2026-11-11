@@ -58,7 +58,7 @@ export async function requireTenantPermission(
       set_config('app.plant_id', ${context.plantId ?? ""}, true)
   `;
 
-  const { actorUserId, grants, denies } = await loadAuthorizationGrants(tx, context);
+  const { actorUserId, grants, denies, denyPolicyIds } = await loadAuthorizationGrants(tx, context);
   if (actorUserId !== context.userId) {
     throw new TenantAuthorizationError(permission, "ACTOR_CONTEXT_MISMATCH");
   }
@@ -74,6 +74,11 @@ export async function requireTenantPermission(
     grants,
     denies,
   });
+  const denyPolicyId = decision.reason === "EXPLICIT_DENY"
+    ? denyPolicyIds.find((row) => row.permissionCode === permission
+        && row.scope === context.scope
+        && row.scopeId === (context.plantId ?? context.companyId ?? context.organizationId))?.policyId ?? null
+    : null;
   if (!decision.allowed) {
     if (decision.reason === "EXPLICIT_DENY") {
       // Persist the denial evidence outside the protected transaction: this
@@ -95,10 +100,10 @@ export async function requireTenantPermission(
         `;
         await auditTx.$executeRaw`
           INSERT INTO "core"."tenant_deny_audit_event"
-            ("id", "organization_id", "target_membership_id", "target_user_id",
+            ("id", "policy_id", "organization_id", "target_membership_id", "target_user_id",
              "permission_definition_id", "scope", "company_id", "plant_id",
              "actor_user_id", "event_type", "outcome", "reason_code", "occurred_at")
-          SELECT gen_random_uuid(), ${auditContext.organizationId}::uuid,
+          SELECT gen_random_uuid(), ${denyPolicyId}::uuid, ${auditContext.organizationId}::uuid,
             ${auditContext.organizationMembershipId}::uuid, ${auditContext.userId},
             pd."id", ${auditContext.scope}::"core"."RoleScope",
             ${auditContext.companyId}::uuid, ${auditContext.plantId}::uuid,
