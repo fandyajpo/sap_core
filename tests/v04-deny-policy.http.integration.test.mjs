@@ -162,6 +162,7 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
   const owner = await createActor("owner", "ORG_OWNER");
   const target = await createActor("target", "ORG_MEMBER", owner.organizationId);
   const admin = await createActor("admin", "ORG_ADMIN", owner.organizationId);
+  const revokeAdmin = await createActor("revoke-admin", "ORG_ADMIN", owner.organizationId);
   const outsider = await createActor("outsider", "ORG_MEMBER");
 
   const input = {
@@ -195,10 +196,36 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
   const deniedWrite = await denyRequest(admin, "POST", "", input, owner.organizationId);
   assert.equal(deniedWrite.status, 403);
 
+  // Revoke is a privileged write just like create. Use a separate admin actor
+  // so this assertion independently verifies REVOKE_NOT_AUTHORIZED audit data
+  // without consuming the first admin actor's rate-limit budget below.
+  const deniedRevoke = await denyRequest(revokeAdmin, "PATCH", `/${policyId}`, { reason: "unauthorized revoke" }, owner.organizationId);
+  assert.equal(deniedRevoke.status, 403);
+  const { rows: revokeDeniedEvents } = await pool.query(
+    `SELECT "event_type"::text AS "eventType","outcome"::text AS "outcome","reason_code" AS "reasonCode"
+       FROM "core"."tenant_deny_audit_event"
+      WHERE "organization_id" = $1 AND "actor_user_id" = $2
+        AND "event_type" = 'POLICY_WRITE_DENIED'`,
+    [owner.organizationId, revokeAdmin.userId],
+  );
+  assert.deepEqual(revokeDeniedEvents, [{
+    eventType: "POLICY_WRITE_DENIED",
+    outcome: "DENIED",
+    reasonCode: "REVOKE_NOT_AUTHORIZED",
+  }]);
+
+  // Invalid revoke inputs must not change the active policy.
+  const invalidRevokeReason = await denyRequest(owner, "PATCH", `/${policyId}`, { reason: "   " });
+  assert.equal(invalidRevokeReason.status, 400);
+  const invalidPolicyId = await denyRequest(owner, "PATCH", "/not-a-uuid", { reason: "invalid ID" });
+  assert.equal(invalidPolicyId.status, 400);
+
   // An authenticated user without membership in this Organization is denied,
   // but cannot create audit evidence in a tenant they do not belong to.
   const outsiderWrite = await denyRequest(outsider, "POST", "", input, owner.organizationId);
   assert.equal(outsiderWrite.status, 403);
+  const outsiderRevoke = await denyRequest(outsider, "PATCH", `/${policyId}`, { reason: "foreign tenant revoke" }, owner.organizationId);
+  assert.equal(outsiderRevoke.status, 403);
 
   // Anonymous attempts have no verified actor and are deliberately not stored.
   const anonymous = await httpFetch(`${authURL}/api/organizations/${owner.organizationId}/deny-policies`, {
@@ -207,6 +234,25 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
     body: JSON.stringify(input),
   });
   assert.equal(anonymous.status, 401);
+  const anonymousRevoke = await httpFetch(
+    `${authURL}/api/organizations/${owner.organizationId}/deny-policies/${policyId}`,
+    {
+      method: "PATCH",
+      headers: { origin: authOrigin, "content-type": "application/json" },
+      body: JSON.stringify({ reason: "anonymous revoke" }),
+    },
+  );
+  assert.equal(anonymousRevoke.status, 401);
+
+  // A user from another Organization cannot create attributable audit evidence
+  // inside this tenant, even when attempting to revoke a known policy ID.
+  const { rows: outsiderRevokeEvents } = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM "core"."tenant_deny_audit_event"
+      WHERE "organization_id" = $1 AND "actor_user_id" = $2
+        AND "event_type" = 'POLICY_WRITE_DENIED'`,
+    [owner.organizationId, outsider.userId],
+  );
+  assert.equal(outsiderRevokeEvents[0].count, 0);
 
   // The per-actor and per-tenant event budgets are serialized in the DB transaction.
   const burst = await Promise.all(Array.from({ length: 12 }, () =>
