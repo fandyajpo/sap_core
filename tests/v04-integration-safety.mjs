@@ -97,12 +97,37 @@ export function assertDisposablePostgresUrl({
   if (database !== expectedDatabase) {
     throw new Error(`${suiteLabel}: database name must be "${expectedDatabase}", got "${database}".`);
   }
-  const username = decodeURIComponent(parsed.username);
+  let username;
+  try {
+    username = decodeURIComponent(parsed.username);
+  } catch {
+    throw new Error(`${suiteLabel}: database URL username contains malformed percent encoding.`);
+  }
   if (!expectedUsers.includes(username)) {
     throw new Error(
       `${suiteLabel}: database username must be one of ${expectedUsers.map((user) => `"${user}"`).join(", ")}, got "${username}".`,
     );
   }
+}
+
+/**
+ * Resolves an HTTP integration request and proves it remains on the exact
+ * validated origin. Callers must use this before fetch; redirects are blocked
+ * separately by the request wrapper.
+ */
+export function assertLocalHttpRequestUrl({ value, baseUrl, expectedOrigin, suiteLabel }) {
+  let target;
+  try {
+    target = new URL(value, baseUrl);
+  } catch {
+    throw new Error(`${suiteLabel}: HTTP integration request URL is invalid.`);
+  }
+  if (target.origin !== expectedOrigin || target.username !== "" || target.password !== "") {
+    throw new Error(
+      `${suiteLabel}: HTTP integration request must stay on validated origin ${expectedOrigin} without URL credentials; got "${target.origin}".`,
+    );
+  }
+  return target;
 }
 
 /**
