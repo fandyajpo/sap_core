@@ -39,3 +39,11 @@ test("custom-role grant loading never locks global permission snapshots or SYSTE
   assert.doesNotMatch(tenantRoleDefinitionService, /FOR SHARE OF ra, om, rd, g/);
   assert.doesNotMatch(tenantRoleDefinitionService, /FOR SHARE OF[^;\x60]*\bg\b/);
 });
+
+const roleDefinitionService = await readFile(new URL("../src/lib/role-definition-service.ts", import.meta.url), "utf8");
+
+test("role-definition actor existence check does not lock read-only Better Auth identity rows", () => {
+  const actorCheck = roleDefinitionService.match(/SELECT "id" FROM "core"\."user" WHERE "id" = \$1([^\x60]*)/);
+  assert.ok(actorCheck, "human actor existence check must remain present");
+  assert.doesNotMatch(actorCheck[1], /FOR SHARE|FOR UPDATE/i);
+});
