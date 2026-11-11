@@ -101,7 +101,7 @@ async function createActor(label, organizationRoleCode = "ORG_OWNER") {
   const cookie = sessionCookie(signup);
   // Track the actor as soon as Better Auth confirms the user exists, before
   // any fixture SQL runs, so a partially completed setup is still signed out
-  // and deleted by teardown instead of leaking an untracked user.
+  // during teardown instead of leaving an untracked authenticated user.
   const actor = { userId, email, cookie, sessionId: null, organizationId: null, membershipId: null };
   actors.push(actor);
   assert.match(cookie, /session_token=/);
