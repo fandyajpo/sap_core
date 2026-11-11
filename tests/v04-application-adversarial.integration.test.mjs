@@ -170,8 +170,9 @@ before(async () => {
   `);
   await owner.query('GRANT SELECT ON "core"."permission_definition", "core"."permission_delegation_policy" TO sap_core_runtime');
   await owner.query('GRANT SELECT, INSERT ON "core"."role_definition_audit" TO sap_core_runtime');
-  await owner.query('GRANT SELECT ON "core"."tenant_deny_policy" TO sap_core_runtime');
+  await owner.query('GRANT SELECT, INSERT ON "core"."tenant_deny_policy" TO sap_core_runtime');
   await owner.query('GRANT UPDATE ("revoked_at", "revoked_by_user_id", "revoke_reason") ON "core"."tenant_deny_policy" TO sap_core_runtime');
+  await owner.query('GRANT SELECT, INSERT ON "core"."tenant_deny_audit_event" TO sap_core_runtime');
   await owner.query(`
     GRANT SELECT, INSERT, UPDATE ON
       "core"."company_role_assignment",
@@ -256,6 +257,30 @@ before(async () => {
     ids.membershipD, ids.actorD,
     ids.recipientMembershipB, ids.recipientB,
   ]);
+
+  const { rows: denyPermissionRows } = await owner.query(
+    'SELECT "id"::text AS "id" FROM "core"."permission_definition" WHERE "code" = $1',
+    ["organization.read"],
+  );
+  assert.equal(denyPermissionRows.length, 1, "organization.read permission must exist");
+  await owner.query(`
+    INSERT INTO "core"."tenant_deny_policy"
+      ("id", "organization_id", "target_membership_id", "target_user_id",
+       "permission_definition_id", "scope", "reason", "issued_by_user_id")
+    VALUES
+      ($1, $2, $3, $4, $5, 'ORGANIZATION', 'RLS fixture A', $6),
+      ($7, $8, $9, $10, $5, 'ORGANIZATION', 'RLS fixture B', $11)
+  `, [
+    randomUUID(), ids.orgA, ids.membershipA, ids.actorA, denyPermissionRows[0].id, ids.actorA,
+    randomUUID(), ids.orgB, ids.membershipB, ids.actorB, ids.actorB,
+  ]);
+  await owner.query(`
+    INSERT INTO "core"."tenant_deny_audit_event"
+      ("id", "organization_id", "actor_user_id", "event_type", "outcome", "reason_code")
+    VALUES
+      ($1, $2, $3, 'POLICY_READ', 'SUCCESS', 'RLS_FIXTURE_A'),
+      ($4, $5, $6, 'POLICY_READ', 'SUCCESS', 'RLS_FIXTURE_B')
+  `, [randomUUID(), ids.orgA, ids.actorA, randomUUID(), ids.orgB, ids.actorB]);
 
   await owner.query(`
     INSERT INTO "core"."company" ("id", "organizationId", "updated_at")
@@ -394,6 +419,53 @@ after(async () => {
     if (outcome.status === "rejected") errors.push(outcome.reason);
   }
   if (errors.length) throw new AggregateError(errors, "V04 application adversarial teardown failed; the disposable database must be discarded.");
+});
+
+test("tenant DENY policy and audit tables enforce Organization RLS for runtime role", async () => {
+  const { rows: rlsState } = await owner.query(`
+    SELECT c.relname AS "tableName", c.relrowsecurity AS "rlsEnabled"
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'core'
+      AND c.relname IN ('tenant_deny_policy', 'tenant_deny_audit_event')
+    ORDER BY c.relname
+  `);
+  assert.deepEqual(rlsState, [
+    { tableName: "tenant_deny_audit_event", rlsEnabled: true },
+    { tableName: "tenant_deny_policy", rlsEnabled: true },
+  ]);
+
+  const client = await runtimePool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.user_id', $1, true)", [ids.actorA]);
+    await client.query(
+      "SELECT set_config('app.organization_id', $1, true), set_config('app.company_id', '', true), set_config('app.plant_id', '', true)",
+      [ids.orgA],
+    );
+
+    const policies = await client.query(
+      'SELECT "organization_id"::text AS "organizationId" FROM "core"."tenant_deny_policy" ORDER BY "organization_id"',
+    );
+    assert.deepEqual(policies.rows, [{ organizationId: ids.orgA }]);
+
+    const events = await client.query(
+      'SELECT "organization_id"::text AS "organizationId" FROM "core"."tenant_deny_audit_event" ORDER BY "organization_id"',
+    );
+    assert.deepEqual(events.rows, [{ organizationId: ids.orgA }]);
+
+    await assert.rejects(
+      client.query(`
+        INSERT INTO "core"."tenant_deny_audit_event"
+          ("id", "organization_id", "actor_user_id", "event_type", "outcome", "reason_code")
+        VALUES ($1, $2, $3, 'POLICY_READ', 'SUCCESS', 'CROSS_TENANT_INSERT')
+      `, [randomUUID(), ids.orgB, ids.actorA]),
+      /row-level security policy/,
+    );
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
+  }
 });
 
 test("tenant role-definition adapter creates and revises custom roles under runtime RLS", async (t) => {
