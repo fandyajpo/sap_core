@@ -500,7 +500,7 @@ test("production authorization grant loader applies persisted DENY over the runt
       async $queryRaw(strings, ...values) {
         let statement = strings[0];
         for (let index = 0; index < values.length; index += 1) {
-          statement += `${index + 1}${strings[index + 1]}`;
+          statement += `$${index + 1}${strings[index + 1]}`;
         }
         const result = await client.query(statement, values);
         return result.rows;
