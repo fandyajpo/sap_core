@@ -343,6 +343,69 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     );
     assert.equal(hiddenLockedCatalog.length, 0, "FOR SHARE on SYSTEM catalog is hidden by RLS UPDATE-policy visibility");
 
+    // The production grant loader locks only mutable rows at Company and Plant
+    // scopes. SYSTEM role definitions remain joined for validation, not locked.
+    const { rows: lockedCompanyAssignments } = await runtime.query(
+      `SELECT ra."id"::text AS "id"
+         FROM "core"."company_role_assignment" ra
+         JOIN "core"."company_membership" cm
+           ON cm."id" = ra."companyMembershipId"
+          AND cm."userId" = $1
+          AND cm."organizationId" = $2::uuid
+          AND cm."companyId" = $3::uuid
+          AND cm."status" = 'ACTIVE'
+         JOIN "core"."organization_membership" om
+           ON om."id" = cm."organizationMembershipId"
+          AND om."userId" = cm."userId"
+          AND om."organizationId" = cm."organizationId"
+          AND om."status" = 'ACTIVE'
+         JOIN "core"."role_definition" rd
+           ON rd."id" = ra."roleDefinitionId"
+          AND rd."scope" = ra."role_scope"
+          AND rd."scope" = 'COMPANY'::"core"."RoleScope"
+          AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND rd."disabled_at" IS NULL
+          AND rd."permissions_locked_at" IS NOT NULL
+        WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+        FOR SHARE OF ra, cm, om`,
+      [ids.actorA, ids.orgA, ids.companyA1],
+    );
+    assert.equal(lockedCompanyAssignments.length, 1, "Company grants lock assignment and membership rows without locking SYSTEM definitions");
+
+    const { rows: lockedPlantAssignments } = await runtime.query(
+      `SELECT ra."id"::text AS "id"
+         FROM "core"."plant_role_assignment" ra
+         JOIN "core"."plant_assignment" pa
+           ON pa."id" = ra."plantAssignmentId"
+          AND pa."userId" = $1
+          AND pa."organizationId" = $2::uuid
+          AND pa."companyId" = $3::uuid
+          AND pa."plantId" = $4::uuid
+          AND pa."status" = 'ACTIVE'
+         JOIN "core"."company_membership" cm
+           ON cm."id" = pa."companyMembershipId"
+          AND cm."userId" = pa."userId"
+          AND cm."organizationId" = pa."organizationId"
+          AND cm."companyId" = pa."companyId"
+          AND cm."status" = 'ACTIVE'
+         JOIN "core"."organization_membership" om
+           ON om."id" = cm."organizationMembershipId"
+          AND om."userId" = cm."userId"
+          AND om."organizationId" = cm."organizationId"
+          AND om."status" = 'ACTIVE'
+         JOIN "core"."role_definition" rd
+           ON rd."id" = ra."roleDefinitionId"
+          AND rd."scope" = ra."role_scope"
+          AND rd."scope" = 'PLANT'::"core"."RoleScope"
+          AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+          AND rd."disabled_at" IS NULL
+          AND rd."permissions_locked_at" IS NOT NULL
+        WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+        FOR SHARE OF ra, pa, cm, om`,
+      [ids.actorA, ids.orgA, ids.companyA1, ids.plantA1],
+    );
+    assert.equal(lockedPlantAssignments.length, 1, "Plant grants lock assignment and ancestry rows without locking SYSTEM definitions");
+
     assert.equal(await count(runtime, '"core"."company_role_assignment"'), 2);
     assert.equal(await count(runtime, '"core"."plant_role_assignment"'), 2);
     assert.equal(await count(runtime, '"core"."role_definition"' , 'WHERE "code" = \'CUSTOM_B\''), 0);
