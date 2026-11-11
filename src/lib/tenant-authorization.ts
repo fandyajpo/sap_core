@@ -78,22 +78,38 @@ export async function requireTenantPermission(
     if (decision.reason === "EXPLICIT_DENY") {
       // Persist the denial evidence outside the protected transaction: this
       // transaction will be rolled back when the authorization error is thrown.
-      await prisma.$executeRaw`
-        INSERT INTO "core"."tenant_deny_audit_event"
-          ("id", "organization_id", "target_membership_id", "target_user_id",
-           "permission_definition_id", "scope", "company_id", "plant_id",
-           "actor_user_id", "event_type", "outcome", "reason_code", "occurred_at")
-        SELECT gen_random_uuid(), ${context.organizationId}::uuid,
-          ${context.organizationMembershipId}::uuid, ${context.userId},
-          pd."id", ${context.scope}::"core"."RoleScope",
-          ${context.companyId}::uuid, ${context.plantId}::uuid,
-          ${context.userId},
-          'POLICY_ENFORCEMENT_DENIED'::"core"."DenyAuditEventType",
-          'DENIED'::"core"."DenyAuditOutcome",
-          'EXPLICIT_DENY', clock_timestamp()
-        FROM "core"."permission_definition" pd
-        WHERE pd."code" = ${permission}
-      `;
+      await prisma.$transaction(async (auditTx) => {
+        // This audit write uses a separate transaction because the protected
+        // transaction is about to roll back. Re-establish the verified actor
+        // and tenant context so the append-only audit table can enforce RLS.
+        await lockVerifiedSessionRow(
+          (statement, values = []) => auditTx.$queryRawUnsafe<Array<{ id: string }>>(statement, ...values),
+          { sessionId: session.session.id, userId: session.user.id },
+        );
+        await auditTx.$queryRaw`SELECT set_config('app.user_id', ${session.user.id}, true)`;
+        const auditContext = await resolveTenantTargetContext(auditTx, session, request);
+        await auditTx.$queryRaw`
+          SELECT set_config('app.organization_id', ${auditContext.organizationId}, true),
+            set_config('app.company_id', ${auditContext.companyId ?? ""}, true),
+            set_config('app.plant_id', ${auditContext.plantId ?? ""}, true)
+        `;
+        await auditTx.$executeRaw`
+          INSERT INTO "core"."tenant_deny_audit_event"
+            ("id", "organization_id", "target_membership_id", "target_user_id",
+             "permission_definition_id", "scope", "company_id", "plant_id",
+             "actor_user_id", "event_type", "outcome", "reason_code", "occurred_at")
+          SELECT gen_random_uuid(), ${auditContext.organizationId}::uuid,
+            ${auditContext.organizationMembershipId}::uuid, ${auditContext.userId},
+            pd."id", ${auditContext.scope}::"core"."RoleScope",
+            ${auditContext.companyId}::uuid, ${auditContext.plantId}::uuid,
+            ${auditContext.userId},
+            'POLICY_ENFORCEMENT_DENIED'::"core"."DenyAuditEventType",
+            'DENIED'::"core"."DenyAuditOutcome",
+            'EXPLICIT_DENY', clock_timestamp()
+          FROM "core"."permission_definition" pd
+          WHERE pd."code" = ${permission}
+        `;
+      });
     }
     throw new TenantAuthorizationError(permission, decision.reason);
   }
