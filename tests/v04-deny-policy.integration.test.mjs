@@ -3,20 +3,27 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import pg from "pg";
+import { assertDisposablePostgresUrl } from "./v04-integration-safety.mjs";
 
 const { Pool } = pg;
-const databaseUrl = process.env.DATABASE_URL;
-const parsed = databaseUrl ? new URL(databaseUrl) : null;
-if (
-  process.env.V04_DENY_ALLOW_DISPOSABLE_DB !== "1" ||
-  !parsed ||
-  !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
-  parsed.port !== "55438" ||
-  decodeURIComponent(parsed.pathname.slice(1)) !== "sap_core_v04_deny_test"
-) {
-  throw new Error("DENY integration tests require explicit approval and localhost:55438/sap_core_v04_deny_test.");
-}
+// Strict target guard: the suite runs only against the exact disposable
+// database CI provisions for it (V04_DENY_ALLOW_DISPOSABLE_DB=1,
+// localhost:55438/sap_core_v04_deny_test). No fallback target is ever used.
+// Fixture lifecycle: tenant_deny_policy and tenant_deny_audit_event rows are
+// append-only (triggers raise SQLSTATE 55000 on UPDATE/DELETE), so the
+// fixtures created in before() and by the tests cannot be deleted afterwards;
+// complete cleanup is impossible by design and the safety boundary is strict
+// disposable-database isolation (see the teardown comment).
+assertDisposablePostgresUrl({
+  value: process.env.DATABASE_URL,
+  suiteLabel: "DENY integration tests",
+  optInEnvName: "V04_DENY_ALLOW_DISPOSABLE_DB",
+  expectedPort: 55438,
+  expectedDatabase: "sap_core_v04_deny_test",
+  expectedUsers: ["sap_core"],
+});
 
+const databaseUrl = process.env.DATABASE_URL;
 const pool = new Pool({ connectionString: databaseUrl, max: 8 });
 const ids = {
   actor: `deny-owner-${randomUUID()}`,
@@ -91,6 +98,12 @@ before(async () => {
 });
 
 after(async () => {
+  // No row cleanup is possible: the DENY policy and audit tables are
+  // append-only (SQLSTATE 55000 on UPDATE/DELETE), so the user, organization,
+  // membership, company, plant, policy and audit fixtures stay behind. The
+  // suite must therefore only ever run against the fresh disposable database
+  // locked in by the guard above; teardown closes the pool and surfaces any
+  // failure.
   await pool.end();
 });
 

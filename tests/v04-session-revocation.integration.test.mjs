@@ -3,21 +3,25 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import pg from "pg";
+import { assertDisposablePostgresUrl } from "./v04-integration-safety.mjs";
 
 const { Pool } = pg;
-const databaseUrl = process.env.DATABASE_URL;
-const parsed = databaseUrl ? new URL(databaseUrl) : null;
-const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+// Fixture lifecycle: one user row and its session rows, all created below with
+// test-generated IDs. Cleanup deletes the session rows first, then the user
+// (FK-safe), strictly by those IDs; no broad DELETEs, and rows the suite did
+// not create are never touched. The suite runs only against the exact
+// disposable database CI provisions — the guard below refuses anything else,
+// with no fallback.
+assertDisposablePostgresUrl({
+  value: process.env.DATABASE_URL,
+  suiteLabel: "Session-lock integration tests",
+  optInEnvName: "V04_SESSION_LOCK_ALLOW_DISPOSABLE_DB",
+  expectedPort: 55432,
+  expectedDatabase: "sap_core_v03_test",
+  expectedUsers: ["sap_core"],
+});
 
-if (
-  process.env.V04_SESSION_LOCK_ALLOW_DISPOSABLE_DB !== "1" ||
-  !parsed ||
-  !localHosts.has(parsed.hostname) ||
-  parsed.port !== "55432" ||
-  decodeURIComponent(parsed.pathname.slice(1)) !== "sap_core_v03_test"
-) {
-  throw new Error("Session-lock integration tests require explicit approval and localhost:55432/sap_core_v03_test.");
-}
+const databaseUrl = process.env.DATABASE_URL;
 
 const pool = new Pool({ connectionString: databaseUrl, max: 3 });
 const userId = `session-lock-user-${randomUUID()}`;
@@ -39,9 +43,21 @@ before(async () => {
 });
 
 after(async () => {
-  await pool.query('DELETE FROM "core"."session" WHERE "userId" = $1', [userId]);
-  await pool.query('DELETE FROM "core"."user" WHERE "id" = $1', [userId]);
-  await pool.end();
+  // Failure-safe: the pool closes even when fixture cleanup fails, and every
+  // cleanup error is preserved and rethrown instead of swallowed.
+  const errors = [];
+  try {
+    await pool.query('DELETE FROM "core"."session" WHERE "userId" = $1', [userId]);
+    await pool.query('DELETE FROM "core"."user" WHERE "id" = $1', [userId]);
+  } catch (error) {
+    errors.push(error);
+  }
+  try {
+    await pool.end();
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length) throw new AggregateError(errors, "Session-lock teardown failed; the disposable database must be discarded.");
 });
 
 async function insertSession(id, expiresAt = new Date(Date.now() + 60_000)) {

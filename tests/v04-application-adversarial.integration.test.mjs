@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import pg from "pg";
+import { assertDisposablePostgresUrl } from "./v04-integration-safety.mjs";
 import { RoleAssignmentError } from "../src/lib/role-assignment-service.ts";
 import { TenantTargetContextError } from "../src/lib/tenant-target-context-core.ts";
 import { createTenantRoleAssignmentAdapter } from "../src/lib/tenant-role-assignment-service-core.ts";
@@ -14,23 +15,27 @@ const runtimeUrl = process.env.DATABASE_URL;
 if (!migrationUrl || !runtimeUrl) {
   throw new Error("MIGRATION_DATABASE_URL and DATABASE_URL are required.");
 }
-if (process.env.V04_APP_ADVERSARIAL_ALLOW_DISPOSABLE_DB !== "1") {
-  throw new Error("V04 application adversarial tests require explicit disposable DB approval.");
-}
-
-function assertDisposableUrl(value, expectedUser) {
-  const parsed = new URL(value);
-  if (
-    !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
-    parsed.port !== "55438" ||
-    decodeURIComponent(parsed.pathname.slice(1)) !== "sap_core_v04_app_test" ||
-    decodeURIComponent(parsed.username) !== expectedUser
-  ) {
-    throw new Error(`V04 application tests require localhost:55438/sap_core_v04_app_test as ${expectedUser}.`);
-  }
-}
-assertDisposableUrl(migrationUrl, "sap_core");
-assertDisposableUrl(runtimeUrl, "sap_core_runtime");
+// Strict target guard: the suite runs only against the exact disposable
+// database CI provisions for it (V04_APP_ADVERSARIAL_ALLOW_DISPOSABLE_DB=1,
+// localhost:55438/sap_core_v04_app_test), as the owner role for migrations and
+// fixtures and as the dedicated runtime role the suite itself provisions. No
+// fallback target is ever used.
+assertDisposablePostgresUrl({
+  value: migrationUrl,
+  suiteLabel: "V04 application adversarial tests",
+  optInEnvName: "V04_APP_ADVERSARIAL_ALLOW_DISPOSABLE_DB",
+  expectedPort: 55438,
+  expectedDatabase: "sap_core_v04_app_test",
+  expectedUsers: ["sap_core"],
+});
+assertDisposablePostgresUrl({
+  value: runtimeUrl,
+  suiteLabel: "V04 application adversarial tests",
+  optInEnvName: "V04_APP_ADVERSARIAL_ALLOW_DISPOSABLE_DB",
+  expectedPort: 55438,
+  expectedDatabase: "sap_core_v04_app_test",
+  expectedUsers: ["sap_core_runtime"],
+});
 
 const owner = new Client({ connectionString: migrationUrl });
 const runtimePool = new Pool({ connectionString: runtimeUrl, max: 4 });
@@ -63,6 +68,7 @@ const ids = {
   plantAssignmentRecipientB: randomUUID(),
 };
 let ownerConnected = false;
+let runtimeRoleCreated = false;
 let memberRoleDefinitionId;
 let companyMemberRoleDefinitionId;
 let companyAdminRoleDefinitionId;
@@ -118,15 +124,22 @@ before(async () => {
   await owner.connect();
   ownerConnected = true;
 
-  await owner.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sap_core_runtime') THEN
-        CREATE ROLE sap_core_runtime LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-      END IF;
-    END
-    $$;
-  `);
+  // Adversarial guard: the suite must provision its own runtime role on a
+  // fresh disposable instance. A pre-existing sap_core_runtime means the
+  // database is not a fresh disposable database (the role's original state —
+  // grants, options, memberships — could not be restored after the run), so
+  // refuse instead of silently granting onto it, and require a fresh
+  // disposable instance.
+  const { rows: preExistingRuntimeRole } = await owner.query(
+    "SELECT 1 FROM pg_roles WHERE rolname = 'sap_core_runtime'",
+  );
+  if (preExistingRuntimeRole.length > 0) {
+    throw new Error(
+      "sap_core_runtime already exists; V04 application adversarial tests require a fresh disposable database where the runtime role does not pre-exist.",
+    );
+  }
+  await owner.query("CREATE ROLE sap_core_runtime LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE");
+  runtimeRoleCreated = true;
   await owner.query('GRANT USAGE ON SCHEMA "core" TO sap_core_runtime');
   await owner.query('GRANT SELECT ON "core"."user" TO sap_core_runtime');
   await owner.query(`
@@ -339,8 +352,82 @@ before(async () => {
 });
 
 after(async () => {
-  await runtimePool.end();
-  if (ownerConnected) await owner.end();
+  // Failure-safe teardown: fixture cleanup runs only through the owner
+  // connection, deletes rows in FK-safe order (children before parents),
+  // strictly by the test-generated IDs captured in ids.* — never by broad
+  // DELETEs — and never touches pre-existing rows (system role definitions,
+  // permission catalog). The role-assignment adapter commits extra
+  // organization_role_assignment rows during the tests; they are parented to
+  // the tracked membership IDs and are removed here. The runtime role is
+  // dropped only if this suite created it, and only after its test-owned
+  // dependencies are gone. Both pools close even when cleanup fails, and every
+  // cleanup error is preserved and rethrown instead of swallowed.
+  const errors = [];
+  if (ownerConnected) {
+    try {
+      await owner.query(
+        'DELETE FROM "core"."organization_role_assignment" WHERE "organizationMembershipId" = ANY($1::uuid[])',
+        [[ids.membershipA, ids.recipientMembershipA, ids.membershipB, ids.membershipC, ids.membershipD, ids.recipientMembershipB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."company_role_assignment" WHERE "companyMembershipId" = ANY($1::uuid[])',
+        [[ids.companyMembershipActorC, ids.companyMembershipActorD, ids.companyMembershipRecipientA, ids.companyMembershipRecipientB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."plant_role_assignment" WHERE "plantAssignmentId" = ANY($1::uuid[])',
+        [[ids.plantAssignmentActorD, ids.plantAssignmentRecipientA, ids.plantAssignmentRecipientB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."plant_assignment" WHERE "id" = ANY($1::uuid[])',
+        [[ids.plantAssignmentActorD, ids.plantAssignmentRecipientA, ids.plantAssignmentRecipientB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."company_membership" WHERE "id" = ANY($1::uuid[])',
+        [[ids.companyMembershipActorC, ids.companyMembershipActorD, ids.companyMembershipRecipientA, ids.companyMembershipRecipientB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."plant" WHERE "id" = ANY($1::uuid[])',
+        [[ids.plantA1, ids.plantA2, ids.plantB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."company" WHERE "id" = ANY($1::uuid[])',
+        [[ids.companyA, ids.companyB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."organization_membership" WHERE "id" = ANY($1::uuid[])',
+        [[ids.membershipA, ids.recipientMembershipA, ids.membershipB, ids.membershipC, ids.membershipD, ids.recipientMembershipB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."organization" WHERE "id" = ANY($1::uuid[])',
+        [[ids.orgA, ids.orgB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."user" WHERE "id" = ANY($1::text[])',
+        [[ids.actorA, ids.recipientA, ids.actorB, ids.actorC, ids.actorD, ids.recipientB]],
+      );
+    } catch (error) {
+      errors.push(error);
+    }
+    if (runtimeRoleCreated) {
+      try {
+        // Revoke everything first (including the column-level UPDATE grant on
+        // tenant_deny_policy) so DROP ROLE cannot fail on leftover privileges.
+        await owner.query('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA "core" FROM sap_core_runtime');
+        await owner.query(
+          'REVOKE UPDATE ("revoked_at", "revoked_by_user_id", "revoke_reason") ON "core"."tenant_deny_policy" FROM sap_core_runtime',
+        );
+        await owner.query('REVOKE USAGE ON SCHEMA "core" FROM sap_core_runtime');
+        await owner.query("DROP ROLE sap_core_runtime");
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+  }
+  const outcomes = await Promise.allSettled([runtimePool.end(), ownerConnected ? owner.end() : Promise.resolve()]);
+  for (const outcome of outcomes) {
+    if (outcome.status === "rejected") errors.push(outcome.reason);
+  }
+  if (errors.length) throw new AggregateError(errors, "V04 application adversarial teardown failed; the disposable database must be discarded.");
 });
 
 test("production role-assignment adapter enforces verified-session actor and tenant boundaries on non-owner RLS role", async (t) => {

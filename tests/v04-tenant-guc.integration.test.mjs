@@ -2,26 +2,32 @@ import "dotenv/config";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import pg from "pg";
+import { assertDisposablePostgresUrl } from "./v04-integration-safety.mjs";
 
 const { Pool } = pg;
+// Fixture lifecycle: this suite inserts no rows — it exercises
+// transaction-local GUCs on pooled backends only — so teardown only has to
+// close its pools. It must still run exclusively against the exact disposable
+// database CI provisions for it; the guard below refuses anything else and
+// there is no fallback.
+assertDisposablePostgresUrl({
+  value: process.env.DATABASE_URL,
+  suiteLabel: "V04 GUC tests",
+  optInEnvName: "V04_ALLOW_DISPOSABLE_DB",
+  expectedPort: 55435,
+  expectedDatabase: "sap_core_d7_test",
+  expectedUsers: ["sap_core"],
+});
+
 const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error("DATABASE_URL is required for the V04 GUC integration suite.");
-
-const parsed = new URL(databaseUrl);
-const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
-if (
-  process.env.V04_ALLOW_DISPOSABLE_DB !== "1" ||
-  !localHosts.has(parsed.hostname) ||
-  parsed.port !== "55435" ||
-  decodeURIComponent(parsed.pathname.slice(1)) !== "sap_core_d7_test"
-) {
-  throw new Error("V04 GUC tests require explicit disposable DB approval and localhost:55435/sap_core_d7_test.");
-}
-
 const pool = new Pool({ connectionString: databaseUrl, max: 1 });
 const concurrentPool = new Pool({ connectionString: databaseUrl, max: 2 });
 after(async () => {
-  await Promise.all([pool.end(), concurrentPool.end()]);
+  // Failure-safe: both pools close even if one end() rejects, and the
+  // failure is surfaced instead of swallowed.
+  const outcomes = await Promise.allSettled([pool.end(), concurrentPool.end()]);
+  const errors = outcomes.filter((outcome) => outcome.status === "rejected").map((outcome) => outcome.reason);
+  if (errors.length) throw new AggregateError(errors, "V04 GUC teardown failed to close its connection pools.");
 });
 
 test("transaction-local tenant GUCs remain on one backend and clear after commit, rollback, and exceptions", async () => {
