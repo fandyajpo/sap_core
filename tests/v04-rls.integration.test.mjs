@@ -364,25 +364,32 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     assert.equal(await count(runtime, '"core"."tenant_deny_audit_event"'), 1, "Organization context reveals only its DENY audit event");
     assert.equal(await count(runtime, '"core"."tenant_deny_audit_event"', `WHERE "organization_id" = '${ids.orgB}'::uuid`), 0, "foreign Organization DENY audit remains hidden");
 
-    await assert.rejects(
-      runtime.query(
-        `INSERT INTO "core"."tenant_deny_policy"
-         ("id","organization_id","target_membership_id","target_user_id",
-          "permission_definition_id","scope","reason","issued_by_user_id")
-         VALUES ($1,$2,$3,$4,$5,'ORGANIZATION','cross-tenant RLS probe',$6)`,
-        [randomUUID(), ids.orgB, ids.orgMembershipB, ids.actorB, ids.denyPermissionId, ids.actorA],
-      ),
+    async function assertRejectedWithoutAbortingTransaction(query, values, predicate, message) {
+      const savepoint = `rls_reject_probe_${randomUUID().replaceAll("-", "")}`;
+      await runtime.query(`SAVEPOINT "${savepoint}"`);
+      try {
+        await assert.rejects(runtime.query(query, values), predicate, message);
+      } finally {
+        await runtime.query(`ROLLBACK TO SAVEPOINT "${savepoint}"`);
+        await runtime.query(`RELEASE SAVEPOINT "${savepoint}"`);
+      }
+    }
+
+    await assertRejectedWithoutAbortingTransaction(
+      `INSERT INTO "core"."tenant_deny_policy"
+       ("id","organization_id","target_membership_id","target_user_id",
+        "permission_definition_id","scope","reason","issued_by_user_id")
+       VALUES ($1,$2,$3,$4,$5,'ORGANIZATION','cross-tenant RLS probe',$6)`,
+      [randomUUID(), ids.orgB, ids.orgMembershipB, ids.actorB, ids.denyPermissionId, ids.actorA],
       (error) => ["42501", "23514"].includes(error.code),
       "RLS or the tenant-scoped membership guard must reject a DENY policy for another Organization",
     );
-    await assert.rejects(
-      runtime.query(
-        `INSERT INTO "core"."tenant_deny_audit_event"
-         ("id","policy_id","organization_id","target_membership_id","target_user_id",
-          "permission_definition_id","scope","actor_user_id","event_type","outcome","reason_code")
-         VALUES ($1,$2,$3,$4,$5,$6,'ORGANIZATION',$7,'POLICY_READ','SUCCESS','RLS_PROBE')`,
-        [randomUUID(), ids.denyPolicyB, ids.orgB, ids.orgMembershipB, ids.actorB, ids.denyPermissionId, ids.actorA],
-      ),
+    await assertRejectedWithoutAbortingTransaction(
+      `INSERT INTO "core"."tenant_deny_audit_event"
+       ("id","policy_id","organization_id","target_membership_id","target_user_id",
+        "permission_definition_id","scope","actor_user_id","event_type","outcome","reason_code")
+       VALUES ($1,$2,$3,$4,$5,$6,'ORGANIZATION',$7,'POLICY_READ','SUCCESS','RLS_PROBE')`,
+      [randomUUID(), ids.denyPolicyB, ids.orgB, ids.orgMembershipB, ids.actorB, ids.denyPermissionId, ids.actorA],
       (error) => error.code === "42501",
       "RLS must reject inserting a DENY audit event for another Organization",
     );
