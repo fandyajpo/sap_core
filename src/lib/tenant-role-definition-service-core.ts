@@ -138,6 +138,52 @@ async function loadOrganizationGrantContext(
     (row.effect === "ALLOW" ? grant.allow : grant.deny).push(row.permissionCode as AuthorizationPermission);
   }
 
+  const membershipRows = await session.query<{ id: string }>(
+    `SELECT "id"::text AS "id"
+       FROM "core"."organization_membership"
+      WHERE "userId" = $1
+        AND "organizationId" = $2::uuid
+        AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+      LIMIT 1
+      FOR SHARE`,
+    [actorUserId, organizationId],
+  );
+  const actorMembershipId = membershipRows[0]?.id;
+  if (!actorMembershipId) {
+    throw new RoleDefinitionError("AUTHORIZATION_DENIED", "An active Organization membership is required.");
+  }
+
+  // Dedicated tenant DENY policies must be included here as well as in the
+  // general tenant authorization loader. Role create/revise uses this adapter
+  // and would otherwise bypass membership-bound DENY policies.
+  const policyDenyRows = await session.query<{ permissionCode: string }>(
+    `SELECT pd."code" AS "permissionCode"
+       FROM "core"."tenant_deny_policy" p
+       JOIN "core"."permission_definition" pd
+         ON pd."id" = p."permission_definition_id"
+      WHERE p."organization_id" = $1::uuid
+        AND p."target_membership_id" = $2::uuid
+        AND p."scope" = 'ORGANIZATION'::"core"."RoleScope"
+        AND p."company_id" IS NULL
+        AND p."plant_id" IS NULL
+        AND p."revoked_at" IS NULL
+        AND (p."expires_at" IS NULL OR p."expires_at" > clock_timestamp())
+      FOR SHARE OF p`,
+    [organizationId, actorMembershipId],
+  );
+  const denyEligiblePermissions = new Set([
+    "organization.read", "organization.update", "organization.members.read",
+    "organization.members.manage", "company.read", "company.manage",
+    "company.members.manage", "plant.read", "plant.manage",
+    "plant.assignments.manage", "roles.read", "roles.create",
+    "roles.revise", "roles.assign",
+  ]);
+  for (const row of policyDenyRows) {
+    if (!denyEligiblePermissions.has(row.permissionCode) || !knownPermissions.has(row.permissionCode)) {
+      throw new RoleDefinitionError("AUTHORIZATION_DENIED", "A persisted DENY policy contains a protected or unknown permission identifier.");
+    }
+  }
+
   const grants: AuthorizationRoleGrant[] = [];
   const denyPermissions = new Set<AuthorizationPermission>();
   for (const grant of byAssignment.values()) {
@@ -151,6 +197,9 @@ async function loadOrganizationGrantContext(
       isBreakGlass: false,
     });
     for (const permission of grant.deny) denyPermissions.add(permission);
+  }
+  for (const row of policyDenyRows) {
+    denyPermissions.add(row.permissionCode as AuthorizationPermission);
   }
   const denies: ExplicitPermissionDeny[] = denyPermissions.size
     ? [{ scope: "ORGANIZATION", scopeId: organizationId, permissions: [...denyPermissions] }]
