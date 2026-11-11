@@ -402,7 +402,6 @@ async function recordDeniedTenantDenyAttempt(
     console.error("[DENY audit] denied-attempt event was not persisted", {
       eventType,
       errorName: error instanceof Error ? error.name : "UnknownError",
-      errorMessage: error instanceof Error ? error.message : "Unknown error",
     });
     return false;
   }
