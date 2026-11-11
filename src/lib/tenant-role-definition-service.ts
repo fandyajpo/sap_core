@@ -41,6 +41,28 @@ async function loadOrganizationGrantContext(
   actorUserId: string,
   organizationId: string,
 ): Promise<{ grants: AuthorizationRoleGrant[]; denies: ExplicitPermissionDeny[]; rows: PersistedOrganizationGrantRow[] }> {
+  // Only Organization-owned custom role definitions are mutable under
+  // tenant RLS. Lock those assigned definitions separately; SYSTEM role
+  // definitions and permission-grant snapshots are read-only catalogs.
+  await session.query(
+    `SELECT rd."id"
+       FROM "core"."organization_role_assignment" ra
+       JOIN "core"."organization_membership" om
+         ON om."id" = ra."organizationMembershipId"
+        AND om."userId" = $1
+        AND om."organizationId" = $2::uuid
+        AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+       JOIN "core"."role_definition" rd
+         ON rd."id" = ra."roleDefinitionId"
+        AND rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+        AND rd."ownerOrganizationId" = om."organizationId"
+        AND rd."disabled_at" IS NULL
+       WHERE ra."revoked_at" IS NULL
+         AND ra."is_break_glass" = FALSE
+       FOR SHARE OF rd`,
+    [actorUserId, organizationId],
+  );
+
   const rows = await session.query<PersistedOrganizationGrantRow>(
     `SELECT
        ra."id"::text AS "assignmentId",
@@ -77,7 +99,7 @@ async function loadOrganizationGrantContext(
        ON dp."permission_definition_id" = pd."id"
      WHERE ra."revoked_at" IS NULL
        AND ra."is_break_glass" = FALSE
-     FOR SHARE OF ra, om, rd, g`,
+     FOR SHARE OF ra, om`,
     [actorUserId, organizationId],
   );
 
@@ -150,17 +172,33 @@ function createAuthorization(sessionUserId: string) {
          WHERE "userId" = $1
            AND "organizationId" = $2::uuid
            AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-         LIMIT 1
-         FOR SHARE`,
+         LIMIT 1`,
         [sessionUserId, input.organizationId],
       );
       if (!memberships[0]) {
         throw new RoleDefinitionError("AUTHORIZATION_DENIED", "An active Organization membership is required.");
       }
+
+      // Bootstrap visibility permits the actor to read their own active
+      // membership, but row locks also require the tenant UPDATE policy.
+      // Install the validated Organization context before locking that exact row.
       await transaction.query(
         "SELECT set_config('app.organization_id', $1, true), set_config('app.company_id', '', true), set_config('app.plant_id', '', true)",
         [input.organizationId],
       );
+      const lockedMemberships = await transaction.query<{ id: string }>(
+        `SELECT "id" FROM "core"."organization_membership"
+         WHERE "id" = $1::uuid
+           AND "userId" = $2
+           AND "organizationId" = $3::uuid
+           AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+         LIMIT 1
+         FOR SHARE`,
+        [memberships[0].id, sessionUserId, input.organizationId],
+      );
+      if (!lockedMemberships[0]) {
+        throw new RoleDefinitionError("AUTHORIZATION_DENIED", "An active Organization membership is required.");
+      }
     },
 
     async getDelegablePermissions(
