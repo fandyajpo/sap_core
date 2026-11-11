@@ -290,8 +290,24 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
 
     await runtime.query("SELECT set_config('app.user_id', $1, true)", [ids.actorA]);
     assert.equal(await count(runtime, '"core"."organization_membership"'), 1, "bootstrap reveals only the actor's own ACTIVE membership");
+    const { rows: hiddenBootstrapLock } = await runtime.query(
+      `SELECT om."id"::text AS "id"
+         FROM "core"."organization_membership" om
+        WHERE om."id" = $1::uuid AND om."userId" = $2 AND om."status" = 'ACTIVE'
+        FOR SHARE OF om`,
+      [ids.orgMembershipA, ids.actorA],
+    );
+    assert.equal(hiddenBootstrapLock.length, 0, "bootstrap SELECT visibility does not permit a row lock before Organization context");
 
     await runtime.query("SELECT set_config('app.organization_id', $1, true)", [ids.orgA]);
+    const { rows: lockedBootstrapMembership } = await runtime.query(
+      `SELECT om."id"::text AS "id"
+         FROM "core"."organization_membership" om
+        WHERE om."id" = $1::uuid AND om."userId" = $2 AND om."status" = 'ACTIVE'
+        FOR SHARE OF om`,
+      [ids.orgMembershipA, ids.actorA],
+    );
+    assert.equal(lockedBootstrapMembership.length, 1, "the exact membership becomes lockable after tenant context is installed");
     assert.equal(await count(runtime, '"core"."organization"'), 1);
     assert.equal(await count(runtime, '"core"."company"'), 2);
     assert.equal(await count(runtime, '"core"."plant"'), 2);
