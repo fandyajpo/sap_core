@@ -352,75 +352,23 @@ before(async () => {
 });
 
 after(async () => {
-  // Failure-safe teardown: fixture cleanup runs only through the owner
-  // connection, deletes rows in FK-safe order (children before parents),
-  // strictly by the test-generated IDs captured in ids.* — never by broad
-  // DELETEs — and never touches pre-existing rows (system role definitions,
-  // permission catalog). The role-assignment adapter commits extra
-  // organization_role_assignment rows during the tests; they are parented to
-  // the tracked membership IDs and are removed here. The runtime role is
-  // dropped only if this suite created it, and only after its test-owned
-  // dependencies are gone. Both pools close even when cleanup fails, and every
-  // cleanup error is preserved and rethrown instead of swallowed.
+  // Role-assignment history is append-only: the database trigger rejects
+  // DELETE as well as UPDATE. Keep all test-generated tenant and assignment
+  // fixtures inside this job-scoped disposable database; CI discards the
+  // PostgreSQL service after the suite. Only remove the runtime role created
+  // by this suite, after revoking its privileges. Both pools close even when
+  // role cleanup fails, and every cleanup error is preserved and rethrown.
   const errors = [];
-  if (ownerConnected) {
+  if (ownerConnected && runtimeRoleCreated) {
     try {
+      await owner.query('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA "core" FROM sap_core_runtime');
       await owner.query(
-        'DELETE FROM "core"."organization_role_assignment" WHERE "organizationMembershipId" = ANY($1::uuid[])',
-        [[ids.membershipA, ids.recipientMembershipA, ids.membershipB, ids.membershipC, ids.membershipD, ids.recipientMembershipB]],
+        'REVOKE UPDATE ("revoked_at", "revoked_by_user_id", "revoke_reason") ON "core"."tenant_deny_policy" FROM sap_core_runtime',
       );
-      await owner.query(
-        'DELETE FROM "core"."company_role_assignment" WHERE "companyMembershipId" = ANY($1::uuid[])',
-        [[ids.companyMembershipActorC, ids.companyMembershipActorD, ids.companyMembershipRecipientA, ids.companyMembershipRecipientB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."plant_role_assignment" WHERE "plantAssignmentId" = ANY($1::uuid[])',
-        [[ids.plantAssignmentActorD, ids.plantAssignmentRecipientA, ids.plantAssignmentRecipientB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."plant_assignment" WHERE "id" = ANY($1::uuid[])',
-        [[ids.plantAssignmentActorD, ids.plantAssignmentRecipientA, ids.plantAssignmentRecipientB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."company_membership" WHERE "id" = ANY($1::uuid[])',
-        [[ids.companyMembershipActorC, ids.companyMembershipActorD, ids.companyMembershipRecipientA, ids.companyMembershipRecipientB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."plant" WHERE "id" = ANY($1::uuid[])',
-        [[ids.plantA1, ids.plantA2, ids.plantB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."company" WHERE "id" = ANY($1::uuid[])',
-        [[ids.companyA, ids.companyB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."organization_membership" WHERE "id" = ANY($1::uuid[])',
-        [[ids.membershipA, ids.recipientMembershipA, ids.membershipB, ids.membershipC, ids.membershipD, ids.recipientMembershipB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."organization" WHERE "id" = ANY($1::uuid[])',
-        [[ids.orgA, ids.orgB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."user" WHERE "id" = ANY($1::text[])',
-        [[ids.actorA, ids.recipientA, ids.actorB, ids.actorC, ids.actorD, ids.recipientB]],
-      );
+      await owner.query('REVOKE USAGE ON SCHEMA "core" FROM sap_core_runtime');
+      await owner.query("DROP ROLE sap_core_runtime");
     } catch (error) {
       errors.push(error);
-    }
-    if (runtimeRoleCreated) {
-      try {
-        // Revoke everything first (including the column-level UPDATE grant on
-        // tenant_deny_policy) so DROP ROLE cannot fail on leftover privileges.
-        await owner.query('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA "core" FROM sap_core_runtime');
-        await owner.query(
-          'REVOKE UPDATE ("revoked_at", "revoked_by_user_id", "revoke_reason") ON "core"."tenant_deny_policy" FROM sap_core_runtime',
-        );
-        await owner.query('REVOKE USAGE ON SCHEMA "core" FROM sap_core_runtime');
-        await owner.query("DROP ROLE sap_core_runtime");
-      } catch (error) {
-        errors.push(error);
-      }
     }
   }
   const outcomes = await Promise.allSettled([runtimePool.end(), ownerConnected ? owner.end() : Promise.resolve()]);
