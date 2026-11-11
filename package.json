@@ -39,7 +39,7 @@
     "test:v04-deny-policy": "node --test tests/v04-deny-policy.unit.test.mjs",
     "test:v04-deny-policy:integration": "node --test tests/v04-deny-policy.integration.test.mjs",
     "test:v04-deny-policy:http": "node --test tests/v04-deny-policy.http.integration.test.mjs",
-    "test:v04-application-adversarial": "node --test tests/v04-application-adversarial.integration.test.mjs",
+    "test:v04-application-adversarial": "node --conditions=react-server --test tests/v04-application-adversarial.integration.test.mjs",
     "test:v04-role-definition-owner-pre-read": "node --test tests/v04-role-definition-owner-pre-read.unit.test.mjs",
     "test:client-data": "node --test tests/client-data.unit.test.mjs",
     "test:data-table": "node --test tests/data-table.unit.test.mjs",
