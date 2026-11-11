@@ -171,6 +171,11 @@ test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke"
     reason: "HTTP integration test",
   };
 
+  for (const expiresAt of [1, "", "2026-11-30T12:00:00", "not-a-date"]) {
+    const invalidExpiry = await denyRequest(owner, "POST", "", { ...input, expiresAt });
+    assert.equal(invalidExpiry.status, 400, `invalid expiry ${JSON.stringify(expiresAt)} must be rejected`);
+  }
+
   const created = await denyRequest(owner, "POST", "", input);
   assert.equal(created.status, 201, JSON.stringify(created.body));
   const policyId = created.body.policy.id;
