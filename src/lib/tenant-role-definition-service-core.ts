@@ -1,0 +1,277 @@
+import {
+  authorizationPermissions,
+  evaluateAuthorization,
+  type AuthorizationPermission,
+  type AuthorizationRoleGrant,
+  type ExplicitPermissionDeny,
+} from "./authorization-policy-core.ts";
+import {
+  createRoleDefinitionService,
+  RoleDefinitionError,
+  type CustomRoleCreateInput,
+  type CustomRoleReviseInput,
+  type RoleDefinitionRecord,
+} from "./role-definition-service.ts";
+import type { ScopedAccessDatabase, ScopedAccessSession } from "./scoped-access-service.ts";
+import { TenantTargetContextError } from "./tenant-target-context-core.ts";
+
+type SessionProvider = () => Promise<{ user?: { id?: string | null } | null } | null>;
+
+export interface TenantRoleDefinitionAdapterDependencies {
+  database: ScopedAccessDatabase;
+  getCurrentSession: SessionProvider;
+}
+
+interface PersistedOrganizationGrantRow {
+  assignmentId: string;
+  roleCode: string;
+  roleKind: "SYSTEM" | "ORGANIZATION_CUSTOM";
+  scope: "ORGANIZATION";
+  scopeId: string;
+  ownerOrganizationId: string | null;
+  permissionCode: string;
+  effect: "ALLOW" | "DENY";
+  isDelegable: boolean;
+}
+
+const knownPermissions = new Set<string>(authorizationPermissions);
+const builtInRoles = new Set(["ORG_OWNER", "ORG_ADMIN", "ORG_MEMBER"]);
+
+async function loadOrganizationGrantContext(
+  session: ScopedAccessSession,
+  actorUserId: string,
+  organizationId: string,
+): Promise<{ grants: AuthorizationRoleGrant[]; denies: ExplicitPermissionDeny[]; rows: PersistedOrganizationGrantRow[] }> {
+  // Only Organization-owned custom role definitions are mutable under
+  // tenant RLS. Lock those assigned definitions separately; SYSTEM role
+  // definitions and permission-grant snapshots are read-only catalogs.
+  await session.query(
+    `SELECT rd."id"
+       FROM "core"."organization_role_assignment" ra
+       JOIN "core"."organization_membership" om
+         ON om."id" = ra."organizationMembershipId"
+        AND om."userId" = $1
+        AND om."organizationId" = $2::uuid
+        AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+       JOIN "core"."role_definition" rd
+         ON rd."id" = ra."roleDefinitionId"
+        AND rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+        AND rd."ownerOrganizationId" = om."organizationId"
+        AND rd."disabled_at" IS NULL
+       WHERE ra."revoked_at" IS NULL
+         AND ra."is_break_glass" = FALSE
+       FOR SHARE OF rd`,
+    [actorUserId, organizationId],
+  );
+
+  const rows = await session.query<PersistedOrganizationGrantRow>(
+    `SELECT
+       ra."id"::text AS "assignmentId",
+       rd."code" AS "roleCode",
+       rd."kind"::text AS "roleKind",
+       rd."scope"::text AS "scope",
+       om."organizationId"::text AS "scopeId",
+       rd."ownerOrganizationId"::text AS "ownerOrganizationId",
+       pd."code" AS "permissionCode",
+       g."effect"::text AS "effect",
+       COALESCE(dp."is_delegable", FALSE) AS "isDelegable"
+     FROM "core"."organization_role_assignment" ra
+     JOIN "core"."organization_membership" om
+       ON om."id" = ra."organizationMembershipId"
+      AND om."userId" = $1
+      AND om."organizationId" = $2::uuid
+      AND om."status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+     JOIN "core"."role_definition" rd
+       ON rd."id" = ra."roleDefinitionId"
+      AND rd."scope" = ra."role_scope"
+      AND rd."scope" = 'ORGANIZATION'::"core"."RoleScope"
+      AND rd."disabled_at" IS NULL
+      AND rd."permissions_locked_at" IS NOT NULL
+      AND (
+        rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
+        OR (
+          rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+          AND rd."ownerOrganizationId" = om."organizationId"
+        )
+      )
+     JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
+     JOIN "core"."permission_definition" pd ON pd."id" = g."permission_definition_id"
+     LEFT JOIN "core"."permission_delegation_policy" dp
+       ON dp."permission_definition_id" = pd."id"
+     WHERE ra."revoked_at" IS NULL
+       AND ra."is_break_glass" = FALSE
+     FOR SHARE OF ra, om`,
+    [actorUserId, organizationId],
+  );
+
+  const byAssignment = new Map<string, {
+    roleCode: string;
+    roleKind: "SYSTEM" | "ORGANIZATION_CUSTOM";
+    scopeId: string;
+    ownerOrganizationId: string | null;
+    allow: AuthorizationPermission[];
+    deny: AuthorizationPermission[];
+  }>();
+  for (const row of rows) {
+    if (
+      !knownPermissions.has(row.permissionCode)
+      || (row.roleKind === "SYSTEM" && (!builtInRoles.has(row.roleCode) || row.ownerOrganizationId !== null))
+      || (row.roleKind !== "SYSTEM" && row.roleKind !== "ORGANIZATION_CUSTOM")
+      || (row.effect !== "ALLOW" && row.effect !== "DENY")
+      || row.scope !== "ORGANIZATION"
+      || (row.roleKind === "ORGANIZATION_CUSTOM" && (builtInRoles.has(row.roleCode) || row.ownerOrganizationId !== organizationId))
+    ) {
+      throw new RoleDefinitionError("AUTHORIZATION_DENIED", "Persisted Organization role grants contain an invalid policy identifier or owner.");
+    }
+    let grant = byAssignment.get(row.assignmentId);
+    if (!grant) {
+      grant = {
+        roleCode: row.roleCode,
+        roleKind: row.roleKind,
+        scopeId: row.scopeId,
+        ownerOrganizationId: row.ownerOrganizationId,
+        allow: [],
+        deny: [],
+      };
+      byAssignment.set(row.assignmentId, grant);
+    }
+    (row.effect === "ALLOW" ? grant.allow : grant.deny).push(row.permissionCode as AuthorizationPermission);
+  }
+
+  const grants: AuthorizationRoleGrant[] = [];
+  const denyPermissions = new Set<AuthorizationPermission>();
+  for (const grant of byAssignment.values()) {
+    grants.push({
+      roleCode: grant.roleCode,
+      roleKind: grant.roleKind,
+      scope: "ORGANIZATION",
+      scopeId: grant.scopeId,
+      ownerOrganizationId: grant.ownerOrganizationId,
+      customPermissions: [...new Set(grant.allow)],
+      isBreakGlass: false,
+    });
+    for (const permission of grant.deny) denyPermissions.add(permission);
+  }
+  const denies: ExplicitPermissionDeny[] = denyPermissions.size
+    ? [{ scope: "ORGANIZATION", scopeId: organizationId, permissions: [...denyPermissions] }]
+    : [];
+  return { grants, denies, rows };
+}
+
+function createAuthorization(sessionUserId: string) {
+  return {
+    async initializeContext(
+      input: { actorUserId: string; organizationId: string },
+      transaction: ScopedAccessSession,
+    ) {
+      if (input.actorUserId !== sessionUserId) {
+        throw new RoleDefinitionError("AUTHORIZATION_DENIED", "Role Definition actor does not match the verified session.");
+      }
+      await transaction.query("SELECT set_config('app.user_id', $1, true)", [sessionUserId]);
+      const memberships = await transaction.query<{ id: string }>(
+        `SELECT "id" FROM "core"."organization_membership"
+         WHERE "userId" = $1
+           AND "organizationId" = $2::uuid
+           AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+         LIMIT 1`,
+        [sessionUserId, input.organizationId],
+      );
+      if (!memberships[0]) {
+        throw new RoleDefinitionError("AUTHORIZATION_DENIED", "An active Organization membership is required.");
+      }
+
+      // Bootstrap visibility permits the actor to read their own active
+      // membership, but row locks also require the tenant UPDATE policy.
+      // Install the validated Organization context before locking that exact row.
+      await transaction.query(
+        "SELECT set_config('app.organization_id', $1, true), set_config('app.company_id', '', true), set_config('app.plant_id', '', true)",
+        [input.organizationId],
+      );
+      const lockedMemberships = await transaction.query<{ id: string }>(
+        `SELECT "id" FROM "core"."organization_membership"
+         WHERE "id" = $1::uuid
+           AND "userId" = $2
+           AND "organizationId" = $3::uuid
+           AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+         LIMIT 1
+         FOR SHARE`,
+        [memberships[0].id, sessionUserId, input.organizationId],
+      );
+      if (!lockedMemberships[0]) {
+        throw new RoleDefinitionError("AUTHORIZATION_DENIED", "An active Organization membership is required.");
+      }
+    },
+
+    async getDelegablePermissions(
+      input: { actorUserId: string; organizationId: string },
+      transaction: ScopedAccessSession,
+    ): Promise<readonly AuthorizationPermission[]> {
+      const loaded = await loadOrganizationGrantContext(transaction, input.actorUserId, input.organizationId);
+      const allowed = new Set(
+        loaded.rows
+          .filter((row) => row.effect === "ALLOW" && row.isDelegable)
+          .map((row) => row.permissionCode as AuthorizationPermission),
+      );
+      const denied = new Set(loaded.denies.flatMap((entry) => entry.permissions));
+      return [...allowed].filter((permission) => !denied.has(permission));
+    },
+
+    async authorizeCreate(
+      input: { actorUserId: string; organizationId: string; code: string; scope: "ORGANIZATION"; permissions: readonly AuthorizationPermission[] },
+      transaction: ScopedAccessSession,
+    ): Promise<boolean> {
+      const loaded = await loadOrganizationGrantContext(transaction, input.actorUserId, input.organizationId);
+      return evaluateAuthorization({
+        permission: "roles.create",
+        target: { scope: "ORGANIZATION", organizationId: input.organizationId },
+        grants: loaded.grants,
+        denies: loaded.denies,
+      }).allowed;
+    },
+
+    async authorizeRevise(
+      input: { actorUserId: string; organizationId: string; code: string; scope: "ORGANIZATION"; permissions: readonly AuthorizationPermission[]; roleFamilyId: string; roleDefinitionId: string; currentVersion: number; nextVersion: number },
+      transaction: ScopedAccessSession,
+    ): Promise<boolean> {
+      const loaded = await loadOrganizationGrantContext(transaction, input.actorUserId, input.organizationId);
+      return evaluateAuthorization({
+        permission: "roles.revise",
+        target: { scope: "ORGANIZATION", organizationId: input.organizationId },
+        grants: loaded.grants,
+        denies: loaded.denies,
+      }).allowed;
+    },
+  };
+}
+
+
+export function createTenantRoleDefinitionAdapter({
+  database,
+  getCurrentSession,
+}: TenantRoleDefinitionAdapterDependencies) {
+  async function getVerifiedActor(): Promise<string> {
+    const session = await getCurrentSession();
+    if (!session?.user?.id) {
+      throw new TenantTargetContextError("UNAUTHENTICATED", "A verified authenticated session is required.");
+    }
+    return session.user.id;
+  }
+
+  return {
+    async createCustomRoleForCurrentUser(
+      input: Omit<CustomRoleCreateInput, "actorUserId">,
+    ): Promise<RoleDefinitionRecord> {
+      const actorUserId = await getVerifiedActor();
+      return createRoleDefinitionService(database, createAuthorization(actorUserId))
+        .createCustomRole({ ...input, actorUserId });
+    },
+
+    async reviseCustomRoleForCurrentUser(
+      input: Omit<CustomRoleReviseInput, "actorUserId">,
+    ): Promise<RoleDefinitionRecord> {
+      const actorUserId = await getVerifiedActor();
+      return createRoleDefinitionService(database, createAuthorization(actorUserId))
+        .reviseCustomRole({ ...input, actorUserId });
+    },
+  };
+}
