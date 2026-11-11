@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertDisposablePostgresUrl, assertLocalHttpOrigin } from "./v04-integration-safety.mjs";
+import { assertDisposablePostgresUrl, assertLocalHttpOrigin, assertLocalHttpRequestUrl } from "./v04-integration-safety.mjs";
 
 // The unit tests approve their own disposable-database opt-in; nothing here
 // touches a database.
@@ -61,6 +61,7 @@ test("rejects URLs that do not match the exact disposable target", () => {
     () => dbGuard("postgresql://sap_core@127.0.0.1:55432/sap_core_v03_test%ZZ?schema=public"),
     /pathname contains malformed percent encoding/,
   );
+  assert.throws(() => dbGuard("postgresql://%ZZ@127.0.0.1:55432/sap_core_v03_test"), /username contains malformed percent encoding/);
   assert.throws(() => dbGuard("not a url"), /not a valid URL/);
 });
 
@@ -94,4 +95,25 @@ test("rejects HTTP origins that are not the validated loopback origin", () => {
   assert.throws(() => httpGuard("http://api.attacker.example:3000"), /must be loopback/);
   assert.throws(() => httpGuard("http://127.0.0.1:4000"), /must be exactly http:\/\/127\.0\.0\.1:3000/);
   assert.throws(() => httpGuard(""), /auth base URL is missing/);
+});
+
+
+test("HTTP request guard accepts same-origin relative and absolute URLs", () => {
+  const baseUrl = "http://127.0.0.1:3000";
+  const expectedOrigin = baseUrl;
+  assert.equal(
+    assertLocalHttpRequestUrl({ value: "/api/auth/get-session", baseUrl, expectedOrigin, suiteLabel: base.suiteLabel }).href,
+    "http://127.0.0.1:3000/api/auth/get-session",
+  );
+  assert.equal(
+    assertLocalHttpRequestUrl({ value: "http://127.0.0.1:3000/api/auth/sign-out", baseUrl, expectedOrigin, suiteLabel: base.suiteLabel }).origin,
+    expectedOrigin,
+  );
+});
+
+test("HTTP request guard rejects cross-origin URLs and embedded credentials before fetch", () => {
+  const options = { baseUrl: "http://127.0.0.1:3000", expectedOrigin: "http://127.0.0.1:3000", suiteLabel: base.suiteLabel };
+  assert.throws(() => assertLocalHttpRequestUrl({ ...options, value: "https://attacker.example/steal" }), /must stay on validated origin/);
+  assert.throws(() => assertLocalHttpRequestUrl({ ...options, value: "http://user:pw@127.0.0.1:3000/path" }), /without URL credentials/);
+  assert.throws(() => assertLocalHttpRequestUrl({ ...options, value: "http://127.0.0.1:3001/path" }), /must stay on validated origin/);
 });
