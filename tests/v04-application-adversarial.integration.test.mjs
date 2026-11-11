@@ -9,6 +9,8 @@ import { TenantTargetContextError } from "../src/lib/tenant-target-context-core.
 import { createTenantRoleAssignmentAdapter } from "../src/lib/tenant-role-assignment-service-core.ts";
 import { createTenantRoleDefinitionAdapter } from "../src/lib/tenant-role-definition-service-core.ts";
 import { RoleDefinitionError } from "../src/lib/role-definition-service.ts";
+import { loadAuthorizationGrants } from "../src/lib/authorization-grant-loader.ts";
+import { evaluateAuthorization } from "../src/lib/authorization-policy-core.ts";
 
 const { Client, Pool } = pg;
 const migrationUrl = process.env.MIGRATION_DATABASE_URL;
@@ -477,6 +479,68 @@ test("tenant DENY policy and audit tables enforce Organization RLS for runtime r
     );
   } finally {
     await client.query("ROLLBACK");
+    client.release();
+  }
+});
+
+test("production authorization grant loader applies persisted DENY over the runtime role's matching ALLOW", async () => {
+  const client = await runtimePool.connect();
+  let transactionOpen = false;
+  try {
+    await client.query("BEGIN");
+    transactionOpen = true;
+    await client.query(
+      "SELECT set_config('app.user_id', $1, true), set_config('app.organization_id', $2, true), set_config('app.company_id', '', true), set_config('app.plant_id', '', true)",
+      [ids.actorA, ids.orgA],
+    );
+
+    // The loader is the production implementation. This small tagged-template
+    // adapter forwards its parameterized SQL to the dedicated NOBYPASSRLS role.
+    const tx = {
+      async $queryRaw(strings, ...values) {
+        let statement = strings[0];
+        for (let index = 0; index < values.length; index += 1) {
+          statement += `${index + 1}${strings[index + 1]}`;
+        }
+        const result = await client.query(statement, values);
+        return result.rows;
+      },
+    };
+    const context = {
+      userId: ids.actorA,
+      organizationId: ids.orgA,
+      organizationMembershipId: ids.membershipA,
+      scope: "ORGANIZATION",
+      companyId: null,
+      plantId: null,
+    };
+
+    const loaded = await loadAuthorizationGrants(tx, context);
+    assert.equal(loaded.actorUserId, ids.actorA);
+    assert.ok(
+      loaded.grants.some((grant) =>
+        grant.roleCode === "ORG_OWNER"
+        && grant.scope === "ORGANIZATION"
+        && grant.scopeId === ids.orgA
+        && grant.customPermissions.includes("organization.read"),
+      ),
+      "production loader must read the actor's persisted ORG_OWNER ALLOW through runtime RLS",
+    );
+    assert.deepEqual(loaded.denies, [{
+      scope: "ORGANIZATION",
+      scopeId: ids.orgA,
+      permissions: ["organization.read"],
+    }], "production loader must read only the active DENY bound to the actor's exact membership and target");
+
+    const decision = evaluateAuthorization({
+      permission: "organization.read",
+      target: { scope: "ORGANIZATION", organizationId: ids.orgA },
+      grants: loaded.grants,
+      denies: loaded.denies,
+    });
+    assert.deepEqual(decision, { allowed: false, reason: "EXPLICIT_DENY" });
+  } finally {
+    if (transactionOpen) await client.query("ROLLBACK");
     client.release();
   }
 });
