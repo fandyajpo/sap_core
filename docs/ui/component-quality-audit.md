@@ -26,7 +26,7 @@ Interactive states covered: loading, empty, error + retry, disabled (forms durin
 All five CSS modules (`data-table`, and the members/roles/assignments views) used raw hex colors (`#f7f9fc`, `#edf1f5`, `#d7e6f1`, `#fbf3f3`, …) plus legacy vars (`--ink`, `--muted`, `--line`) and hardcoded rgba focus outlines. None consumed the PR #91 semantic tokens, so every component was light-only despite the dark theme existing. **Fix:** complete token adoption — colors → `--sc-color-*` (info/success/warning/danger/status chips, border/input, surface steps), focus → `--sc-focus-ring-width` + `--sc-color-ring` + offset everywhere (replacing per-file rgba outlines), radii → `--sc-radius-*` (8px→md/10px, 7px→sm/6px, 999px→full, 12px→lg/14px, 16px→lg), shadows → `--sc-shadow-md`, body/label/caption sizes → `--sc-text-*`. Normalizations are documented as intentional visual deltas (≤4px radius shifts; danger/warning/info tints now token-accurate).
 
 ### F2 — `AuthForm` coupled page layout to form logic (API/reusability/a11y) — FIXED
-`AuthForm` rendered `<main class="auth-page">` itself, so it could not be reused (a nested `<main>` inside any other layout violates HTML landmarks). **Fix:** layout moved to the pages (`/sign-in`, `/register` wrap it in `<main className="auth-page">`); `AuthForm` now returns only the form card section. Its public API is unchanged (`mode` prop).
+`AuthForm` rendered `<main class="auth-page">` itself, so it could not be reused (a nested `<main>` inside any other layout violates HTML landmarks). **Fix:** layout moved to the pages (`/sign-in`, `/register` wrap it in `<main className="auth-page">`); `AuthForm` now returns only the form card section. Its public API is `mode` plus the optional `headingLevel` prop added later for semantic embedding (see F6).
 
 ### F3 — Auth error association (a11y) — FIXED, then refined by review
 `auth-form.tsx` showed a `role="alert"` error but inputs had no association (contrast: `profile-name-form.tsx` already did this correctly). **Initial fix:** inputs carried `aria-describedby="auth-form-error"`. **Review refinement (supersedes the first attempt):** the initial fix also set `aria-invalid={Boolean(error)}` on every input, which wrongly marked all fields invalid for a *general* authentication failure. The refined fix keeps `aria-describedby` (it references the `#auth-form-error` element, which is conditionally rendered together with the error) and removes `aria-invalid` — fields are only ever marked invalid for specific field-level validation errors, which this form currently reports through native HTML validation. The general error remains announced by `role="alert"`.
@@ -46,6 +46,9 @@ Findings from code review of the showcase, resolved without touching backend aut
 - **Heading hierarchy**: `AuthForm` gained a `headingLevel?: 1 | 2 | 3` prop (default 1 — unchanged on `/sign-in` and `/register`). The showcase embeds it with `headingLevel={3}`, giving `/ui-showcase` the semantic chain h1 (page) → h2 (sections) → h3 (demo cards, including the auth card's "Welcome back"). No useful labels or section descriptions were removed.
 
 Scope note: these changes modify **authentication UI components** (`auth-form.tsx`, `sign-out-button.tsx`, `profile-name-form.tsx`) only in their presentation/adapter surface. Better Auth configuration, sign-in/registration/update/sign-out requests, validation rules, redirects, and session behavior are unchanged — the `/account` profile update and production sign-out retain their original behavior because the adapters default to the previous code paths.
+
+### F7 — Adapter failure handling hardening — FIXED
+Follow-up to F6: the injected adapters (`onSave`, `onSignOut`) were awaited without rejection handling, so a rejecting adapter would throw an unhandled rejection and leave the button pending forever. **Fix:** both components wrap the adapter execution in try/catch with a `finally` that always restores `isPending`. A rejection degrades to a safe user-facing message ("We couldn't update your display name. Please try again." / "Unable to sign out. Please try again.") via the existing error UI (`role="alert"`). Success, validation, accessibility behavior, and the production Better Auth paths (`saveWithAuthClient`, `signOutWithAuthClient` — including redirect and refresh) are unchanged.
 
 ## 3. Showcase — `/ui-showcase` (session-protected)
 
@@ -78,10 +81,10 @@ Attempted per the runtime verification mission; the following could not be run b
 - **Dark scoping: PASS (static).** `themes.css` exposes semantic roles under `[data-theme="dark"]` as a plain attribute selector, so a scoped section inherits dark values to all token-driven descendants — the showcase dark section and the newly token-adopted components are dark-ready by construction.
 - **Existing test contracts: PASS (static).** The source-regex assertions in `tests/*-ui.unit.test.mjs` and `tests/data-table.unit.test.mjs` target TSX structure (`aria-label`, `aria-expanded`, hook usage) that was not modified; no test asserts the changed CSS values.
 
-### 4c. Findings from the static pass (documented, no code change required)
+### 4c. Findings from the static pass (historical record, with current status)
 
-- Duplicate `<h1>` when `AuthForm` is embedded in the showcase (its own "Welcome back" heading + the showcase page heading). Not a defect on `/sign-in` (single heading there); documented as an embedding constraint — `AuthForm` is not yet a form-only widget.
-- Duplicate `id="auth-form-error"` would occur only if two `AuthForm`s rendered simultaneously on one page — verified that no current page does (`/sign-in`, `/register`, and the showcase each render at most one).
+- Duplicate `<h1>` when `AuthForm` was embedded in the showcase — **RESOLVED after this static pass**: `AuthForm` now takes `headingLevel` (see F6) and the showcase embeds it at level 3, giving the semantic h1 → h2 → h3 chain. Kept here as a historical finding, not a current defect.
+- Duplicate `id="auth-form-error"` would occur only if two `AuthForm`s rendered simultaneously on one page — verified that no current page does (`/sign-in`, `/register`, and the showcase each render at most one). Still an embedding constraint to keep in mind.
 - A token-definition search mistakenly pointed at `src/styles` (nonexistent path) before being corrected to `src/app/styles`; zero matches were a tool-path error, not a repository defect.
 
 ## 5. Remaining known limitations

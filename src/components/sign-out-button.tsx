@@ -30,15 +30,20 @@ export function SignOutButton({ onSignOut, label }: SignOutButtonProps = {}) {
     setIsPending(true);
     setError(null);
 
-    const result = await (onSignOut ?? signOutWithAuthClient)();
+    try {
+      const result = await (onSignOut ?? signOutWithAuthClient)();
 
-    if (result.error) {
-      setError(result.error);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+    } catch {
+      // A rejecting adapter (e.g. a broken demo) must degrade to a safe,
+      // user-facing message instead of an unhandled rejection.
+      setError("Unable to sign out. Please try again.");
+    } finally {
       setIsPending(false);
-      return;
     }
-
-    setIsPending(false);
   }
 
   async function signOutWithAuthClient(): Promise<SignOutResult> {

@@ -50,22 +50,28 @@ export function ProfileNameForm({ initialName, onSave }: ProfileNameFormProps) {
     setError(null);
     setIsSaved(false);
 
-    const result = await (onSave ?? saveWithAuthClient)(normalizedName);
+    try {
+      const result = await (onSave ?? saveWithAuthClient)(normalizedName);
 
-    if (result.error) {
-      setError(result.error);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      // Route refresh only matters for real saves (server state changed).
+      if (!onSave) {
+        router.refresh();
+      }
+
+      setName(normalizedName);
+      setIsSaved(true);
+    } catch {
+      // A rejecting adapter (e.g. a broken demo) must degrade to a safe,
+      // user-facing message instead of an unhandled rejection.
+      setError("We couldn't update your display name. Please try again.");
+    } finally {
       setIsPending(false);
-      return;
     }
-
-    // Route refresh only matters for real saves (server state changed).
-    if (!onSave) {
-      router.refresh();
-    }
-
-    setName(normalizedName);
-    setIsSaved(true);
-    setIsPending(false);
   }
 
   return (
