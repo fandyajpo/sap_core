@@ -7,8 +7,8 @@ import {
   type AuthorizationRoleGrant,
   type AuthorizationScope,
   type ExplicitPermissionDeny,
-} from "@/lib/authorization-policy-core";
-import type { TenantTargetContext } from "@/lib/tenant-target-context-core";
+} from "./authorization-policy-core.ts";
+import type { TenantTargetContext } from "./tenant-target-context-core.ts";
 
 interface PersistedGrantRow {
   assignmentId: string;
