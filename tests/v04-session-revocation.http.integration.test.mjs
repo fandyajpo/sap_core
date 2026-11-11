@@ -31,7 +31,6 @@ const databaseUrl = process.env.DATABASE_URL;
 const pool = new Pool({ connectionString: databaseUrl, max: 8 });
 const prefix = `v04-session-http-${randomUUID()}-`;
 const actors = [];
-const organizationIds = [];
 let ownerRoleId;
 
 function authRequest(path, { method = "GET", body, cookie } = {}) {
@@ -120,7 +119,6 @@ async function createActor(label, organizationRoleCode = "ORG_OWNER") {
   // clean up even when an insert fails partway through.
   actor.organizationId = organizationId;
   actor.membershipId = membershipId;
-  organizationIds.push(organizationId);
   await pool.query(
     'INSERT INTO "core"."organization" ("id", "created_at", "updated_at") VALUES ($1, NOW(), NOW())',
     [organizationId],
