@@ -270,7 +270,11 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     assert.equal(await count(runtime, '"core"."company"'), 0);
     assert.equal(await count(runtime, '"core"."plant"'), 0);
     assert.equal(await count(runtime, '"core"."organization_membership"'), 0);
-    assert.equal(await count(runtime, '"core"."user"'), 3, "Better Auth identity rows remain available without tenant context");
+    assert.equal(
+      await count(runtime, '"core"."user"', 'WHERE "id" = ANY(ARRAY[\'${ids.actorA}\', \'${ids.memberA}\', \'${ids.actorB}\']::text[])'),
+      3,
+      "the three Better Auth identity fixtures remain available without tenant context",
+    );
     assert.equal(await count(runtime, '"core"."permission_definition"'), 15, "permission catalog remains globally readable");
     assert.equal(await count(runtime, '"core"."permission_delegation_policy"'), 15, "delegation policy is globally readable but owner-controlled");
     const { rows: delegableRows } = await runtime.query(
