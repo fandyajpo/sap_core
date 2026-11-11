@@ -3,26 +3,31 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import pg from "pg";
+import { assertDisposablePostgresUrl, assertLocalHttpOrigin } from "./v04-integration-safety.mjs";
 
 const { Pool } = pg;
+// Strict target guards: only the exact disposable database and loopback auth
+// origin CI provisions may be used; there is no fallback. See
+// tests/v04-integration-safety.mjs.
+assertDisposablePostgresUrl({
+  value: process.env.DATABASE_URL,
+  suiteLabel: "V04 session HTTP tests",
+  optInEnvName: "V04_SESSION_HTTP_ALLOW_DISPOSABLE_DB",
+  expectedPort: 55432,
+  expectedDatabase: "sap_core_v03_test",
+  expectedUsers: ["sap_core"],
+});
+const auth = assertLocalHttpOrigin({
+  value: process.env.BETTER_AUTH_URL,
+  suiteLabel: "V04 session HTTP tests",
+  optInEnvName: "V04_SESSION_HTTP_ALLOW_DISPOSABLE_DB",
+  // Mirrors .github/workflows/validation.yml (BETTER_AUTH_URL of the v03 job).
+  expectedOrigin: "http://127.0.0.1:3000",
+});
+
+const authURL = auth.baseUrl;
+const authOrigin = auth.origin;
 const databaseUrl = process.env.DATABASE_URL;
-const parsed = databaseUrl ? new URL(databaseUrl) : null;
-const authBaseURL = process.env.BETTER_AUTH_URL;
-const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
-if (
-  process.env.V04_SESSION_HTTP_ALLOW_DISPOSABLE_DB !== "1" ||
-  !parsed ||
-  !localHosts.has(parsed.hostname) ||
-  parsed.port !== "55432" ||
-  decodeURIComponent(parsed.pathname.slice(1)) !== "sap_core_v03_test" ||
-  !authBaseURL
-) {
-  throw new Error("V04 session HTTP tests require explicit disposable DB approval and localhost:55432/sap_core_v03_test.");
-}
-
-const authURL = authBaseURL.replace(/\/+$/, "");
-const authOrigin = new URL(authBaseURL).origin;
 const pool = new Pool({ connectionString: databaseUrl, max: 8 });
 const prefix = `v04-session-http-${randomUUID()}-`;
 const actors = [];
@@ -186,6 +191,14 @@ before(async () => {
 });
 
 after(async () => {
+  // Fixture lifecycle: every row this suite creates is parented to IDs captured
+  // below (actors[].userId, actors[].membershipId, organizationIds[]). Teardown
+  // signs each actor out over HTTP, then deletes the suite's rows in FK-safe
+  // order — assignment and membership children before their parents — strictly
+  // by those test-generated IDs. No broad pattern DELETEs; rows the suite did
+  // not create (system role definitions, permission catalog) are never touched.
+  // The pool closes even when cleanup fails, and every cleanup error is
+  // preserved and rethrown instead of swallowed.
   const errors = [];
   for (const actor of actors) {
     try {
@@ -197,27 +210,45 @@ after(async () => {
   try {
     if (organizationIds.length > 0) {
       await pool.query(
-        `UPDATE "core"."organization_role_assignment"
-            SET "revoked_at" = NOW()
-          WHERE "revoked_at" IS NULL
-            AND "organizationMembershipId" IN (
-              SELECT "id" FROM "core"."organization_membership"
-              WHERE "organizationId" = ANY($1::uuid[])
-            )`,
+        `DELETE FROM "core"."organization_role_assignment"
+          WHERE "organizationMembershipId" IN (
+            SELECT "id" FROM "core"."organization_membership" WHERE "organizationId" = ANY($1::uuid[]))`,
         [organizationIds],
       );
       await pool.query(
-        `UPDATE "core"."organization_membership"
-            SET "status" = 'SUSPENDED'::"core"."OrganizationMembershipStatus"
-          WHERE "organizationId" = ANY($1::uuid[])`,
+        `DELETE FROM "core"."company_role_assignment"
+          WHERE "companyMembershipId" IN (
+            SELECT "id" FROM "core"."company_membership" WHERE "organizationId" = ANY($1::uuid[]))`,
         [organizationIds],
       );
+      await pool.query(
+        `DELETE FROM "core"."plant_role_assignment"
+          WHERE "plantAssignmentId" IN (
+            SELECT "id" FROM "core"."plant_assignment" WHERE "organizationId" = ANY($1::uuid[]))`,
+        [organizationIds],
+      );
+      await pool.query('DELETE FROM "core"."plant_assignment" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
+      await pool.query('DELETE FROM "core"."company_membership" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
+      await pool.query('DELETE FROM "core"."plant" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
+      await pool.query('DELETE FROM "core"."company" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
+      await pool.query('DELETE FROM "core"."organization_membership" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
+      await pool.query('DELETE FROM "core"."organization" WHERE "id" = ANY($1::uuid[])', [organizationIds]);
+    }
+    const userIds = actors.map((actor) => actor.userId);
+    if (userIds.length > 0) {
+      await pool.query('DELETE FROM "core"."session" WHERE "userId" = ANY($1::text[])', [userIds]);
+      await pool.query('DELETE FROM "core"."account" WHERE "userId" = ANY($1::text[])', [userIds]);
+      await pool.query('DELETE FROM "core"."user" WHERE "id" = ANY($1::text[])', [userIds]);
     }
   } catch (error) {
     errors.push(error);
   }
-  await pool.end();
-  if (errors.length) throw new AggregateError(errors, "V04 session HTTP fixture cleanup failed.");
+  try {
+    await pool.end();
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length) throw new AggregateError(errors, "V04 session HTTP fixture cleanup failed; the disposable database must be discarded.");
 });
 
 test("real Better Auth HTTP sign-out waits behind a protected request that acquired the session lock first", async () => {

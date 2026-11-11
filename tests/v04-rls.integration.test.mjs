@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, test } from "node:test";
 import pg from "pg";
+import { assertDisposablePostgresUrl } from "./v04-integration-safety.mjs";
 
 const { Client } = pg;
 const migrationUrl = process.env.MIGRATION_DATABASE_URL;
@@ -11,27 +12,35 @@ if (!migrationUrl || !runtimeUrl) {
   throw new Error("MIGRATION_DATABASE_URL (owner) and DATABASE_URL (runtime) are required.");
 }
 
-function assertDisposableUrl(value, expectedUser) {
-  const parsed = new URL(value);
-  const database = decodeURIComponent(parsed.pathname.slice(1));
-  if (
-    !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
-    parsed.port !== "55437" ||
-    database !== "sap_core_v04_rls_test" ||
-    decodeURIComponent(parsed.username) !== expectedUser
-  ) {
-    throw new Error(`V04 RLS tests require localhost:55437/sap_core_v04_rls_test as ${expectedUser}.`);
-  }
-}
-if (process.env.V04_RLS_ALLOW_DISPOSABLE_DB !== "1") {
-  throw new Error("V04 RLS tests require explicit disposable database approval.");
-}
-assertDisposableUrl(migrationUrl, "sap_core");
-assertDisposableUrl(runtimeUrl, "sap_core_runtime");
+// Strict target guard: the suite runs only against the exact disposable
+// database CI provisions for it (V04_RLS_ALLOW_DISPOSABLE_DB=1,
+// localhost:55437/sap_core_v04_rls_test), as the owner role for migrations and
+// fixtures and as the dedicated runtime role for the RLS checks. No fallback
+// target is ever used.
+assertDisposablePostgresUrl({
+  value: migrationUrl,
+  suiteLabel: "V04 RLS tests",
+  optInEnvName: "V04_RLS_ALLOW_DISPOSABLE_DB",
+  expectedPort: 55437,
+  expectedDatabase: "sap_core_v04_rls_test",
+  expectedUsers: ["sap_core"],
+});
+assertDisposablePostgresUrl({
+  value: runtimeUrl,
+  suiteLabel: "V04 RLS tests",
+  optInEnvName: "V04_RLS_ALLOW_DISPOSABLE_DB",
+  expectedPort: 55437,
+  expectedDatabase: "sap_core_v04_rls_test",
+  expectedUsers: ["sap_core_runtime"],
+});
 
 const owner = new Client({ connectionString: migrationUrl });
 const runtime = new Client({ connectionString: runtimeUrl });
 let connected = false;
+let runtimeRoleCreated = false;
+// Custom role ids created by seedOwnerFixtures; teardown deletes their grants,
+// audit rows and definitions before anything that references them.
+const customRoleIds = [];
 
 const ids = {
   actorA: "v04-rls-actor-a",
@@ -141,6 +150,7 @@ async function seedOwnerFixtures() {
   for (const [ownerOrg, code, actorId] of [[ids.orgB, "CUSTOM_B", ids.actorB]]) {
     const familyId = randomUUID();
     const roleId = randomUUID();
+    customRoleIds.push(roleId);
     await owner.query(
       `INSERT INTO "core"."role_definition"
        ("id","role_family_id","code","version","kind","scope","ownerOrganizationId","created_at","updated_at")
@@ -184,9 +194,24 @@ async function seedOwnerFixtures() {
 test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and identity-table exclusion", async () => {
   await owner.connect();
   connected = true;
+  // Adversarial guard: the suite must provision its own runtime role on a
+  // fresh disposable instance. A pre-existing sap_core_runtime means the
+  // database is not a fresh disposable database (the role's original state —
+  // grants, options, memberships — could not be restored after the run), so
+  // refuse instead of granting onto it, and require a fresh disposable
+  // instance.
+  const { rows: preExistingRuntimeRole } = await owner.query(
+    "SELECT 1 FROM pg_roles WHERE rolname = 'sap_core_runtime'",
+  );
+  if (preExistingRuntimeRole.length > 0) {
+    throw new Error(
+      "sap_core_runtime already exists; V04 RLS tests require a fresh disposable database where the runtime role does not pre-exist.",
+    );
+  }
   await owner.query(
     `CREATE ROLE sap_core_runtime LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE`,
   );
+  runtimeRoleCreated = true;
   await owner.query('GRANT USAGE ON SCHEMA "core" TO sap_core_runtime');
   await owner.query(`GRANT SELECT, INSERT, UPDATE ON
     "core"."organization", "core"."company", "core"."plant",
@@ -344,5 +369,90 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
 });
 
 after(async () => {
-  if (connected) await owner.end();
+  // Failure-safe teardown: fixture cleanup runs only through the owner
+  // connection, deletes rows in FK-safe order (children before parents),
+  // strictly by the test-generated IDs captured in ids.* and customRoleIds —
+  // never by broad DELETEs — and never touches pre-existing rows (system role
+  // definitions, permission catalog, delegation policies). The runtime role is
+  // dropped only if this suite created it, and only after its test-owned
+  // dependencies are gone. The owner connection closes even when cleanup
+  // fails, and every cleanup error is preserved and rethrown instead of
+  // swallowed.
+  const errors = [];
+  if (connected) {
+    try {
+      await owner.query(
+        'DELETE FROM "core"."break_glass_access_audit" WHERE "actor_user_id" = ANY($1::text[])',
+        [[ids.actorA, ids.actorB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."role_permission_grant" WHERE "role_definition_id" = ANY($1::uuid[])',
+        [customRoleIds],
+      );
+      await owner.query(
+        'DELETE FROM "core"."role_definition_audit" WHERE "role_definition_id" = ANY($1::uuid[])',
+        [customRoleIds],
+      );
+      await owner.query(
+        'DELETE FROM "core"."role_definition" WHERE "id" = ANY($1::uuid[])',
+        [customRoleIds],
+      );
+      await owner.query(
+        'DELETE FROM "core"."plant_role_assignment" WHERE "plantAssignmentId" = ANY($1::uuid[])',
+        [[ids.plantAssignmentA1, ids.plantAssignmentA2, ids.plantAssignmentB1]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."company_role_assignment" WHERE "companyMembershipId" = ANY($1::uuid[])',
+        [[ids.companyMembershipA1, ids.companyMembershipA2, ids.companyMembershipB1]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."organization_role_assignment" WHERE "organizationMembershipId" = ANY($1::uuid[])',
+        [[ids.orgMembershipA, ids.orgMembershipMemberA, ids.orgMembershipB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."plant_assignment" WHERE "id" = ANY($1::uuid[])',
+        [[ids.plantAssignmentA1, ids.plantAssignmentA2, ids.plantAssignmentB1]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."company_membership" WHERE "id" = ANY($1::uuid[])',
+        [[ids.companyMembershipA1, ids.companyMembershipA2, ids.companyMembershipB1]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."organization_membership" WHERE "id" = ANY($1::uuid[])',
+        [[ids.orgMembershipA, ids.orgMembershipMemberA, ids.orgMembershipB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."plant" WHERE "id" = ANY($1::uuid[])',
+        [[ids.plantA1, ids.plantA2, ids.plantB1]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."company" WHERE "id" = ANY($1::uuid[])',
+        [[ids.companyA1, ids.companyA2, ids.companyB1]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."organization" WHERE "id" = ANY($1::uuid[])',
+        [[ids.orgA, ids.orgB]],
+      );
+      await owner.query(
+        'DELETE FROM "core"."user" WHERE "id" = ANY($1::text[])',
+        [[ids.actorA, ids.memberA, ids.actorB]],
+      );
+    } catch (error) {
+      errors.push(error);
+    }
+    if (runtimeRoleCreated) {
+      try {
+        await owner.query('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA "core" FROM sap_core_runtime');
+        await owner.query('REVOKE USAGE ON SCHEMA "core" FROM sap_core_runtime');
+        await owner.query("DROP ROLE sap_core_runtime");
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+  }
+  const outcomes = await Promise.allSettled(connected ? [owner.end()] : []);
+  for (const outcome of outcomes) {
+    if (outcome.status === "rejected") errors.push(outcome.reason);
+  }
+  if (errors.length) throw new AggregateError(errors, "V04 RLS teardown failed; the disposable database must be discarded.");
 });

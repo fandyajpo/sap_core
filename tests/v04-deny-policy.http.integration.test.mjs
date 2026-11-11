@@ -3,24 +3,31 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import pg from "pg";
+import { assertDisposablePostgresUrl, assertLocalHttpOrigin } from "./v04-integration-safety.mjs";
 
 const { Pool } = pg;
-const databaseUrl = process.env.DATABASE_URL;
-const parsed = databaseUrl ? new URL(databaseUrl) : null;
-const authBaseURL = process.env.BETTER_AUTH_URL;
-if (
-  process.env.V04_DENY_HTTP_ALLOW_DISPOSABLE_DB !== "1" ||
-  !parsed ||
-  !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
-  parsed.port !== "55432" ||
-  decodeURIComponent(parsed.pathname.slice(1)) !== "sap_core_v03_test" ||
-  !authBaseURL
-) {
-  throw new Error("DENY HTTP integration tests require explicit approval, Better Auth URL, and localhost:55432/sap_core_v03_test.");
-}
+// Strict target guards: only the exact disposable database and loopback auth
+// origin CI provisions may be used; there is no fallback. See
+// tests/v04-integration-safety.mjs.
+assertDisposablePostgresUrl({
+  value: process.env.DATABASE_URL,
+  suiteLabel: "DENY HTTP integration tests",
+  optInEnvName: "V04_DENY_HTTP_ALLOW_DISPOSABLE_DB",
+  expectedPort: 55432,
+  expectedDatabase: "sap_core_v03_test",
+  expectedUsers: ["sap_core"],
+});
+const auth = assertLocalHttpOrigin({
+  value: process.env.BETTER_AUTH_URL,
+  suiteLabel: "DENY HTTP integration tests",
+  optInEnvName: "V04_DENY_HTTP_ALLOW_DISPOSABLE_DB",
+  // Mirrors .github/workflows/validation.yml (BETTER_AUTH_URL of the v03 job).
+  expectedOrigin: "http://127.0.0.1:3000",
+});
 
-const authURL = authBaseURL.replace(/\/+$/, "");
-const authOrigin = new URL(authBaseURL).origin;
+const authURL = auth.baseUrl;
+const authOrigin = auth.origin;
+const databaseUrl = process.env.DATABASE_URL;
 const pool = new Pool({ connectionString: databaseUrl, max: 8 });
 const prefix = `v04-deny-http-${randomUUID()}-`;
 const actors = [];
@@ -104,14 +111,27 @@ before(async () => {
 });
 
 after(async () => {
+  // Fixture lifecycle: the tenant_deny_policy and tenant_deny_audit_event rows
+  // created through the HTTP API are append-only (triggers raise SQLSTATE
+  // 55000 on UPDATE/DELETE), so the suite's user, organization, membership and
+  // policy rows cannot be removed after the run without violating FK-safe,
+  // append-only semantics. Complete cleanup is therefore impossible by design,
+  // and the safety boundary is strict disposable-database isolation: the guard
+  // above only accepts the exact fresh database CI provisions for this job.
+  // Teardown only signs the HTTP actors out and closes the pool, and every
+  // failure is preserved and rethrown instead of swallowed.
   const errors = [];
   for (const actor of actors) {
     try {
       await authRequest("/sign-out", { method: "POST", cookie: actor.cookie, body: {} });
     } catch (error) { errors.push(error); }
   }
-  await pool.end();
-  if (errors.length) throw new AggregateError(errors, "DENY HTTP fixture cleanup failed.");
+  try {
+    await pool.end();
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length) throw new AggregateError(errors, "DENY HTTP fixture cleanup failed; the disposable database must be discarded.");
 });
 
 test("real HTTP DENY lifecycle enforces ORG_OWNER-only create, read, and revoke", async () => {
