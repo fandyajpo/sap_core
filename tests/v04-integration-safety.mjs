@@ -71,7 +71,7 @@ export function assertDisposablePostgresUrl({
   // validated above. Only approved parameters are accepted, and no parameter
   // may appear twice.
   const seenQueryKeys = new Set();
-  for (const key of parsed.searchParams.keys()) {
+  for (const [key, queryValue] of parsed.searchParams.entries()) {
     if (seenQueryKeys.has(key)) {
       throw new Error(`${suiteLabel}: database URL has duplicate query parameter "${key}".`);
     }
@@ -81,11 +81,19 @@ export function assertDisposablePostgresUrl({
         `${suiteLabel}: database URL query parameter "${key}" is not approved. Query parameters could override the validated host, port, database or username; only ${[...ALLOWED_QUERY_PARAMS].map((name) => `"${name}"`).join(", ")} (as provisioned by CI) is allowed.`,
       );
     }
+    if (key === "schema" && queryValue !== "public") {
+      throw new Error(`${suiteLabel}: database URL schema query parameter must be exactly "public", got "${queryValue}".`);
+    }
   }
   if (parsed.port !== String(expectedPort)) {
     throw new Error(`${suiteLabel}: database port must be ${expectedPort}, got "${parsed.port || "(none)"}".`);
   }
-  const database = decodeURIComponent(parsed.pathname.slice(1));
+  let database;
+  try {
+    database = decodeURIComponent(parsed.pathname.slice(1));
+  } catch {
+    throw new Error(`${suiteLabel}: database URL pathname contains malformed percent encoding.`);
+  }
   if (database !== expectedDatabase) {
     throw new Error(`${suiteLabel}: database name must be "${expectedDatabase}", got "${database}".`);
   }
