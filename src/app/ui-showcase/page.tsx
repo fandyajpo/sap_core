@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { UiShowcaseView } from "@/components/ui-showcase/ui-showcase-view";
 import { SignOutButton } from "@/components/sign-out-button";
+import { simulateDelayedSuccess } from "@/components/ui-showcase/simulations";
 import { requireCurrentSession } from "@/lib/auth-session";
 
 export default async function UiShowcasePage() {
@@ -17,7 +18,12 @@ export default async function UiShowcasePage() {
           <Link href="/">Home</Link>
           <Link href="/account">Account</Link>
         </nav>
-        <SignOutButton />
+        {/* Simulated on purpose: the showcase header must not end the
+            reviewer's real session. */}
+        <SignOutButton
+          label="Sign out (simulated)"
+          onSignOut={() => simulateDelayedSuccess(600)}
+        />
       </header>
       <UiShowcaseView organizationId="showcase" />
     </main>

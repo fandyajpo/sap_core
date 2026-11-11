@@ -4,11 +4,32 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 
-type ProfileNameFormProps = {
-  initialName: string;
-};
+export interface ProfileNameSaveResult {
+  error: string | null;
+}
 
-export function ProfileNameForm({ initialName }: ProfileNameFormProps) {
+export interface ProfileNameFormProps {
+  initialName: string;
+  /**
+   * Optional save adapter. The default calls Better Auth
+   * `authClient.updateUser()` and refreshes the route — the production
+   * behavior on /account. The UI Showcase injects a simulator that
+   * resolves locally and never touches the authenticated account.
+   */
+  onSave?: (name: string) => Promise<ProfileNameSaveResult>;
+}
+
+async function saveWithAuthClient(name: string): Promise<ProfileNameSaveResult> {
+  const failure = "We couldn't update your display name. Please try again.";
+  try {
+    const result = await authClient.updateUser({ name });
+    return result.error ? { error: failure } : { error: null };
+  } catch {
+    return { error: failure };
+  }
+}
+
+export function ProfileNameForm({ initialName, onSave }: ProfileNameFormProps) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
   const [isPending, setIsPending] = useState(false);
@@ -29,22 +50,22 @@ export function ProfileNameForm({ initialName }: ProfileNameFormProps) {
     setError(null);
     setIsSaved(false);
 
-    try {
-      const result = await authClient.updateUser({ name: normalizedName });
+    const result = await (onSave ?? saveWithAuthClient)(normalizedName);
 
-      if (result.error) {
-        setError("We couldn't update your display name. Please try again.");
-        return;
-      }
-
-      setName(normalizedName);
-      setIsSaved(true);
-      router.refresh();
-    } catch {
-      setError("We couldn't update your display name. Please try again.");
-    } finally {
+    if (result.error) {
+      setError(result.error);
       setIsPending(false);
+      return;
     }
+
+    // Route refresh only matters for real saves (server state changed).
+    if (!onSave) {
+      router.refresh();
+    }
+
+    setName(normalizedName);
+    setIsSaved(true);
+    setIsPending(false);
   }
 
   return (

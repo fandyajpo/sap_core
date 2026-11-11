@@ -6,6 +6,7 @@ import { DataTable } from "@/components/data-table";
 import { AuthForm } from "@/components/auth-form";
 import { ProfileNameForm } from "@/components/profile-name-form";
 import { SignOutButton } from "@/components/sign-out-button";
+import { simulateDelayedSuccess } from "./simulations";
 import styles from "./ui-showcase.module.css";
 
 interface ShowcaseRow {
@@ -118,8 +119,9 @@ export function UiShowcaseView({ organizationId }: UiShowcaseViewProps) {
         <h1 id="ui-showcase-title">UI component showcase</h1>
         <p className={styles.context}>
           Organization <code>{organizationId}</code> · Live components on the PR #91
-          design tokens. Interactive demos below run the real components; forms and
-          sign-out perform their real API calls.
+          design tokens. Interactive demos below run the real components. The auth
+          form performs its real sign-in; the profile save and sign-out demos are
+          simulated locally and never touch the authenticated account.
         </p>
       </div>
 
@@ -159,22 +161,37 @@ export function UiShowcaseView({ organizationId }: UiShowcaseViewProps) {
       <section aria-labelledby="showcase-forms-title" className={styles.card}>
         <h2 id="showcase-forms-title">Live forms</h2>
         <p className={styles.note}>
-          Real components with real behavior: submitting the auth form calls the
-          authentication API, saving the display name calls the profile API, and
-          signing out ends the session.
+          Real components. Submitting the auth form performs a real sign-in; the
+          profile save and sign-out below are simulated locally — they never call
+          the authentication API and cannot change your account or session.
         </p>
         <div className={styles.formGrid}>
           <div className={styles.formCell}>
-            <h3>AuthForm (sign-in mode)</h3>
-            <AuthForm mode="sign-in" />
+            <p className={styles.note}>
+              Real sign-in form — submitting performs a real sign-in attempt with
+              Better Auth.
+            </p>
+            <AuthForm headingLevel={3} mode="sign-in" />
           </div>
           <div className={styles.formCell}>
-            <h3>ProfileNameForm</h3>
-            <ProfileNameForm initialName="Showcase User" />
+            <h3>ProfileNameForm (simulated save)</h3>
+            <p className={styles.note}>
+              Simulated demo — resolves locally and never calls the profile API.
+            </p>
+            <ProfileNameForm
+              initialName="Showcase User"
+              onSave={() => simulateDelayedSuccess(600)}
+            />
           </div>
           <div className={styles.formCell}>
-            <h3>SignOutButton</h3>
-            <SignOutButton />
+            <h3>SignOutButton (simulated)</h3>
+            <p className={styles.note}>
+              Simulated demo — keeps your real session active.
+            </p>
+            <SignOutButton
+              label="Sign out (simulated)"
+              onSignOut={() => simulateDelayedSuccess(600)}
+            />
           </div>
         </div>
       </section>

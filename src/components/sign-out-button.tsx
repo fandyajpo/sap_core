@@ -4,29 +4,56 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
-export function SignOutButton() {
+export interface SignOutResult {
+  error: string | null;
+}
+
+export interface SignOutButtonProps {
+  /**
+   * Optional sign-out adapter. The default calls Better Auth
+   * `authClient.signOut()` and redirects to /sign-in — the production
+   * behavior. The UI Showcase injects a simulator that resolves locally
+   * and never ends the real session.
+   */
+  onSignOut?: () => Promise<SignOutResult>;
+  /** Button label override (e.g. the showcase marks its demo as simulated). */
+  label?: string;
+}
+
+export function SignOutButton({ onSignOut, label }: SignOutButtonProps = {}) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pendingLabel = label ? `${label}…` : "Signing out…";
 
   async function handleSignOut() {
     setIsPending(true);
     setError(null);
 
+    const result = await (onSignOut ?? signOutWithAuthClient)();
+
+    if (result.error) {
+      setError(result.error);
+      setIsPending(false);
+      return;
+    }
+
+    setIsPending(false);
+  }
+
+  async function signOutWithAuthClient(): Promise<SignOutResult> {
+    const unreachable = "Unable to reach the authentication service. Please try again.";
     try {
       const result = await authClient.signOut();
-
       if (result.error) {
-        setError("Unable to sign out. Please try again.");
-        return;
+        return { error: "Unable to sign out. Please try again." };
       }
 
       router.replace("/sign-in");
       router.refresh();
+      return { error: null };
     } catch {
-      setError("Unable to reach the authentication service. Please try again.");
-    } finally {
-      setIsPending(false);
+      return { error: unreachable };
     }
   }
 
@@ -38,7 +65,7 @@ export function SignOutButton() {
         onClick={handleSignOut}
         type="button"
       >
-        {isPending ? "Signing out…" : "Sign out"}
+        {isPending ? pendingLabel : label ?? "Sign out"}
       </button>
       {error && <p className="auth-error" role="alert">{error}</p>}
     </div>

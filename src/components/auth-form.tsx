@@ -5,11 +5,20 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 
-type AuthFormProps = {
-  mode: "sign-in" | "register";
-};
+type AuthFormHeadingLevel = 1 | 2 | 3;
 
-export function AuthForm({ mode }: AuthFormProps) {
+interface AuthFormProps {
+  mode: "sign-in" | "register";
+  /**
+   * Heading tag for the card title. The dedicated auth pages use h1;
+   * pass a deeper level when embedding the card inside another page
+   * (e.g. the UI showcase) so heading hierarchy stays semantic.
+   */
+  headingLevel?: AuthFormHeadingLevel;
+}
+
+export function AuthForm({ headingLevel = 1, mode }: AuthFormProps) {
+  const Heading = `h${headingLevel}` as `h${AuthFormHeadingLevel}`;
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +74,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
         <div className="auth-heading">
           <p className="eyebrow">Secure workspace</p>
-          <h1 id="auth-title">{isRegistration ? "Create your account" : "Welcome back"}</h1>
+          <Heading id="auth-title">{isRegistration ? "Create your account" : "Welcome back"}</Heading>
           <p className="auth-description">
             {isRegistration
               ? "Register with your email to access the SAP Core workspace."
@@ -81,7 +90,6 @@ export function AuthForm({ mode }: AuthFormProps) {
                 autoComplete="name"
                 className="text-input"
                 aria-describedby={error ? "auth-form-error" : undefined}
-                aria-invalid={Boolean(error)}
                 disabled={isPending}
                 id="name"
                 name="name"
@@ -97,7 +105,6 @@ export function AuthForm({ mode }: AuthFormProps) {
               autoComplete="email"
               className="text-input"
               aria-describedby={error ? "auth-form-error" : undefined}
-              aria-invalid={Boolean(error)}
               disabled={isPending}
               id="email"
               name="email"
@@ -112,7 +119,6 @@ export function AuthForm({ mode }: AuthFormProps) {
               autoComplete={isRegistration ? "new-password" : "current-password"}
               className="text-input"
               aria-describedby={error ? "auth-form-error" : undefined}
-              aria-invalid={Boolean(error)}
               disabled={isPending}
               id="password"
               minLength={8}
