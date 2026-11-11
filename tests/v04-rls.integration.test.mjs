@@ -38,8 +38,9 @@ const owner = new Client({ connectionString: migrationUrl });
 const runtime = new Client({ connectionString: runtimeUrl });
 let connected = false;
 let runtimeRoleCreated = false;
-// Custom role ids created by seedOwnerFixtures; teardown deletes their grants,
-// audit rows and definitions before anything that references them.
+// Custom role ids created by seedOwnerFixtures; teardown deletes their grants.
+// The custom definitions and role-definition audit rows remain because database
+// triggers enforce immutable definitions and append-only audit history.
 const customRoleIds = [];
 // User ids actually inserted by this run; teardown deletes exactly these and
 // never any other user.
@@ -155,6 +156,7 @@ async function seedOwnerFixtures() {
   );
   assert.equal(permissionRows.length, 1);
   for (const [ownerOrg, code, actorId] of [[ids.orgB, "CUSTOM_B", ids.actorB]]) {
+    // role_family_id is a logical family identifier, not a separate table row.
     const familyId = randomUUID();
     const roleId = randomUUID();
     customRoleIds.push(roleId);
@@ -394,14 +396,6 @@ after(async () => {
       );
       await owner.query(
         'DELETE FROM "core"."role_permission_grant" WHERE "role_definition_id" = ANY($1::uuid[])',
-        [customRoleIds],
-      );
-      await owner.query(
-        'DELETE FROM "core"."role_definition_audit" WHERE "role_definition_id" = ANY($1::uuid[])',
-        [customRoleIds],
-      );
-      await owner.query(
-        'DELETE FROM "core"."role_definition" WHERE "id" = ANY($1::uuid[])',
         [customRoleIds],
       );
       await owner.query(
