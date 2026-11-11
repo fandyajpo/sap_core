@@ -43,8 +43,10 @@ let runtimeRoleCreated = false;
 // PostgreSQL service for this job and discards it after completion; attempting
 // row-by-row cleanup would violate immutable history and its foreign keys.
 
-// Fixture ids are unique per run (prefixed random UUIDs) so teardown deletes
-// only rows created by this run and can never collide with pre-existing rows.
+// Fixture ids are unique per run (prefixed random UUIDs) so this suite's
+// tenant rows cannot collide with another run. Rows intentionally remain in
+// the job-scoped disposable database because append-only audit history and
+// foreign keys make row-by-row teardown invalid; CI discards the whole service.
 const runId = randomUUID();
 const ids = {
   actorA: `v04-rls-${runId}-actor-a`,
