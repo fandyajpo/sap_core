@@ -52,6 +52,18 @@ test("the persisted DENY loader binds policy rows to the actor's exact membershi
   assert.match(loader, /denyEligiblePermissions/);
 });
 
+test("custom-role create and revise authorization loads membership-bound tenant DENY policies", async () => {
+  const adapter = await source("src/lib/tenant-role-definition-service-core.ts");
+  assert.match(adapter, /FROM "core"\."tenant_deny_policy" p/);
+  assert.match(adapter, /"target_membership_id" = \$2::uuid/);
+  assert.match(adapter, /p\."scope" = 'ORGANIZATION'::"core"\."RoleScope"/);
+  assert.match(adapter, /p\."revoked_at" IS NULL/);
+  assert.match(adapter, /p\."expires_at" > clock_timestamp\(\)/);
+  assert.match(adapter, /FOR SHARE OF p/);
+  assert.match(adapter, /policyDenyRows/);
+  assert.match(adapter, /denyPermissions\.add\(row\.permissionCode as AuthorizationPermission\)/);
+});
+
 test("DENY policy administration uses a verified session and exact active ORG_OWNER assignment", async () => {
   const service = await source("src/lib/tenant-deny-policy-service.ts");
   assert.match(service, /lockVerifiedSessionRow/);
