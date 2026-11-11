@@ -71,6 +71,7 @@ const ids = {
   plantAssignmentB1: randomUUID(),
   denyPolicyA: randomUUID(),
   denyPolicyB: randomUUID(),
+  denyPermissionId: null,
 };
 
 async function count(client, table, where = "") {
@@ -204,6 +205,7 @@ async function seedOwnerFixtures() {
     `SELECT "id"::text AS id FROM "core"."permission_definition" WHERE "code" = 'organization.read'`,
   );
   assert.equal(denyPermission.length, 1);
+  ids.denyPermissionId = denyPermission[0].id;
   for (const [organizationId, membershipId, targetUserId, issuerUserId, policyId] of [
     [ids.orgA, ids.orgMembershipMemberA, ids.memberA, ids.actorA, ids.denyPolicyA],
     [ids.orgB, ids.orgMembershipB, ids.actorB, ids.actorB, ids.denyPolicyB],
@@ -361,6 +363,29 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     assert.equal(await count(runtime, '"core"."tenant_deny_policy"', `WHERE "id" = '${ids.denyPolicyB}'::uuid`), 0, "foreign Organization DENY policy remains hidden");
     assert.equal(await count(runtime, '"core"."tenant_deny_audit_event"'), 1, "Organization context reveals only its DENY audit event");
     assert.equal(await count(runtime, '"core"."tenant_deny_audit_event"', `WHERE "organization_id" = '${ids.orgB}'::uuid`), 0, "foreign Organization DENY audit remains hidden");
+
+    await assert.rejects(
+      runtime.query(
+        `INSERT INTO "core"."tenant_deny_policy"
+         ("id","organization_id","target_membership_id","target_user_id",
+          "permission_definition_id","scope","reason","issued_by_user_id")
+         VALUES ($1,$2,$3,$4,$5,'ORGANIZATION','cross-tenant RLS probe',$6)`,
+        [randomUUID(), ids.orgB, ids.orgMembershipB, ids.actorB, ids.denyPermissionId, ids.actorA],
+      ),
+      (error) => error.code === "42501",
+      "RLS must reject inserting a DENY policy for another Organization",
+    );
+    await assert.rejects(
+      runtime.query(
+        `INSERT INTO "core"."tenant_deny_audit_event"
+         ("id","policy_id","organization_id","target_membership_id","target_user_id",
+          "permission_definition_id","scope","actor_user_id","event_type","outcome","reason_code")
+         VALUES ($1,$2,$3,$4,$5,$6,'ORGANIZATION',$7,'POLICY_READ','SUCCESS','RLS_PROBE')`,
+        [randomUUID(), ids.denyPolicyB, ids.orgB, ids.orgMembershipB, ids.actorB, ids.denyPermissionId, ids.actorA],
+      ),
+      (error) => error.code === "42501",
+      "RLS must reject inserting a DENY audit event for another Organization",
+    );
 
     // SYSTEM role definitions are SELECT-visible but intentionally not
     // UPDATE-visible under RLS. A row lock on the catalog therefore hides
