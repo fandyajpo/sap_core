@@ -50,6 +50,7 @@ function harness({ actorMember = true, targetMember = true, deny = false, explic
           null,
         ]);
         return [{
+          policyId: "99999999-9999-4999-8999-999999999999",
           scope: "ORGANIZATION",
           scopeId: organizationId,
           permissionCode: "roles.assign",
@@ -134,4 +135,42 @@ test("effective-role listing requires roles.read and the requested user membersh
   assert.equal(await policy.authorizeList({
     actorUserId: actorId, userId: recipientId, scope: "ORGANIZATION", parentId: membershipId,
   }, session), false);
+});
+
+
+test("explicit tenant DENY returns attributable policy evidence to the audit recorder", async () => {
+  const { session } = harness({ explicitDeny: true });
+  const recorded = [];
+  const policy = createRoleAssignmentAuthorization(actorId, organizationId, async (evidence) => {
+    recorded.push(evidence);
+  });
+  assert.equal(await policy.authorizeGrant({
+    actorUserId: actorId, scope: "ORGANIZATION", parentId: membershipId,
+    roleDefinitionId: "88888888-8888-4888-8888-888888888888",
+  }, session), false);
+  assert.equal(recorded.length, 1);
+  assert.deepEqual(recorded[0], {
+    actorUserId: actorId,
+    actorMembershipId: "55555555-5555-4555-8555-555555555555",
+    organizationId,
+    scope: "ORGANIZATION",
+    scopeId: organizationId,
+    companyId: null,
+    plantId: null,
+    permission: "roles.assign",
+    policyId: "99999999-9999-4999-8999-999999999999",
+  });
+});
+
+test("role assignment production adapter writes enforcement audit in a separate verified-session transaction", async () => {
+  const adapter = await (await import("node:fs/promises")).readFile(
+    new URL("../src/lib/tenant-role-assignment-service.ts", import.meta.url), "utf8",
+  );
+  assert.match(adapter, /prisma\.\$transaction\(async \(auditTx\)/);
+  assert.match(adapter, /lockVerifiedSessionRow/);
+  assert.match(adapter, /resolveTenantTargetContext\(auditTx, session, request\)/);
+  assert.match(adapter, /"policy_id"/);
+  assert.match(adapter, /\$\{evidence\.policyId\}::uuid/);
+  assert.match(adapter, /POLICY_ENFORCEMENT_DENIED/);
+  assert.match(adapter, /recordRoleAssignmentExplicitDeny\(session, evidence\)/);
 });
