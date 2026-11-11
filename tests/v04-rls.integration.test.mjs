@@ -270,8 +270,12 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
     assert.equal(await count(runtime, '"core"."company"'), 0);
     assert.equal(await count(runtime, '"core"."plant"'), 0);
     assert.equal(await count(runtime, '"core"."organization_membership"'), 0);
+    const { rows: visibleIdentityFixtures } = await runtime.query(
+      `SELECT COUNT(*)::int AS n FROM "core"."user" WHERE "id" = ANY($1::text[])`,
+      [[ids.actorA, ids.memberA, ids.actorB]],
+    );
     assert.equal(
-      await count(runtime, '"core"."user"', 'WHERE "id" = ANY(ARRAY[\'${ids.actorA}\', \'${ids.memberA}\', \'${ids.actorB}\']::text[])'),
+      visibleIdentityFixtures[0].n,
       3,
       "the three Better Auth identity fixtures remain available without tenant context",
     );
