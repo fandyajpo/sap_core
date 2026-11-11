@@ -108,12 +108,12 @@ test("DENY-eligible permission allowlists stay identical across service, runtime
 
   const servicePermissions = extractSet(
     service,
-    /const denyEligiblePermissions = new Set\\(\\[([\\s\\S]*?)\\]\\);/,
+    /const denyEligiblePermissions = new Set\(\[([\s\S]*?)\]\);/,
     "service",
   );
   const loaderPermissions = extractSet(
     loader,
-    /const denyEligiblePermissions = new Set\(\[([\s\S]*?)\]\);/,
+    /const denyEligiblePermissions = new Set<string>\(\[([\s\S]*?)\]\);/,
     "runtime loader",
   );
   const databasePermissions = extractSet(
