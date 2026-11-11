@@ -372,8 +372,8 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
          VALUES ($1,$2,$3,$4,$5,'ORGANIZATION','cross-tenant RLS probe',$6)`,
         [randomUUID(), ids.orgB, ids.orgMembershipB, ids.actorB, ids.denyPermissionId, ids.actorA],
       ),
-      (error) => error.code === "42501",
-      "RLS must reject inserting a DENY policy for another Organization",
+      (error) => ["42501", "23514"].includes(error.code),
+      "RLS or the tenant-scoped membership guard must reject a DENY policy for another Organization",
     );
     await assert.rejects(
       runtime.query(
