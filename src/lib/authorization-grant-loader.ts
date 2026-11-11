@@ -77,9 +77,32 @@ async function lockAuthorizationGrantRows(
      AND rd."scope" = 'ORGANIZATION'::"core"."RoleScope"
      AND rd."disabled_at" IS NULL
      AND rd."permissions_locked_at" IS NOT NULL
-    JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
     WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
-    FOR SHARE OF ra, om, rd, g
+    -- SYSTEM definitions and permission snapshots are immutable read-only catalog
+    -- rows under runtime RLS. Lock only mutable assignment and membership rows.
+    FOR SHARE OF ra, om
+  `;
+
+  // Custom Organization definitions can still be disabled by their owner.
+  // Lock those tenant-owned rows separately; SYSTEM definitions and immutable
+  // permission snapshots must never be included in an UPDATE-policy row lock.
+  await tx.$queryRaw`
+    SELECT rd."id"
+    FROM "core"."organization_role_assignment" ra
+    JOIN "core"."organization_membership" om
+      ON om."id" = ra."organizationMembershipId"
+     AND om."userId" = ${context.userId}
+     AND om."organizationId" = ${context.organizationId}::uuid
+     AND om."status" = 'ACTIVE'
+    JOIN "core"."role_definition" rd
+      ON rd."id" = ra."roleDefinitionId"
+     AND rd."scope" = ra."role_scope"
+     AND rd."kind" = 'ORGANIZATION_CUSTOM'::"core"."RoleDefinitionKind"
+     AND rd."ownerOrganizationId" = ${context.organizationId}::uuid
+     AND rd."disabled_at" IS NULL
+     AND rd."permissions_locked_at" IS NOT NULL
+    WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
+    FOR SHARE OF rd
   `;
 
   if (context.scope === "COMPANY" || context.scope === "PLANT") {
@@ -104,7 +127,6 @@ async function lockAuthorizationGrantRows(
        AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
        AND rd."disabled_at" IS NULL
        AND rd."permissions_locked_at" IS NOT NULL
-      JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
       WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
       FOR SHARE OF ra, cm, om, rd, g
     `;
@@ -139,7 +161,6 @@ async function lockAuthorizationGrantRows(
        AND rd."kind" = 'SYSTEM'::"core"."RoleDefinitionKind"
        AND rd."disabled_at" IS NULL
        AND rd."permissions_locked_at" IS NOT NULL
-      JOIN "core"."role_permission_grant" g ON g."role_definition_id" = rd."id"
       WHERE ra."revoked_at" IS NULL AND ra."is_break_glass" = FALSE
       FOR SHARE OF ra, pa, cm, om, rd, g
     `;
