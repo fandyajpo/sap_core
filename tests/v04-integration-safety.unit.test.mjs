@@ -49,6 +49,18 @@ test("rejects URLs that do not match the exact disposable target", () => {
   assert.throws(() => dbGuard("postgresql://sap_core:pw@127.0.0.1:55432/sap_core_v03_test?schema=public"), /must not embed a password/);
   assert.throws(() => dbGuard("mysql://sap_core@127.0.0.1:55432/sap_core_v03_test?schema=public"), /postgresql: protocol/);
   assert.throws(() => dbGuard(`${ciDatabaseUrl}&application_name=sap_core_tests`), /is not approved/);
+  assert.throws(
+    () => dbGuard("postgresql://sap_core@127.0.0.1:55432/sap_core_v03_test?schema=private"),
+    /schema query parameter must be exactly "public"/,
+  );
+  assert.throws(
+    () => dbGuard("postgresql://sap_core@127.0.0.1:55432/sap_core_v03_test?schema="),
+    /schema query parameter must be exactly "public"/,
+  );
+  assert.throws(
+    () => dbGuard("postgresql://sap_core@127.0.0.1:55432/sap_core_v03_test%ZZ?schema=public"),
+    /pathname contains malformed percent encoding/,
+  );
   assert.throws(() => dbGuard("not a url"), /not a valid URL/);
 });
 
