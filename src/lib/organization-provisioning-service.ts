@@ -5,10 +5,39 @@ import { prisma } from "@/lib/prisma";
 import { lockVerifiedSessionRow } from "@/lib/verified-session-lock";
 
 export class OrganizationProvisioningError extends Error {
-  constructor(readonly code: "INVALID_NAME" | "ALREADY_HAS_ORGANIZATION" | "OWNER_ROLE_UNAVAILABLE") {
+  constructor(
+    readonly code: "INVALID_NAME" | "ALREADY_HAS_ORGANIZATION" | "OWNER_ROLE_UNAVAILABLE",
+    readonly organizationId?: string,
+  ) {
     super(code);
     this.name = "OrganizationProvisioningError";
   }
+}
+
+function isOrganizationMembershipSlotConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+
+  const candidate = error as {
+    code?: unknown;
+    constraint?: unknown;
+    meta?: { code?: unknown; constraint?: unknown; message?: unknown };
+  };
+
+  if (
+    candidate.constraint === "organization_membership_user_slot_key" ||
+    candidate.meta?.constraint === "organization_membership_user_slot_key"
+  ) {
+    return true;
+  }
+
+  // Prisma wraps PostgreSQL raw-query errors as P2010. Only translate the
+  // exact membership-slot violation; unrelated unique violations stay errors.
+  return (
+    candidate.code === "P2010" &&
+    candidate.meta?.code === "23505" &&
+    typeof candidate.meta.message === "string" &&
+    /organization_membership_user_slot_key/.test(candidate.meta.message)
+  );
 }
 
 export async function provisionInitialOrganization(input: {
@@ -36,10 +65,39 @@ export async function provisionInitialOrganization(input: {
       );
 
       const actor = await query<{ id: string }>(
-        `SELECT "id" FROM "core"."user" WHERE "id" = $1 FOR UPDATE`,
+        `SELECT "id" FROM "core"."user" WHERE "id" = $1`,
         input.userId,
       );
       if (!actor[0]) throw new Error("Authenticated user no longer exists.");
+
+      // Serialize bootstrap attempts across all sessions belonging to this user.
+      await query(
+        `SELECT pg_advisory_xact_lock(
+           hashtextextended('organization-membership:' || $1, 0)
+         )`,
+        input.userId,
+      );
+
+      // Resolve the actor's existing ACTIVE membership while the bootstrap
+      // RLS policy can see it. Do not install the new tenant ID before this read.
+      const existing = await query<{ organizationId: string }>(
+        `SELECT "organizationId"::text AS "organizationId"
+           FROM "core"."organization_membership"
+          WHERE "userId" = $1
+            AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
+          LIMIT 1`,
+        input.userId,
+      );
+      if (existing[0]) {
+        throw new OrganizationProvisioningError(
+          "ALREADY_HAS_ORGANIZATION",
+          existing[0].organizationId,
+        );
+      }
+
+      // SUSPENDED memberships are intentionally not exposed by the current
+      // actor-bootstrap SELECT policy. The partial unique index still includes
+      // ACTIVE and SUSPENDED, and its exact violation is translated below.
 
       await query(
         `SELECT set_config('app.user_id', $1, true),
@@ -47,14 +105,6 @@ export async function provisionInitialOrganization(input: {
         input.userId,
         organizationId,
       );
-
-      const existing = await query<{ id: string }>(
-        `SELECT "id" FROM "core"."organization_membership"
-          WHERE "userId" = $1 AND "status" = 'ACTIVE'::"core"."OrganizationMembershipStatus"
-          LIMIT 1`,
-        input.userId,
-      );
-      if (existing[0]) throw new OrganizationProvisioningError("ALREADY_HAS_ORGANIZATION");
 
       const roles = await query<{ id: string }>(
         `SELECT "id" FROM "core"."role_definition"
@@ -106,13 +156,8 @@ export async function provisionInitialOrganization(input: {
       return { id: organizationId, name };
     });
   } catch (error) {
-    const candidate = error as { code?: string; meta?: { code?: string; constraint?: string } };
-    if (
-      candidate?.code === "P2002" ||
-      candidate?.code === "23505" ||
-      candidate?.meta?.code === "23505" ||
-      candidate?.meta?.constraint === "organization_membership_user_slot_key"
-    ) {
+    if (error instanceof OrganizationProvisioningError) throw error;
+    if (isOrganizationMembershipSlotConflict(error)) {
       throw new OrganizationProvisioningError("ALREADY_HAS_ORGANIZATION");
     }
     throw error;
