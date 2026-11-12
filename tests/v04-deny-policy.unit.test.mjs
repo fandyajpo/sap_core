@@ -179,6 +179,6 @@ test("custom-role explicit DENY evidence is persisted through a separate verifie
   assert.match(adapter, /resolveTenantTargetContext\(auditTx, session/);
   assert.match(adapter, /POLICY_ENFORCEMENT_DENIED/);
   assert.match(adapter, /recordExplicitDeny: \(evidence\) => recordRoleDefinitionExplicitDeny\(session, evidence\)/);
-  assert.match(adapter, /createAuthorization\(actorUserId, recordExplicitDeny\)\)\s*\.reviseCustomRole/);
+  assert.match(adapter, /export async function reviseCustomRoleForCurrentUser[\\s\\S]*?recordExplicitDeny: \\(evidence\\) => recordRoleDefinitionExplicitDeny\\(session, evidence\\)[\\s\\S]*?\\.reviseCustomRoleForCurrentUser\\(input\\)/);
   assert.match(adapter, /"policy_id"/);
 });
