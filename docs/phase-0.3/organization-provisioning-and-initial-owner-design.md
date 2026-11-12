@@ -172,7 +172,36 @@ The current `core.organization` model has no `name`, `slug`, or display-name fie
 - Do not add a slug in this increment. A stable public identifier or slug requires a separate product and uniqueness decision.
 - Existing Organization rows must receive an explicit migration backfill/default strategy before the column becomes NOT NULL. Do not invent names from UUIDs or silently use placeholder names.
 
-The product direction is approved, but the exact migration/backfill strategy and schema implementation still require review. The onboarding UI must not ship until the name is actually persisted.
+### 8.1 Proposed schema increment and legacy-data backfill
+
+Use a staged, forward-only rollout. Do not combine an unconditional `ADD COLUMN name ... NOT NULL` with a fabricated default.
+
+**Increment A — expand safely**
+
+1. Add `core.organization.name` as nullable `VARCHAR(160)` in a new forward migration.
+2. Represent the field as optional in the intermediate Prisma schema (`name String? @db.VarChar(160)`) while legacy rows may still be unresolved.
+3. New application writes and the future provisioning service must require a valid non-empty name from day one; nullable storage is only a temporary compatibility state for pre-existing rows.
+4. Do not add a database default. Do not derive a name from the UUID, email, owner identity, or another unverified source.
+5. Existing Organization read surfaces must tolerate a null name during this transition and must not display the UUID as if it were a human-readable name.
+
+**Backfill gate — explicit mapping only**
+
+1. Before the backfill, obtain an authoritative inventory of existing Organization IDs from the target environment through a separately approved, read-only operation. The hosted migration state and current hosted data are not verified by this design.
+2. For every existing row, require an owner-confirmed mapping from the exact Organization UUID to its intended display name. If the correct name is unknown, stop and leave the row unresolved; do not guess.
+3. Review the mapping as data before applying it. The backfill must update only the explicitly listed Organization IDs and must preserve the approved display casing after trimming.
+4. Verify that every mapped name is non-empty and no longer than 160 characters, that every target ID exists exactly once, and that no Organization row remains with a null name.
+5. If the environment contains zero Organization rows, record that verified zero-row result as the backfill evidence; do not infer it from a local database or from an old audit.
+
+**Increment B — contract safely**
+
+1. Only after the backfill gate passes for the relevant environment, add a separate forward migration that changes `name` to `NOT NULL`.
+2. Change the Prisma field to required: `name String @db.VarChar(160)`.
+3. Keep application-level trimming/length validation. A database CHECK constraint for non-blank trimmed names may be considered in the migration review, but it must be consistent with the application's exact validation semantics.
+4. Do not rewrite or squash existing migrations. Do not apply either migration to hosted or local databases as part of this design work.
+
+This two-increment approach allows new Organizations to require names while existing records are explicitly reconciled. It also makes the point at which the database guarantees a name visible and reviewable. Whether both increments can be collapsed for a particular environment is an operational decision that requires fresh row-count and data evidence plus an approved migration plan; it is not the default design.
+
+The onboarding UI must not ship until the write path persists the name. The final NOT NULL contract must not be declared complete until the applicable environment's backfill evidence is reviewed.
 
 ## 9. API and UI boundary
 
@@ -229,7 +258,7 @@ This proposal does not authorize or implement:
 - a general-purpose tenant-context setter;
 - changes to existing RLS policies;
 - changes to Better Auth identity/session schema;
-- Organization name/slug schema changes (the Named Organization direction is approved, but schema implementation is not);
+- Applying Organization name/slug schema changes or backfills (the Named Organization direction and staged design are approved for documentation only);
 - migration generation or application;
 - seed changes;
 - hosted database access, role provisioning, or deployment;
@@ -247,7 +276,7 @@ Before coding, obtain explicit approval for:
 
 After those decisions, implementation should proceed in this order:
 
-1. schema/audit design and migration review;
+1. approve the Organization name schema/backfill plan and audit schema, then review each forward migration before execution;
 2. server-only session-bound provisioning service;
 3. API route and safe conflict/error mapping;
 4. disposable PostgreSQL RLS/concurrency/adversarial tests;
