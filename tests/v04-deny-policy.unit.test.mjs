@@ -62,6 +62,10 @@ test("custom-role create and revise authorization loads membership-bound tenant 
   assert.match(adapter, /FOR SHARE OF p/);
   assert.match(adapter, /policyDenyRows/);
   assert.match(adapter, /denyPermissions\.add\(row\.permissionCode as AuthorizationPermission\)/);
+  assert.match(adapter, /requestedPermissions\?: readonly AuthorizationPermission\[\]/);
+  assert.match(adapter, /for \(const permission of new Set\(input\.requestedPermissions \?\? \[\]\)\)/);
+  assert.match(adapter, /policyId: policy\?\.policyId \?\? null/);
+
 });
 
 test("DENY policy administration uses a verified session and exact active ORG_OWNER assignment", async () => {
