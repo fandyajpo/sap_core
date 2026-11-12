@@ -28,14 +28,24 @@ export function CreateOrganizationForm() {
       });
       const result = await response.json() as {
         organization?: { id?: string };
+        organizationId?: string;
         error?: string;
       };
+
+      if (response.status === 409 && result.error === "ALREADY_HAS_ORGANIZATION") {
+        if (result.organizationId) {
+          router.push(`/organizations/${encodeURIComponent(result.organizationId)}`);
+          router.refresh();
+          return;
+        }
+        setError("Your account already has an organization membership that prevents creating another workspace. Contact an administrator if you need help accessing it.");
+        return;
+      }
+
       if (!response.ok || !result.organization?.id) {
-        setError(result.error === "ALREADY_HAS_ORGANIZATION"
-          ? "Your account already has an organization. Open it using its organization ID."
-          : result.error === "OWNER_ROLE_UNAVAILABLE"
-            ? "Organization setup is temporarily unavailable. Please try again later."
-            : "We couldn't create the organization. Check the name and try again.");
+        setError(result.error === "OWNER_ROLE_UNAVAILABLE"
+          ? "Organization setup is temporarily unavailable. Please try again later."
+          : "We couldn't create the organization. Check the name and try again.");
         return;
       }
       router.push(`/organizations/${encodeURIComponent(result.organization.id)}`);
