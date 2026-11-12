@@ -21,7 +21,7 @@ export interface RoleDefinitionExplicitDenyEvidence {
   actorUserId: string;
   actorMembershipId: string;
   organizationId: string;
-  permission: "roles.create" | "roles.revise";
+  permission: AuthorizationPermission;
   policyId: string | null;
 }
 
@@ -264,7 +264,7 @@ function createAuthorization(
     },
 
     async getDelegablePermissions(
-      input: { actorUserId: string; organizationId: string },
+      input: { actorUserId: string; organizationId: string; requestedPermissions?: readonly AuthorizationPermission[] },
       transaction: ScopedAccessSession,
     ): Promise<readonly AuthorizationPermission[]> {
       const loaded = await loadOrganizationGrantContext(transaction, input.actorUserId, input.organizationId);
@@ -274,6 +274,17 @@ function createAuthorization(
           .map((row) => row.permissionCode as AuthorizationPermission),
       );
       const denied = new Set(loaded.denies.flatMap((entry) => entry.permissions));
+      for (const permission of new Set(input.requestedPermissions ?? [])) {
+        if (!denied.has(permission) || !recordExplicitDeny) continue;
+        const policy = loaded.denyPolicyRows.find((row) => row.permissionCode === permission);
+        await recordExplicitDeny({
+          actorUserId: input.actorUserId,
+          actorMembershipId: loaded.actorMembershipId,
+          organizationId: input.organizationId,
+          permission,
+          policyId: policy?.policyId ?? null,
+        });
+      }
       return [...allowed].filter((permission) => !denied.has(permission));
     },
 
