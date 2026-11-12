@@ -78,6 +78,14 @@ export async function provisionInitialOrganization(input: {
         input.userId,
       );
 
+      // Install only the verified actor context first. The bootstrap RLS
+      // policy uses app.user_id to expose this actor's own ACTIVE membership.
+      // Keep app.organization_id unset until after the membership lookup.
+      await query(
+        `SELECT set_config('app.user_id', $1, true)`,
+        input.userId,
+      );
+
       // Resolve the actor's existing ACTIVE membership while the bootstrap
       // RLS policy can see it. Do not install the new tenant ID before this read.
       const existing = await query<{ organizationId: string }>(
