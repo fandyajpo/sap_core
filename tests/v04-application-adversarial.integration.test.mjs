@@ -358,15 +358,18 @@ after(async () => {
   // This suite therefore leaves its test-owned rows in the disposable
   // database, which must be discarded after the run.
   const errors = [];
+  let runtimePoolClosed = false;
 
   // Close runtime connections before dropping the role they authenticated as.
   try {
     await runtimePool.end();
+    runtimePoolClosed = true;
   } catch (error) {
     errors.push(error);
   }
 
-  if (ownerConnected && runtimeRoleCreated) {
+  // Never drop the role if its pool could not be closed successfully.
+  if (ownerConnected && runtimeRoleCreated && runtimePoolClosed) {
     try {
       // Revoke everything first (including the column-level UPDATE grant on
       // tenant_deny_policy) so DROP ROLE cannot fail on leftover privileges.
