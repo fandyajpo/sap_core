@@ -179,10 +179,10 @@ test("custom-role explicit DENY evidence is persisted through a separate verifie
   assert.match(core, /permission: "roles\.revise"/);
   assert.match(core, /policyId: policy\?\.policyId \?\? null/);
   assert.equal((core.match(/await recordExplicitDeny\(\{/g) ?? []).length, 3);
-  assert.match(core, /for \\(const permission of new Set\\(input\\.requestedPermissions \\?\\? \\[\\]\\)\\) \\{[\\s\\S]*?await recordExplicitDeny\\(\\{/);
-  assert.match(service, /authorization\\.getDelegablePermissions\\([\\s\\S]*?requestedPermissions: permissions,[\\s\\S]*?\\);\\s*if \\(!isPermissionSubset\\(permissions, delegablePermissions\\)\\) \\{\\s*throw new RoleDefinitionError\\("AUTHORIZATION_DENIED"/);
+  assert.match(core, /for \(const permission of new Set\(input\.requestedPermissions \?\? \[\]\)\) \{[\s\S]*?await recordExplicitDeny\(\{/);
+  assert.match(service, /authorization\.getDelegablePermissions\([\s\S]*?requestedPermissions: permissions,[\s\S]*?\);\s*if \(!isPermissionSubset\(permissions, delegablePermissions\)\) \{\s*throw new RoleDefinitionError\("AUTHORIZATION_DENIED"/);
   assert.equal((service.match(/requestedPermissions: permissions/g) ?? []).length, 2);
-  assert.doesNotMatch(adapter, /database\\.transaction/);
+  assert.doesNotMatch(adapter, /database\.transaction/);
   assert.match(adapter, /prisma\.\$transaction\(async \(auditTx\)/);
   assert.match(adapter, /lockVerifiedSessionRow/);
   assert.match(adapter, /resolveTenantTargetContext\(auditTx, session/);
