@@ -35,8 +35,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ organization }, { status: 201 });
   } catch (error) {
     if (error instanceof OrganizationProvisioningError) {
-      if (error.code === "INVALID_NAME") return NextResponse.json({ error: error.code }, { status: 400 });
-      if (error.code === "ALREADY_HAS_ORGANIZATION") return NextResponse.json({ error: error.code }, { status: 409 });
+      if (error.code === "INVALID_NAME") {
+        return NextResponse.json({ error: error.code }, { status: 400 });
+      }
+      if (error.code === "ALREADY_HAS_ORGANIZATION") {
+        return NextResponse.json(
+          { error: error.code, organizationId: error.organizationId },
+          { status: 409 },
+        );
+      }
       return NextResponse.json({ error: error.code }, { status: 503 });
     }
     return NextResponse.json({ error: "PROVISIONING_FAILED" }, { status: 500 });
