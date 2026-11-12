@@ -354,7 +354,7 @@ export function createTenantRoleDefinitionAdapter({
       input: Omit<CustomRoleReviseInput, "actorUserId">,
     ): Promise<RoleDefinitionRecord> {
       const actorUserId = await getVerifiedActor();
-      return createRoleDefinitionService(database, createAuthorization(actorUserId))
+      return createRoleDefinitionService(database, createAuthorization(actorUserId, recordExplicitDeny))
         .reviseCustomRole({ ...input, actorUserId });
     },
   };
