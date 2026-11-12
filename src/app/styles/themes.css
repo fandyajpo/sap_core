@@ -66,6 +66,21 @@
   --sc-color-info-foreground: var(--sc-white);
   --sc-color-info-subtle: #EFF6FF;
   --sc-color-info-border: #BFDBFE;
+
+  /*
+   * Application chrome. The sidebar is a structural brand surface (deep navy)
+   * rather than a content surface, so it carries its own semantic role and
+   * components never reach for primitives directly.
+   */
+  --sc-color-sidebar: var(--sc-navy-950);
+  --sc-color-sidebar-foreground: var(--sc-slate-200);
+  --sc-color-sidebar-muted: #94A3B8;
+  --sc-color-sidebar-border: rgba(148, 163, 184, 0.18);
+  --sc-color-sidebar-item-hover: rgba(148, 163, 184, 0.12);
+  --sc-color-sidebar-active-bg: rgba(59, 130, 246, 0.18);
+  --sc-color-sidebar-active-foreground: var(--sc-white);
+  --sc-color-sidebar-accent: var(--sc-blue-500);
+  --sc-color-topbar: var(--sc-white);
 }
 
 [data-theme="dark"] {
@@ -120,6 +135,17 @@
   --sc-color-info-foreground: #0B1220;
   --sc-color-info-subtle: rgba(96, 165, 250, 0.12);
   --sc-color-info-border: rgba(96, 165, 250, 0.4);
+
+  /* Application chrome (see the light block for the role definition). */
+  --sc-color-sidebar: #0B1220;
+  --sc-color-sidebar-foreground: var(--sc-slate-200);
+  --sc-color-sidebar-muted: #94A3B8;
+  --sc-color-sidebar-border: #263449;
+  --sc-color-sidebar-item-hover: rgba(148, 163, 184, 0.12);
+  --sc-color-sidebar-active-bg: rgba(96, 165, 250, 0.16);
+  --sc-color-sidebar-active-foreground: var(--sc-white);
+  --sc-color-sidebar-accent: #60A5FA;
+  --sc-color-topbar: #111C2E;
 }
 
 /*

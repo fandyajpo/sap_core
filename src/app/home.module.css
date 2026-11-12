@@ -1,0 +1,63 @@
+.entryCard {
+  max-width: 640px;
+  margin: clamp(24px, 5vw, 56px) 0 0;
+  padding: clamp(20px, 4vw, 32px);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-surface);
+  box-shadow: var(--sc-shadow-sm);
+}
+
+.entryCard h1 {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-h1);
+  font-weight: var(--sc-font-weight-semibold);
+  letter-spacing: var(--sc-tracking-h1);
+  line-height: var(--sc-leading-h1);
+  overflow-wrap: anywhere;
+}
+
+.lede {
+  margin: var(--sc-space-2) 0 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-body);
+  line-height: var(--sc-leading-body);
+}
+
+.primaryLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-height: 44px;
+  margin-top: var(--sc-space-5);
+  padding: 0 var(--sc-space-5);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-primary);
+  color: var(--sc-color-primary-foreground);
+  font-size: var(--sc-text-body);
+  font-weight: var(--sc-font-weight-semibold);
+  text-decoration: none;
+  transition: background-color var(--sc-duration-micro) var(--sc-ease-standard);
+}
+
+.primaryLink:hover {
+  background: var(--sc-color-primary-hover);
+  color: var(--sc-color-primary-foreground);
+  text-decoration: none;
+}
+
+.primaryLink:active {
+  background: var(--sc-color-primary-active);
+}
+
+.primaryLink:focus-visible {
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
+}
+
+.note {
+  margin: var(--sc-space-4) 0 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-caption);
+}

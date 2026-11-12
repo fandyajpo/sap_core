@@ -1,9 +1,13 @@
 import Link from "next/link";
+import { OrganizationOnboarding } from "@/components/organization-onboarding/organization-onboarding";
 import { SignOutButton } from "@/components/sign-out-button";
 import { requireCurrentSession } from "@/lib/auth-session";
+import { getCurrentWorkspace } from "@/lib/organization-workspace-reader";
+import styles from "./home.module.css";
 
 export default async function HomePage() {
   const session = await requireCurrentSession();
+  const workspace = await getCurrentWorkspace();
 
   return (
     <main className="app-page">
@@ -18,15 +22,30 @@ export default async function HomePage() {
         <SignOutButton />
       </header>
 
-      <section className="welcome-card" aria-labelledby="welcome-title">
-        <p className="eyebrow">Authenticated session</p>
-        <h1 id="welcome-title">Welcome, {session.user.name}</h1>
-        <p className="user-email">{session.user.email}</p>
-        <div className="status-row">
-          <span className="status-dot" aria-hidden="true" />
-          <span>Your identity has been verified for this session.</span>
-        </div>
-      </section>
+      {workspace ? (
+        <section aria-labelledby="workspace-entry-title" className={styles.entryCard}>
+          <p className="eyebrow">Workspace ready</p>
+          <h1 id="workspace-entry-title">
+            {workspace.organizationName ?? "Organization workspace"}
+          </h1>
+          <p className={styles.lede}>
+            Your account already belongs to an organization. Continue into its workspace to manage
+            members, roles and role assignments.
+          </p>
+          <Link
+            className={styles.primaryLink}
+            href={`/organizations/${encodeURIComponent(workspace.organizationId)}`}
+          >
+            Open workspace
+            <span aria-hidden="true"> →</span>
+          </Link>
+          <p className={styles.note}>
+            An account holds one active organization membership at a time.
+          </p>
+        </section>
+      ) : (
+        <OrganizationOnboarding />
+      )}
 
       <aside className="access-notice">
         <h2>Authentication is not authorization</h2>

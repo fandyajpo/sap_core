@@ -39,11 +39,13 @@
     "test:v04-deny-policy": "node --test tests/v04-deny-policy.unit.test.mjs",
     "test:v04-deny-policy:integration": "node --test tests/v04-deny-policy.integration.test.mjs",
     "test:v04-deny-policy:http": "node --test tests/v04-deny-policy.http.integration.test.mjs",
+    "test:v04-organization-provisioning:http": "node --test tests/v04-organization-provisioning.http.integration.test.mjs",
     "test:v04-application-adversarial": "node --test tests/v04-application-adversarial.integration.test.mjs",
     "test:v04-role-definition-owner-pre-read": "node --test tests/v04-role-definition-owner-pre-read.unit.test.mjs",
     "test:client-data": "node --test tests/client-data.unit.test.mjs",
     "test:data-table": "node --test tests/data-table.unit.test.mjs",
     "test:organization-members-ui": "node --test tests/organization-members-ui.unit.test.mjs",
+    "test:organization-provisioning": "node --test tests/organization-provisioning.unit.test.mjs",
     "test:organization-roles-ui": "node --test tests/organization-roles-ui.unit.test.mjs",
     "test:role-assignments-ui": "node --test tests/role-assignments-ui.unit.test.mjs"
   },

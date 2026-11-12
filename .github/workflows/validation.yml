@@ -50,6 +50,7 @@ jobs:
       - run: pnpm test:client-data
       - run: pnpm test:data-table
       - run: pnpm test:organization-members-ui
+      - run: pnpm test:organization-provisioning
       - run: pnpm test:organization-roles-ui
       - run: pnpm test:role-assignments-ui
       - run: node --test tests/architecture-boundaries.unit.test.mjs
@@ -79,6 +80,7 @@ jobs:
       V04_SESSION_LOCK_ALLOW_DISPOSABLE_DB: "1"
       V04_SESSION_HTTP_ALLOW_DISPOSABLE_DB: "1"
       V04_DENY_HTTP_ALLOW_DISPOSABLE_DB: "1"
+      V04_ORGANIZATION_PROVISIONING_ALLOW_DISPOSABLE_DB: "1"
       BETTER_AUTH_URL: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v4
@@ -136,6 +138,7 @@ jobs:
       - run: pnpm test:v04-session-revocation:integration
       - run: pnpm test:v04-session-revocation:http
       - run: pnpm test:v04-deny-policy:http
+      - run: pnpm test:v04-organization-provisioning:http
       - name: Show DENY HTTP failure diagnostics
         if: always()
         run: |

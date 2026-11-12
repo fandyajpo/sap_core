@@ -1,0 +1,318 @@
+/*
+ * Organization workspace overview.
+ *
+ * Everything below is presentational: the page is a server component and the
+ * data it shows (session identity, organization reference) already comes from
+ * the authorized server boundary. No counts, metrics or activity are invented.
+ */
+
+.page {
+  display: grid;
+  gap: var(--sc-space-8);
+  min-width: 0;
+}
+
+.pageHeader {
+  display: grid;
+  gap: var(--sc-space-2);
+  min-width: 0;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-3);
+}
+
+.titleRow h1 {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: clamp(1.5rem, 3vw, 1.875rem);
+  font-weight: var(--sc-font-weight-semibold);
+  letter-spacing: var(--sc-tracking-h1);
+  line-height: var(--sc-leading-h1);
+}
+
+.lede {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-body-large);
+  line-height: var(--sc-leading-body-large);
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  padding: 4px var(--sc-space-3);
+  border: var(--sc-border-width) solid var(--sc-color-success-border);
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-color-success-subtle);
+  color: var(--sc-color-success);
+  font-size: var(--sc-text-caption);
+  font-weight: var(--sc-font-weight-semibold);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-success);
+}
+
+/* ------------------------------------------------------------ context */
+
+.contextPanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-6);
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--sc-space-5) var(--sc-space-6);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
+  box-shadow: var(--sc-shadow-xs);
+}
+
+.contextIdentity {
+  display: grid;
+  gap: var(--sc-space-1);
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.contextLabel {
+  margin: 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-caption);
+  font-weight: var(--sc-font-weight-semibold);
+  letter-spacing: var(--sc-tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+.contextIdentity h2 {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-h3);
+  font-weight: var(--sc-font-weight-semibold);
+  letter-spacing: var(--sc-tracking-h3);
+  line-height: var(--sc-leading-h3);
+}
+
+.contextHint {
+  max-width: 62ch;
+  margin: var(--sc-space-1) 0 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-body);
+  line-height: var(--sc-leading-body);
+}
+
+.contextId {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-2);
+  margin: var(--sc-space-2) 0 0;
+  color: var(--sc-color-secondary-foreground);
+  font-size: var(--sc-text-label);
+}
+
+.contextId code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px var(--sc-space-2);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-color-surface-secondary);
+  color: var(--sc-color-foreground);
+  font-family: var(--sc-font-mono);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.contextMeta {
+  display: grid;
+  flex: 0 1 auto;
+  gap: var(--sc-space-3);
+  margin: 0;
+  padding: 0;
+  min-width: 180px;
+}
+
+.contextMeta div {
+  display: grid;
+  gap: 2px;
+}
+
+.contextMeta dt {
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-caption);
+  font-weight: var(--sc-font-weight-semibold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.contextMeta dd {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-body);
+  font-weight: var(--sc-font-weight-medium);
+}
+
+/* ----------------------------------------------------------- sections */
+
+.section {
+  display: grid;
+  gap: var(--sc-space-4);
+  min-width: 0;
+}
+
+.sectionHeader {
+  display: grid;
+  gap: var(--sc-space-1);
+}
+
+.sectionHeader h2 {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-h3);
+  font-weight: var(--sc-font-weight-semibold);
+  letter-spacing: var(--sc-tracking-h3);
+  line-height: var(--sc-leading-h3);
+}
+
+.sectionHeader p {
+  margin: 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-body);
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sc-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  gap: var(--sc-space-4);
+  align-items: flex-start;
+  height: 100%;
+  padding: var(--sc-space-5);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color var(--sc-duration-micro) var(--sc-ease-standard),
+    box-shadow var(--sc-duration-micro) var(--sc-ease-standard),
+    transform var(--sc-duration-micro) var(--sc-ease-standard);
+}
+
+.card:hover {
+  border-color: var(--sc-color-input);
+  box-shadow: var(--sc-shadow-sm);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.card:focus-visible {
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
+}
+
+.cardIcon {
+  display: grid;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-color-info-subtle);
+  color: var(--sc-color-info);
+  place-items: center;
+}
+
+.cardBody {
+  display: grid;
+  gap: var(--sc-space-1);
+  min-width: 0;
+}
+
+.cardTitle {
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-body-large);
+  font-weight: var(--sc-font-weight-semibold);
+}
+
+.cardDescription {
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-body);
+  line-height: var(--sc-leading-body);
+}
+
+.cardAction {
+  margin-top: var(--sc-space-2);
+  color: var(--sc-color-primary);
+  font-size: var(--sc-text-label);
+  font-weight: var(--sc-font-weight-semibold);
+}
+
+/* -------------------------------------------------------------- access */
+
+.accessList {
+  display: grid;
+  gap: var(--sc-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.accessList li {
+  position: relative;
+  padding-left: var(--sc-space-5);
+  color: var(--sc-color-secondary-foreground);
+  font-size: var(--sc-text-body);
+  line-height: var(--sc-leading-body);
+}
+
+.accessList li::before {
+  position: absolute;
+  top: 0.45em;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-primary);
+  content: "";
+}
+
+@media (max-width: 760px) {
+  .page {
+    gap: var(--sc-space-6);
+  }
+
+  .contextPanel {
+    padding: var(--sc-space-4);
+  }
+
+  .contextMeta {
+    min-width: 0;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+
+  .card {
+    padding: var(--sc-space-4);
+  }
+}

@@ -192,14 +192,6 @@ after(async () => {
         );
       }
 
-      await pool.query(
-        `UPDATE "core"."permission_delegation_policy"
-            SET "is_delegable" = FALSE, "approved_at" = NULL, "approved_by" = NULL
-          WHERE "permission_definition_id" = (
-            SELECT "id" FROM "core"."permission_definition" WHERE "code" = 'organization.read'
-          )`,
-      );
-
       const cleanupQueries = [
         `DELETE FROM "core"."session"
          WHERE "userId" IN (
@@ -840,15 +832,10 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
       });
       assert.equal(breakGlassAssignmentGrant.status, 400, "tenant HTTP API must not accept break-glass grants");
 
-      // Simulate an owner-approved delegable permission in this disposable fixture.
-      await pool.query(
-        `UPDATE "core"."permission_delegation_policy"
-            SET "is_delegable" = TRUE, "approved_at" = NOW(), "approved_by" = $1
-          WHERE "permission_definition_id" = (
-            SELECT "id" FROM "core"."permission_definition" WHERE "code" = 'organization.read'
-          )`,
-        [userId],
-      );
+      // `organization.read` is already delegable in the seeded owner-approved
+      // allowlist (migration 13). Neither this suite nor any other may mutate
+      // that shared catalog row: the five suites in this CI job share one
+      // database, so the seeded allowlist must survive every suite unchanged.
 
       const spoofedRoleCreate = await fetch(
         authURL + "/api/organizations/" + organizationId + "/roles",
@@ -934,14 +921,6 @@ test("V03 Better Auth identity integration and V01/V02 regression", async (t) =>
         preservedRevisionRows.map((row) => row.version),
         [2, 1],
         "denied non-delegable revision must leave immutable role history unchanged",
-      );
-
-      await pool.query(
-        `UPDATE "core"."permission_delegation_policy"
-            SET "is_delegable" = FALSE, "approved_at" = NULL, "approved_by" = NULL
-          WHERE "permission_definition_id" = (
-            SELECT "id" FROM "core"."permission_definition" WHERE "code" = 'organization.read'
-          )`,
       );
 
       const firstProfileResponse = await fetch(`${authURL}/account`, {

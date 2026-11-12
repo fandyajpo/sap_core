@@ -1,0 +1,117 @@
+.card {
+  max-width: 560px;
+  margin: clamp(24px, 5vw, 56px) 0 0;
+  padding: clamp(20px, 4vw, 32px);
+  border: var(--sc-border-width) solid var(--sc-color-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-surface);
+  box-shadow: var(--sc-shadow-sm);
+}
+
+.card h1 {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: var(--sc-text-h2);
+  font-weight: var(--sc-font-weight-semibold);
+  letter-spacing: var(--sc-tracking-h2);
+  line-height: var(--sc-leading-h2);
+}
+
+.lede {
+  margin: var(--sc-space-2) 0 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-body);
+  line-height: var(--sc-leading-body);
+}
+
+.form {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin-top: var(--sc-space-6);
+}
+
+.label {
+  color: var(--sc-color-secondary-foreground);
+  font-size: var(--sc-text-label);
+  font-weight: var(--sc-font-weight-semibold);
+}
+
+.input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--sc-space-3);
+  border: var(--sc-border-width) solid var(--sc-color-input);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-surface);
+  color: var(--sc-color-foreground);
+  font: inherit;
+  transition:
+    border-color var(--sc-duration-micro) var(--sc-ease-standard),
+    box-shadow var(--sc-duration-micro) var(--sc-ease-standard);
+}
+
+.input:focus-visible {
+  border-color: var(--sc-color-ring);
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
+}
+
+.input:disabled {
+  background: var(--sc-color-surface-secondary);
+}
+
+.hint {
+  margin: 0 0 var(--sc-space-2);
+  color: var(--sc-color-muted-foreground);
+  font-size: var(--sc-text-caption);
+}
+
+.error {
+  margin: 0;
+  color: var(--sc-color-danger);
+  font-size: var(--sc-text-label);
+  line-height: var(--sc-leading-label);
+}
+
+.submit {
+  justify-self: start;
+  min-height: 44px;
+  margin-top: var(--sc-space-2);
+  padding: 0 var(--sc-space-5);
+  border: 0;
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-primary);
+  color: var(--sc-color-primary-foreground);
+  cursor: pointer;
+  font-size: var(--sc-text-body);
+  font-weight: var(--sc-font-weight-semibold);
+  transition: background-color var(--sc-duration-micro) var(--sc-ease-standard);
+}
+
+.submit:hover:not(:disabled) {
+  background: var(--sc-color-primary-hover);
+}
+
+.submit:active:not(:disabled) {
+  background: var(--sc-color-primary-active);
+}
+
+.submit:focus-visible {
+  outline: var(--sc-focus-ring-width) solid var(--sc-color-ring);
+  outline-offset: var(--sc-focus-ring-offset);
+}
+
+.submit:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+@media (max-width: 520px) {
+  .card {
+    padding: var(--sc-space-5) var(--sc-space-4);
+  }
+
+  .submit {
+    justify-self: stretch;
+  }
+}

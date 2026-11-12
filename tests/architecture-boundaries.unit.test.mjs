@@ -23,6 +23,7 @@ const requiredServerOnlyModules = [
   "lib/tenant-resource-reader.ts",
   "lib/verified-session-lock.ts",
   "lib/tenant-role-definition-service.ts",
+  "lib/organization-provisioning-service.ts",
 ];
 
 const pureDomainModules = [
@@ -31,6 +32,7 @@ const pureDomainModules = [
   "lib/organization-members-reader-core.ts",
   "lib/tenant-scope-types.ts",
   "lib/http-validation.ts",
+  "lib/organization-provisioning-core.ts",
 ];
 
 const expectedOrganizationRouteServices = new Map([
@@ -65,6 +67,10 @@ const expectedOrganizationRouteServices = new Map([
   [
     "app/api/organizations/[organizationId]/roles/route.ts",
     "lib/tenant-role-definition-service.ts",
+  ],
+  [
+    "app/api/organizations/route.ts",
+    "lib/organization-provisioning-service.ts",
   ],
 ]);
 
