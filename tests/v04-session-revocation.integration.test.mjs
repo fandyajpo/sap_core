@@ -61,11 +61,13 @@ after(async () => {
 });
 
 async function insertSession(id, expiresAt = new Date(Date.now() + 60_000)) {
+  const expiresAtUtc = expiresAt.toISOString().replace("T", " ").replace("Z", "");
+
   await pool.query(
     `INSERT INTO "core"."session"
        ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
      VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
-    [id, expiresAt, randomUUID(), userId],
+    [id, expiresAtUtc, randomUUID(), userId],
   );
 }
 
