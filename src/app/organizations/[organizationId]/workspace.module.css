@@ -1,0 +1,189 @@
+.page { width: min(100%, 1120px); margin: 0 auto; }
+
+.heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 34px;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: var(--sc-color-primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .13em;
+}
+
+.heading h1 {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: clamp(27px, 4vw, 38px);
+  font-weight: 700;
+  letter-spacing: -.045em;
+  line-height: 1.15;
+}
+
+.subtitle {
+  margin: 12px 0 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--sc-color-success-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-success-subtle);
+  color: var(--sc-color-success);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.contextCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  border: 1px solid var(--sc-color-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-surface);
+  box-shadow: var(--sc-shadow-xs);
+}
+
+.contextCard > div { display: grid; gap: 8px; }
+.contextLabel {
+  color: var(--sc-color-muted-foreground);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.contextCard code {
+  color: var(--sc-color-foreground);
+  font-family: var(--sc-font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.contextNote {
+  max-width: 360px;
+  color: var(--sc-color-muted-foreground);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin: 42px 0 16px;
+}
+.sectionHeading h2 {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: 17px;
+  letter-spacing: -.02em;
+}
+.sectionHeading p {
+  margin: 5px 0 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: 12px;
+}
+.sectionHeading > span {
+  color: var(--sc-color-muted-foreground);
+  font-family: var(--sc-font-mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.card {
+  display: flex;
+  min-height: 228px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px;
+  border: 1px solid var(--sc-color-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-surface);
+  box-shadow: var(--sc-shadow-xs);
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.card:hover {
+  transform: translateY(-2px);
+  border-color: var(--sc-color-input);
+  box-shadow: var(--sc-shadow-md);
+}
+.cardNumber {
+  color: var(--sc-color-primary);
+  font-family: var(--sc-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+.card h3 {
+  margin: 0;
+  color: var(--sc-color-foreground);
+  font-size: 17px;
+  letter-spacing: -.025em;
+}
+.card p {
+  margin: 9px 0 0;
+  color: var(--sc-color-muted-foreground);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.card a {
+  color: var(--sc-color-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.card a span { display: inline-block; transition: transform 150ms ease; }
+.card a:hover span { transform: translate(2px, -2px); }
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 34px;
+  padding-top: 18px;
+  border-top: 1px solid var(--sc-color-border);
+  color: var(--sc-color-muted-foreground);
+  font-size: 11px;
+}
+.footer a { color: var(--sc-color-primary); font-weight: 650; }
+
+@media (max-width: 900px) {
+  .cards { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 620px) {
+  .heading { align-items: flex-start; flex-direction: column; }
+  .contextCard { align-items: flex-start; flex-direction: column; }
+  .contextNote { text-align: left; }
+  .cards { grid-template-columns: 1fr; }
+  .card { min-height: 180px; }
+  .footer { align-items: flex-start; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, .card a span { transition: none; }
+}
