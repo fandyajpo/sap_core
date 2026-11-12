@@ -32,6 +32,13 @@ CREATE INDEX "organization_lifecycle_audit_actor_user_id_occurred_at_idx"
 
 ALTER TABLE "core"."organization_lifecycle_audit" ENABLE ROW LEVEL SECURITY;
 
+CREATE POLICY "organization_lifecycle_audit_tenant_read"
+  ON "core"."organization_lifecycle_audit"
+  FOR SELECT
+  USING (
+    "organization_id"::text = NULLIF(current_setting('app.organization_id', true), '')
+  );
+
 CREATE POLICY "organization_lifecycle_audit_bootstrap_insert"
   ON "core"."organization_lifecycle_audit"
   FOR INSERT
