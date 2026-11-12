@@ -168,9 +168,9 @@ test("DENY-eligible permission allowlists stay identical across service, runtime
 
 test("custom-role explicit DENY evidence is persisted through a separate verified-session audit transaction", async () => {
   const [core, adapter, service] = await Promise.all([
-    source("src/lib/role-definition-service.ts"),
     source("src/lib/tenant-role-definition-service-core.ts"),
     source("src/lib/tenant-role-definition-service.ts"),
+    source("src/lib/role-definition-service.ts"),
   ]);
   assert.match(core, /p\."id"::text AS "policyId"/);
   assert.match(core, /actorMembershipId, denyPolicyRows: policyDenyRows/);
