@@ -11,6 +11,49 @@ import type {
 } from "@/lib/role-definition-service";
 import { requireTenantPermission } from "@/lib/tenant-authorization";
 import { TenantTargetContextError } from "@/lib/tenant-target-context-core";
+import { lockVerifiedSessionRow } from "@/lib/verified-session-lock";
+import { resolveTenantTargetContext } from "@/lib/tenant-target-context";
+import type { RoleDefinitionExplicitDenyEvidence } from "@/lib/tenant-role-definition-service-core";
+
+type VerifiedRoleDefinitionSession = {
+  session: { id: string };
+  user: { id: string };
+};
+
+async function recordRoleDefinitionExplicitDeny(
+  session: VerifiedRoleDefinitionSession,
+  evidence: RoleDefinitionExplicitDenyEvidence,
+) {
+  await prisma.$transaction(async (auditTx) => {
+    await lockVerifiedSessionRow(
+      (statement, values = []) => auditTx.$queryRawUnsafe<Array<{ id: string }>>(statement, ...values),
+      { sessionId: session.session.id, userId: session.user.id },
+    );
+    await auditTx.$queryRaw`SELECT set_config('app.user_id', ${session.user.id}, true)`;
+    const context = await resolveTenantTargetContext(auditTx, session, {
+      kind: "ORGANIZATION",
+      organizationId: evidence.organizationId,
+    });
+    await auditTx.$queryRaw`
+      SELECT set_config('app.organization_id', ${context.organizationId}, true),
+        set_config('app.company_id', '', true),
+        set_config('app.plant_id', '', true)
+    `;
+    await auditTx.$executeRaw`
+      INSERT INTO "core"."tenant_deny_audit_event"
+        ("id", "policy_id", "organization_id", "target_membership_id", "target_user_id",
+         "permission_definition_id", "scope", "company_id", "plant_id", "actor_user_id",
+         "event_type", "outcome", "reason_code", "occurred_at")
+      SELECT gen_random_uuid(), ${evidence.policyId}::uuid, ${context.organizationId}::uuid,
+        ${context.organizationMembershipId}::uuid, ${context.userId},
+        pd."id", 'ORGANIZATION'::"core"."RoleScope", NULL, NULL,
+        ${context.userId}, 'POLICY_ENFORCEMENT_DENIED'::"core"."DenyAuditEventType",
+        'DENIED'::"core"."DenyAuditOutcome", 'EXPLICIT_DENY', clock_timestamp()
+      FROM "core"."permission_definition" pd
+      WHERE pd."code" = ${evidence.permission}
+    `;
+  });
+}
 
 async function getVerifiedSession() {
   const session = await getCurrentSession();
@@ -31,6 +74,7 @@ export async function createCustomRoleForCurrentUser(
   return createTenantRoleDefinitionAdapter({
     database,
     getCurrentSession: async () => session,
+    recordExplicitDeny: (evidence) => recordRoleDefinitionExplicitDeny(session, evidence),
   }).createCustomRoleForCurrentUser(input);
 }
 
@@ -45,6 +89,7 @@ export async function reviseCustomRoleForCurrentUser(
   return createTenantRoleDefinitionAdapter({
     database,
     getCurrentSession: async () => session,
+    recordExplicitDeny: (evidence) => recordRoleDefinitionExplicitDeny(session, evidence),
   }).reviseCustomRoleForCurrentUser(input);
 }
 
