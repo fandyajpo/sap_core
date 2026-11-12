@@ -356,30 +356,45 @@ after(async () => {
   // rejects DELETE on all three typed assignment tables, and their parent
   // foreign keys are RESTRICT, so deleting fixture parents is also invalid.
   // This suite therefore leaves its test-owned rows in the disposable
-  // database, which must be discarded after the run. Only the runtime role
-  // created by this suite is cleaned up; it is not part of assignment history.
+  // database, which must be discarded after the run.
   const errors = [];
-  if (ownerConnected) {
-    if (runtimeRoleCreated) {
-      try {
-        // Revoke everything first (including the column-level UPDATE grant on
-        // tenant_deny_policy) so DROP ROLE cannot fail on leftover privileges.
-        await owner.query('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA "core" FROM sap_core_runtime');
-        await owner.query(
-          'REVOKE UPDATE ("revoked_at", "revoked_by_user_id", "revoke_reason") ON "core"."tenant_deny_policy" FROM sap_core_runtime',
-        );
-        await owner.query('REVOKE USAGE ON SCHEMA "core" FROM sap_core_runtime');
-        await owner.query("DROP ROLE sap_core_runtime");
-      } catch (error) {
-        errors.push(error);
-      }
+
+  // Close runtime connections before dropping the role they authenticated as.
+  try {
+    await runtimePool.end();
+  } catch (error) {
+    errors.push(error);
+  }
+
+  if (ownerConnected && runtimeRoleCreated) {
+    try {
+      // Revoke everything first (including the column-level UPDATE grant on
+      // tenant_deny_policy) so DROP ROLE cannot fail on leftover privileges.
+      await owner.query('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA "core" FROM sap_core_runtime');
+      await owner.query(
+        'REVOKE UPDATE ("revoked_at", "revoked_by_user_id", "revoke_reason") ON "core"."tenant_deny_policy" FROM sap_core_runtime',
+      );
+      await owner.query('REVOKE USAGE ON SCHEMA "core" FROM sap_core_runtime');
+      await owner.query("DROP ROLE sap_core_runtime");
+    } catch (error) {
+      errors.push(error);
     }
   }
-  const outcomes = await Promise.allSettled([runtimePool.end(), ownerConnected ? owner.end() : Promise.resolve()]);
-  for (const outcome of outcomes) {
-    if (outcome.status === "rejected") errors.push(outcome.reason);
+
+  if (ownerConnected) {
+    try {
+      await owner.end();
+    } catch (error) {
+      errors.push(error);
+    }
   }
-  if (errors.length) throw new AggregateError(errors, "V04 application adversarial teardown failed; the disposable database must be discarded.");
+
+  if (errors.length) {
+    throw new AggregateError(
+      errors,
+      "V04 application adversarial teardown failed; the disposable database must be discarded.",
+    );
+  }
 });
 
 test("production role-assignment adapter enforces verified-session actor and tenant boundaries on non-owner RLS role", async (t) => {
