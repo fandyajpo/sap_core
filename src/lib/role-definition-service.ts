@@ -63,7 +63,11 @@ export interface RoleDefinitionAuthorization {
     session: ScopedAccessSession,
   ): Promise<void>;
   getDelegablePermissions(
-    input: { actorUserId: string; organizationId: string },
+    input: {
+      actorUserId: string;
+      organizationId: string;
+      requestedPermissions?: readonly AuthorizationPermission[];
+    },
     session: ScopedAccessSession,
   ): Promise<readonly AuthorizationPermission[]>;
   authorizeCreate(input: CustomRoleCreateAuthorization, session: ScopedAccessSession): Promise<boolean>;
