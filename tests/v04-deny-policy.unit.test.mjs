@@ -167,7 +167,8 @@ test("DENY-eligible permission allowlists stay identical across service, runtime
 });
 
 test("custom-role explicit DENY evidence is persisted through a separate verified-session audit transaction", async () => {
-  const [core, adapter] = await Promise.all([
+  const [core, adapter, service] = await Promise.all([
+    source("src/lib/role-definition-service.ts"),
     source("src/lib/tenant-role-definition-service-core.ts"),
     source("src/lib/tenant-role-definition-service.ts"),
   ]);
@@ -178,6 +179,10 @@ test("custom-role explicit DENY evidence is persisted through a separate verifie
   assert.match(core, /permission: "roles\.revise"/);
   assert.match(core, /policyId: policy\?\.policyId \?\? null/);
   assert.equal((core.match(/await recordExplicitDeny\(\{/g) ?? []).length, 3);
+  assert.match(core, /for \\(const permission of new Set\\(input\\.requestedPermissions \\?\\? \\[\\]\\)\\) \\{[\\s\\S]*?await recordExplicitDeny\\(\\{/);
+  assert.match(service, /authorization\\.getDelegablePermissions\\([\\s\\S]*?requestedPermissions: permissions,[\\s\\S]*?\\);\\s*if \\(!isPermissionSubset\\(permissions, delegablePermissions\\)\\) \\{\\s*throw new RoleDefinitionError\\("AUTHORIZATION_DENIED"/);
+  assert.equal((service.match(/requestedPermissions: permissions/g) ?? []).length, 2);
+  assert.doesNotMatch(adapter, /database\\.transaction/);
   assert.match(adapter, /prisma\.\$transaction\(async \(auditTx\)/);
   assert.match(adapter, /lockVerifiedSessionRow/);
   assert.match(adapter, /resolveTenantTargetContext\(auditTx, session/);
