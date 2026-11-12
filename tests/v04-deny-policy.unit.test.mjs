@@ -161,3 +161,23 @@ test("DENY-eligible permission allowlists stay identical across service, runtime
   assert.deepEqual(loaderPermissions, approved);
   assert.deepEqual(databasePermissions, approved);
 });
+
+test("custom-role explicit DENY evidence is persisted through a separate verified-session audit transaction", async () => {
+  const [core, adapter] = await Promise.all([
+    source("src/lib/tenant-role-definition-service-core.ts"),
+    source("src/lib/tenant-role-definition-service.ts"),
+  ]);
+  assert.match(core, /p\."id"::text AS "policyId"/);
+  assert.match(core, /actorMembershipId, denyPolicyRows: policyDenyRows/);
+  assert.match(core, /decision\.reason === "EXPLICIT_DENY"/);
+  assert.match(core, /permission: "roles\.create"/);
+  assert.match(core, /permission: "roles\.revise"/);
+  assert.match(core, /policyId: policy\?\.policyId \?\? null/);
+  assert.equal((core.match(/await recordExplicitDeny\(\{/g) ?? []).length, 2);
+  assert.match(adapter, /prisma\.\$transaction\(async \(auditTx\)/);
+  assert.match(adapter, /lockVerifiedSessionRow/);
+  assert.match(adapter, /resolveTenantTargetContext\(auditTx, session/);
+  assert.match(adapter, /POLICY_ENFORCEMENT_DENIED/);
+  assert.match(adapter, /recordExplicitDeny: \(evidence\) => recordRoleDefinitionExplicitDeny\(session, evidence\)/);
+  assert.match(adapter, /"policy_id"/);
+});
