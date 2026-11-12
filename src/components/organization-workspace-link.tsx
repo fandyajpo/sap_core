@@ -29,10 +29,15 @@ export function OrganizationWorkspaceLink() {
       <div className="workspace-entry-controls">
         <input
           autoComplete="off"
+          aria-describedby={error ? "organization-id-error organization-id-hint" : "organization-id-hint"}
+          aria-invalid={Boolean(error)}
           className="workspace-entry-input"
           id="organization-id"
           name="organizationId"
-          onChange={(event) => setOrganizationId(event.target.value)}
+          onChange={(event) => {
+            setOrganizationId(event.target.value);
+            if (error) setError(null);
+          }}
           placeholder="Paste your organization ID"
           value={organizationId}
         />
@@ -40,9 +45,9 @@ export function OrganizationWorkspaceLink() {
           Open workspace
         </button>
       </div>
-      {error ? <p className="workspace-entry-error" role="alert">{error}</p> : null}
-      <p className="workspace-entry-hint">
-        Access is checked by the server. Knowing an ID does not grant access.
+      {error ? <p className="workspace-entry-error" id="organization-id-error" role="alert">{error}</p> : null}
+      <p className="workspace-entry-hint" id="organization-id-hint">
+        Access is verified by the server. Knowing an ID does not grant access.
       </p>
     </form>
   );

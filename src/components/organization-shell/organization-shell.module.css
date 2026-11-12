@@ -5,6 +5,20 @@
   font-family: var(--sc-font-sans);
 }
 
+.skipLink {
+  position: fixed;
+  z-index: 100;
+  top: 8px;
+  left: 8px;
+  padding: 10px 14px;
+  transform: translateY(-150%);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-foreground);
+  color: var(--sc-color-background);
+  font-size: 13px;
+}
+.skipLink:focus { transform: translateY(0); }
+
 .topbar {
   position: sticky;
   z-index: 20;
@@ -12,25 +26,24 @@
   display: flex;
   min-height: 68px;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 0 clamp(20px, 4vw, 56px);
+  gap: 28px;
+  padding: 0 clamp(18px, 3.5vw, 48px);
   border-bottom: 1px solid var(--sc-color-border);
-  background: color-mix(in srgb, var(--sc-color-surface) 94%, transparent);
+  background: color-mix(in srgb, var(--sc-color-surface) 95%, transparent);
   backdrop-filter: blur(14px);
 }
 
 .brand {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 11px;
   color: var(--sc-color-foreground);
   font-size: 15px;
   font-weight: 750;
-  letter-spacing: -0.02em;
+  letter-spacing: -.02em;
   text-decoration: none;
 }
-
 .brand:hover, .accountLink:hover { text-decoration: none; }
 
 .brandMark {
@@ -38,7 +51,7 @@
   width: 34px;
   height: 34px;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--sc-navy-950);
   color: white;
   font-size: 11px;
@@ -46,12 +59,36 @@
   letter-spacing: .04em;
 }
 
-.topbarActions {
-  display: flex;
-  align-items: center;
-  gap: 22px;
+.workspaceContext {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding-left: 24px;
+  border-left: 1px solid var(--sc-color-border);
+}
+.contextCaption {
+  color: var(--sc-color-muted-foreground);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .11em;
+}
+.contextValue {
+  max-width: min(36vw, 420px);
+  overflow: hidden;
+  color: var(--sc-color-secondary-foreground);
+  font-family: var(--sc-font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.topbarActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 20px;
+  margin-left: auto;
+}
 .accountLink {
   color: var(--sc-color-muted-foreground);
   font-size: 13px;
@@ -60,9 +97,9 @@
 
 .workspace {
   display: grid;
-  width: min(100%, 1600px);
+  width: min(100%, 1680px);
   min-height: calc(100vh - 68px);
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 252px minmax(0, 1fr);
   margin: 0 auto;
 }
 
@@ -71,39 +108,34 @@
   top: 68px;
   display: flex;
   height: calc(100vh - 68px);
+  min-height: 420px;
   flex-direction: column;
   padding: 30px 18px 20px;
   border-right: 1px solid var(--sc-color-border);
   background: var(--sc-color-surface);
 }
-
 .sidebarHeading {
   display: grid;
-  gap: 8px;
+  gap: 9px;
   padding: 0 12px 25px;
 }
-
 .sidebarLabel {
   color: var(--sc-color-muted-foreground);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .12em;
 }
-
 .organizationId {
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--sc-color-foreground);
   font-family: var(--sc-font-mono);
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
 }
-
 .navigation { display: grid; gap: 5px; }
-
 .navLink, .navLinkActive {
   display: flex;
-  min-height: 42px;
+  min-height: 44px;
   align-items: center;
   gap: 12px;
   padding: 0 12px;
@@ -114,34 +146,29 @@
   text-decoration: none;
   transition: background 140ms ease, color 140ms ease;
 }
-
 .navLink:hover {
   background: var(--sc-color-muted);
   color: var(--sc-color-foreground);
   text-decoration: none;
 }
-
 .navLinkActive {
   background: var(--sc-color-info-subtle);
   color: var(--sc-color-primary);
 }
-
 .navLinkActive:hover { text-decoration: none; }
-
 .navIndicator {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
   border: 1.5px solid currentColor;
   border-radius: 3px;
   opacity: .72;
 }
-
 .navLinkActive .navIndicator {
   border: 0;
   background: currentColor;
   opacity: 1;
 }
-
 .sidebarFooter {
   display: flex;
   align-items: flex-start;
@@ -153,7 +180,6 @@
   font-size: 11px;
   line-height: 1.5;
 }
-
 .securityDot {
   width: 7px;
   height: 7px;
@@ -162,44 +188,60 @@
   border-radius: 50%;
   background: var(--sc-color-success);
 }
-
 .main {
   width: 100%;
   min-width: 0;
-  padding: clamp(28px, 4vw, 56px);
+  padding: clamp(28px, 4vw, 58px);
+}
+.main:focus { outline: none; }
+
+:global(a:focus-visible), :global(button:focus-visible), :global(input:focus-visible) {
+  outline: 2px solid var(--sc-color-ring);
+  outline-offset: 3px;
 }
 
-@media (max-width: 760px) {
-  .topbar { min-height: 60px; padding-inline: 16px; }
+@media (max-width: 900px) {
+  .topbar { gap: 18px; }
+  .workspace { grid-template-columns: 218px minmax(0, 1fr); }
+  .main { padding: 30px 24px; }
+}
+@media (max-width: 680px) {
+  .topbar { min-height: 60px; gap: 12px; padding-inline: 14px; }
+  .brand { gap: 8px; font-size: 14px; }
+  .brandMark { width: 31px; height: 31px; }
+  .workspaceContext { display: none; }
+  .topbarActions { gap: 10px; }
+  .accountLink { font-size: 12px; }
   .workspace { display: block; min-height: calc(100vh - 60px); }
   .sidebar {
     position: sticky;
     z-index: 10;
     top: 60px;
     height: auto;
-    padding: 10px 14px;
+    min-height: 0;
+    padding: 9px 12px;
     border-right: 0;
     border-bottom: 1px solid var(--sc-color-border);
   }
   .sidebarHeading, .sidebarFooter { display: none; }
   .navigation {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 5px;
-    overflow-x: auto;
-    scrollbar-width: none;
   }
-  .navigation::-webkit-scrollbar { display: none; }
   .navLink, .navLinkActive {
     min-height: 38px;
-    flex: 0 0 auto;
-    padding-inline: 11px;
-    font-size: 12px;
-    white-space: nowrap;
+    gap: 8px;
+    padding-inline: 10px;
+    font-size: 11px;
   }
-  .main { padding: 28px 18px 44px; }
-  .topbarActions { gap: 12px; }
+  .main { padding: 26px 16px 42px; }
 }
-
+@media (max-width: 360px) {
+  .topbarActions { gap: 7px; }
+  .accountLink { font-size: 11px; }
+  .topbar :global(.secondary-button) { padding-inline: 10px; font-size: 12px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .navLink, .navLinkActive { transition: none; }
 }

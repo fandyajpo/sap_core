@@ -12,23 +12,26 @@ interface OrganizationWorkspacePageProps {
 const sections = [
   {
     title: "Members",
-    description: "Review people in this organization and their membership status.",
+    description: "Review the people who belong to this organization and their membership status.",
+    detail: "PEOPLE & MEMBERSHIP",
     href: (id: string) => `/organizations/${id}/members`,
-    label: "View members",
+    label: "Explore members",
     number: "01",
   },
   {
     title: "Roles",
-    description: "Inspect organization role definitions, scopes, and permissions.",
+    description: "Understand the role definitions available within this organization.",
+    detail: "ACCESS STRUCTURE",
     href: (id: string) => `/organizations/${id}/roles`,
-    label: "Manage roles",
+    label: "Explore roles",
     number: "02",
   },
   {
     title: "Role assignments",
-    description: "Review role grants by member and organizational scope.",
+    description: "Review which roles have been granted and to whom they apply.",
+    detail: "PERMISSIONS & SCOPE",
     href: (id: string) => `/organizations/${id}/role-assignments`,
-    label: "View assignments",
+    label: "Explore assignments",
     number: "03",
   },
 ];
@@ -48,52 +51,69 @@ export default async function OrganizationWorkspacePage({
     );
   });
 
-  const firstName = session.user.name?.trim().split(/\\s+/)[0] || "there";
+  const firstName = session.user.name?.trim().split(/\s+/)[0] || "there";
 
   return (
     <OrganizationShell activeSection="overview" organizationId={organizationId}>
       <div className={styles.page}>
-        <div className={styles.heading}>
+        <header className={styles.heading}>
           <div>
             <p className={styles.eyebrow}>ORGANIZATION WORKSPACE</p>
-            <h1>Good to see you, {firstName}.</h1>
-            <p className={styles.subtitle}>Your organization access and administration, in one place.</p>
+            <h1>Welcome back, {firstName}.</h1>
+            <p className={styles.subtitle}>
+              A central place to review your organization structure and access.
+            </p>
           </div>
-          <span className={styles.status}><span /> Secure workspace</span>
-        </div>
+          <span className={styles.status}>
+            <span className={styles.statusDot} aria-hidden="true" />
+            Protected workspace
+          </span>
+        </header>
 
-        <section className={styles.contextCard} aria-label="Current organization">
-          <div>
-            <span className={styles.contextLabel}>CURRENT ORGANIZATION</span>
-            <code>{organizationId}</code>
+        <section className={styles.contextCard} aria-labelledby="organization-context-title">
+          <div className={styles.contextTopline}>
+            <span className={styles.contextLabel} id="organization-context-title">ACTIVE ORGANIZATION</span>
+            <span className={styles.contextBadge}>SERVER VERIFIED</span>
           </div>
-          <span className={styles.contextNote}>Organization context is verified by the server on each protected request.</span>
+          <code className={styles.organizationId}>{organizationId}</code>
+          <p className={styles.contextNote}>
+            This workspace is opened using your organization identifier. Access to protected
+            areas is checked by the server for each request.
+          </p>
         </section>
 
-        <div className={styles.sectionHeading}>
-          <div>
-            <h2>Workspace</h2>
-            <p>Choose an area to continue.</p>
+        <section className={styles.section} aria-labelledby="workspace-areas-title">
+          <div className={styles.sectionHeading}>
+            <div>
+              <p className={styles.sectionEyebrow}>WORKSPACE DIRECTORY</p>
+              <h2 id="workspace-areas-title">Explore your workspace</h2>
+              <p>Choose an area to review organization structure and access.</p>
+            </div>
+            <span className={styles.sectionCount}>03 AREAS</span>
           </div>
-          <span>03 AREAS</span>
-        </div>
 
-        <div className={styles.cards}>
-          {sections.map((section) => (
-            <article className={styles.card} key={section.number}>
-              <span className={styles.cardNumber}>{section.number}</span>
-              <div>
-                <h3>{section.title}</h3>
-                <p>{section.description}</p>
-              </div>
-              <Link href={section.href(organizationId)}>{section.label}<span aria-hidden="true"> ↗</span></Link>
-            </article>
-          ))}
-        </div>
+          <div className={styles.cards}>
+            {sections.map((section) => (
+              <article className={styles.card} key={section.number}>
+                <div className={styles.cardTopline}>
+                  <span className={styles.cardNumber}>{section.number}</span>
+                  <span className={styles.cardDetail}>{section.detail}</span>
+                </div>
+                <div className={styles.cardBody}>
+                  <h3>{section.title}</h3>
+                  <p>{section.description}</p>
+                </div>
+                <Link className={styles.cardLink} href={section.href(organizationId)}>
+                  {section.label}<span aria-hidden="true">↗</span>
+                </Link>
+              </article>
+            ))}
+          </div>
+        </section>
 
         <footer className={styles.footer}>
           <span>Signed in as {session.user.email}</span>
-          <Link href="/account">Manage account</Link>
+          <Link href="/account">Manage account <span aria-hidden="true">↗</span></Link>
         </footer>
       </div>
     </OrganizationShell>
