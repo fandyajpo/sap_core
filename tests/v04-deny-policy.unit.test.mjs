@@ -177,7 +177,7 @@ test("custom-role explicit DENY evidence is persisted through a separate verifie
   assert.match(core, /permission: "roles\.create"/);
   assert.match(core, /permission: "roles\.revise"/);
   assert.match(core, /policyId: policy\?\.policyId \?\? null/);
-  assert.equal((core.match(/await recordExplicitDeny\(\{/g) ?? []).length, 2);
+  assert.equal((core.match(/await recordExplicitDeny\(\{/g) ?? []).length, 3);
   assert.match(adapter, /prisma\.\$transaction\(async \(auditTx\)/);
   assert.match(adapter, /lockVerifiedSessionRow/);
   assert.match(adapter, /resolveTenantTargetContext\(auditTx, session/);
