@@ -1,0 +1,205 @@
+.shell {
+  min-height: 100vh;
+  background: var(--sc-color-background);
+  color: var(--sc-color-foreground);
+  font-family: var(--sc-font-sans);
+}
+
+.topbar {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 clamp(20px, 4vw, 56px);
+  border-bottom: 1px solid var(--sc-color-border);
+  background: color-mix(in srgb, var(--sc-color-surface) 94%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--sc-color-foreground);
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.brand:hover, .accountLink:hover { text-decoration: none; }
+
+.brandMark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--sc-navy-950);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.topbarActions {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.accountLink {
+  color: var(--sc-color-muted-foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.workspace {
+  display: grid;
+  width: min(100%, 1600px);
+  min-height: calc(100vh - 68px);
+  grid-template-columns: 248px minmax(0, 1fr);
+  margin: 0 auto;
+}
+
+.sidebar {
+  position: sticky;
+  top: 68px;
+  display: flex;
+  height: calc(100vh - 68px);
+  flex-direction: column;
+  padding: 30px 18px 20px;
+  border-right: 1px solid var(--sc-color-border);
+  background: var(--sc-color-surface);
+}
+
+.sidebarHeading {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 25px;
+}
+
+.sidebarLabel {
+  color: var(--sc-color-muted-foreground);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.organizationId {
+  overflow: hidden;
+  color: var(--sc-color-foreground);
+  font-family: var(--sc-font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigation { display: grid; gap: 5px; }
+
+.navLink, .navLinkActive {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-radius: var(--sc-radius-md);
+  color: var(--sc-color-secondary-foreground);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.navLink:hover {
+  background: var(--sc-color-muted);
+  color: var(--sc-color-foreground);
+  text-decoration: none;
+}
+
+.navLinkActive {
+  background: var(--sc-color-info-subtle);
+  color: var(--sc-color-primary);
+}
+
+.navLinkActive:hover { text-decoration: none; }
+
+.navIndicator {
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  opacity: .72;
+}
+
+.navLinkActive .navIndicator {
+  border: 0;
+  background: currentColor;
+  opacity: 1;
+}
+
+.sidebarFooter {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: auto;
+  padding: 14px 12px 0;
+  border-top: 1px solid var(--sc-color-border);
+  color: var(--sc-color-muted-foreground);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.securityDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--sc-color-success);
+}
+
+.main {
+  width: 100%;
+  min-width: 0;
+  padding: clamp(28px, 4vw, 56px);
+}
+
+@media (max-width: 760px) {
+  .topbar { min-height: 60px; padding-inline: 16px; }
+  .workspace { display: block; min-height: calc(100vh - 60px); }
+  .sidebar {
+    position: sticky;
+    z-index: 10;
+    top: 60px;
+    height: auto;
+    padding: 10px 14px;
+    border-right: 0;
+    border-bottom: 1px solid var(--sc-color-border);
+  }
+  .sidebarHeading, .sidebarFooter { display: none; }
+  .navigation {
+    display: flex;
+    gap: 5px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .navigation::-webkit-scrollbar { display: none; }
+  .navLink, .navLinkActive {
+    min-height: 38px;
+    flex: 0 0 auto;
+    padding-inline: 11px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .main { padding: 28px 18px 44px; }
+  .topbarActions { gap: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navLink, .navLinkActive { transition: none; }
+}
