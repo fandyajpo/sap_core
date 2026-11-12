@@ -36,6 +36,8 @@ export function DataTable<TData extends RowData, TValue = unknown>({
   loadingState,
   toolbar,
 }: DataTableProps<TData, TValue>) {
+  "use no memo"; // TanStack Table exposes a mutable table instance that React Compiler cannot safely memoize.
+
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
   const table = useReactTable({
