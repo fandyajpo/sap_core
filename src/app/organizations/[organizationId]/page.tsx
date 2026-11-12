@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { OrganizationShell } from "@/components/organization-shell/organization-shell";
 import { requireCurrentSession } from "@/lib/auth-session";
+import { prisma } from "@/lib/prisma";
+import { requireTenantPermission } from "@/lib/tenant-authorization";
 import styles from "./workspace.module.css";
 
 interface OrganizationWorkspacePageProps {
@@ -37,13 +39,24 @@ export default async function OrganizationWorkspacePage({
   const session = await requireCurrentSession();
   const { organizationId } = await params;
 
+  await prisma.$transaction(async (tx) => {
+    await requireTenantPermission(
+      tx,
+      session,
+      { kind: "ORGANIZATION", organizationId },
+      "organization.read",
+    );
+  });
+
+  const firstName = session.user.name?.trim().split(/\\s+/)[0] || "there";
+
   return (
     <OrganizationShell activeSection="overview" organizationId={organizationId}>
       <div className={styles.page}>
         <div className={styles.heading}>
           <div>
             <p className={styles.eyebrow}>ORGANIZATION WORKSPACE</p>
-            <h1>Good to see you, {session.user.name.split(" ")[0]}.</h1>
+            <h1>Good to see you, {firstName}.</h1>
             <p className={styles.subtitle}>Your organization access and administration, in one place.</p>
           </div>
           <span className={styles.status}><span /> Secure workspace</span>
