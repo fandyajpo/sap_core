@@ -4,8 +4,6 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { lockVerifiedSessionRow } from "@/lib/verified-session-lock";
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export class OrganizationProvisioningError extends Error {
   constructor(readonly code: "INVALID_NAME" | "ALREADY_HAS_ORGANIZATION" | "OWNER_ROLE_UNAVAILABLE") {
     super(code);
