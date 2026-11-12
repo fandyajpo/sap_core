@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OrganizationWorkspaceLink } from "@/components/organization-workspace-link";
 import { SignOutButton } from "@/components/sign-out-button";
 import { requireCurrentSession } from "@/lib/auth-session";
 
@@ -26,6 +27,13 @@ export default async function HomePage() {
           <span className="status-dot" aria-hidden="true" />
           <span>Your identity has been verified for this session.</span>
         </div>
+      </section>
+
+      <section className="workspace-entry-card" aria-labelledby="workspace-entry-title">
+        <p className="eyebrow">YOUR WORKSPACE</p>
+        <h2 id="workspace-entry-title">Open an organization</h2>
+        <p>Enter the organization ID you were given to open its workspace.</p>
+        <OrganizationWorkspaceLink />
       </section>
 
       <aside className="access-notice">
