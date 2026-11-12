@@ -294,7 +294,11 @@ export function createRoleDefinitionService(
 
         const permissions = await requirePermissionSet(session, input.permissions);
         const delegablePermissions = await authorization.getDelegablePermissions(
-          { actorUserId: input.actorUserId, organizationId: input.organizationId },
+          {
+            actorUserId: input.actorUserId,
+            organizationId: input.organizationId,
+            requestedPermissions: permissions,
+          },
           session,
         );
         if (!isPermissionSubset(permissions, delegablePermissions)) {
@@ -410,7 +414,11 @@ export function createRoleDefinitionService(
         const priorPermissions = input.permissions ?? await readPermissionSnapshot(session, source.id);
         const permissions = await requirePermissionSet(session, priorPermissions);
         const delegablePermissions = await authorization.getDelegablePermissions(
-          { actorUserId: input.actorUserId, organizationId: source.ownerOrganizationId },
+          {
+            actorUserId: input.actorUserId,
+            organizationId: source.ownerOrganizationId,
+            requestedPermissions: permissions,
+          },
           session,
         );
         if (!isPermissionSubset(permissions, delegablePermissions)) {
