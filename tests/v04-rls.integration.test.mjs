@@ -38,15 +38,10 @@ const owner = new Client({ connectionString: migrationUrl });
 const runtime = new Client({ connectionString: runtimeUrl });
 let connected = false;
 let runtimeRoleCreated = false;
-// Custom role ids created by seedOwnerFixtures; teardown deletes their grants,
-// audit rows and definitions before anything that references them.
-const customRoleIds = [];
-// User ids actually inserted by this run; teardown deletes exactly these and
-// never any other user.
-const createdUserIds = [];
 
-// Fixture ids are unique per run (prefixed random UUIDs) so teardown deletes
-// only rows created by this run and can never collide with pre-existing rows.
+// Fixture ids are unique per run (prefixed random UUIDs) so this suite can
+// never collide with pre-existing rows. They are deliberately not used to
+// delete anything: see the teardown boundary note at the end of the file.
 const runId = randomUUID();
 const ids = {
   actorA: `v04-rls-${runId}-actor-a`,
@@ -89,7 +84,6 @@ async function seedOwnerFixtures() {
      VALUES ($1,'Actor A',$2,false,NOW(),NOW()),($3,'Member A',$4,false,NOW(),NOW()),($5,'Actor B',$6,false,NOW(),NOW())`,
     [ids.actorA, `v04-rls-${randomUUID()}-a@example.test`, ids.memberA, `v04-rls-${randomUUID()}-m@example.test`, ids.actorB, `v04-rls-${randomUUID()}-b@example.test`],
   );
-  createdUserIds.push(ids.actorA, ids.memberA, ids.actorB);
   await owner.query(
     `INSERT INTO "core"."organization" ("id","updated_at") VALUES ($1,NOW()),($2,NOW())`,
     [ids.orgA, ids.orgB],
@@ -157,7 +151,6 @@ async function seedOwnerFixtures() {
   for (const [ownerOrg, code, actorId] of [[ids.orgB, "CUSTOM_B", ids.actorB]]) {
     const familyId = randomUUID();
     const roleId = randomUUID();
-    customRoleIds.push(roleId);
     await owner.query(
       `INSERT INTO "core"."role_definition"
        ("id","role_family_id","code","version","kind","scope","ownerOrganizationId","created_at","updated_at")
@@ -376,88 +369,29 @@ test("non-owner runtime role enforces tenant RLS, bootstrap, target scoping, and
 });
 
 after(async () => {
-  // Failure-safe teardown: fixture cleanup runs only through the owner
-  // connection, deletes rows in FK-safe order (children before parents),
-  // strictly by the test-generated IDs captured in ids.* and customRoleIds —
-  // never by broad DELETEs — and never touches pre-existing rows (system role
-  // definitions, permission catalog, delegation policies). The runtime role is
-  // dropped only if this suite created it, and only after its test-owned
-  // dependencies are gone. The owner connection closes even when cleanup
-  // fails, and every cleanup error is preserved and rethrown instead of
-  // swallowed.
+  // Teardown boundary: this suite writes append-only governance evidence
+  // (`break_glass_access_audit`, `role_definition_audit`) and role-assignment
+  // history. Database triggers reject DELETE on those tables with SQLSTATE
+  // 55000, and their RESTRICT foreign keys make the parent memberships,
+  // Organizations and Better Auth users undeletable. Removing those rows is
+  // therefore impossible by design and is intentionally not attempted.
+  //
+  // The cleanup boundary is strict disposable-database isolation, enforced by
+  // the guards at the top of this file: explicit per-suite opt-in, loopback
+  // host only, exact port 55437, exact database `sap_core_v04_rls_test`, and
+  // the exact owner/runtime usernames. CI provisions a fresh database per job.
+  //
+  // The runtime role this suite created is revoked and dropped so the role
+  // lifecycle stays repeatable, and every teardown error is preserved and
+  // rethrown instead of swallowed.
   const errors = [];
-  if (connected) {
+  if (connected && runtimeRoleCreated) {
     try {
-      await owner.query(
-        'DELETE FROM "core"."break_glass_access_audit" WHERE "actor_user_id" = ANY($1::text[])',
-        [[ids.actorA, ids.actorB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."role_permission_grant" WHERE "role_definition_id" = ANY($1::uuid[])',
-        [customRoleIds],
-      );
-      await owner.query(
-        'DELETE FROM "core"."role_definition_audit" WHERE "role_definition_id" = ANY($1::uuid[])',
-        [customRoleIds],
-      );
-      await owner.query(
-        'DELETE FROM "core"."role_definition" WHERE "id" = ANY($1::uuid[])',
-        [customRoleIds],
-      );
-      await owner.query(
-        'DELETE FROM "core"."plant_role_assignment" WHERE "plantAssignmentId" = ANY($1::uuid[])',
-        [[ids.plantAssignmentA1, ids.plantAssignmentA2, ids.plantAssignmentB1]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."company_role_assignment" WHERE "companyMembershipId" = ANY($1::uuid[])',
-        [[ids.companyMembershipA1, ids.companyMembershipA2, ids.companyMembershipB1]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."organization_role_assignment" WHERE "organizationMembershipId" = ANY($1::uuid[])',
-        [[ids.orgMembershipA, ids.orgMembershipMemberA, ids.orgMembershipB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."plant_assignment" WHERE "id" = ANY($1::uuid[])',
-        [[ids.plantAssignmentA1, ids.plantAssignmentA2, ids.plantAssignmentB1]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."company_membership" WHERE "id" = ANY($1::uuid[])',
-        [[ids.companyMembershipA1, ids.companyMembershipA2, ids.companyMembershipB1]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."organization_membership" WHERE "id" = ANY($1::uuid[])',
-        [[ids.orgMembershipA, ids.orgMembershipMemberA, ids.orgMembershipB]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."plant" WHERE "id" = ANY($1::uuid[])',
-        [[ids.plantA1, ids.plantA2, ids.plantB1]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."company" WHERE "id" = ANY($1::uuid[])',
-        [[ids.companyA1, ids.companyA2, ids.companyB1]],
-      );
-      await owner.query(
-        'DELETE FROM "core"."organization" WHERE "id" = ANY($1::uuid[])',
-        [[ids.orgA, ids.orgB]],
-      );
-      // Only users this run actually created are deleted.
-      if (createdUserIds.length > 0) {
-        await owner.query(
-          'DELETE FROM "core"."user" WHERE "id" = ANY($1::text[])',
-          [createdUserIds],
-        );
-      }
+      await owner.query('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA "core" FROM sap_core_runtime');
+      await owner.query('REVOKE USAGE ON SCHEMA "core" FROM sap_core_runtime');
+      await owner.query("DROP ROLE sap_core_runtime");
     } catch (error) {
       errors.push(error);
-    }
-    if (runtimeRoleCreated) {
-      try {
-        await owner.query('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA "core" FROM sap_core_runtime');
-        await owner.query('REVOKE USAGE ON SCHEMA "core" FROM sap_core_runtime');
-        await owner.query("DROP ROLE sap_core_runtime");
-      } catch (error) {
-        errors.push(error);
-      }
     }
   }
   const outcomes = await Promise.allSettled(connected ? [owner.end()] : []);

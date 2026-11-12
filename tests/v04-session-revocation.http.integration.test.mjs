@@ -31,7 +31,6 @@ const databaseUrl = process.env.DATABASE_URL;
 const pool = new Pool({ connectionString: databaseUrl, max: 8 });
 const prefix = `v04-session-http-${randomUUID()}-`;
 const actors = [];
-const organizationIds = [];
 let ownerRoleId;
 
 function authRequest(path, { method = "GET", body, cookie } = {}) {
@@ -110,11 +109,11 @@ async function createActor(label, organizationRoleCode = "ORG_OWNER") {
 
   const organizationId = randomUUID();
   const membershipId = randomUUID();
-  // Record the generated IDs before attempting their inserts so teardown can
-  // clean up even when an insert fails partway through.
+  // Record the generated IDs before attempting their inserts so a partially
+  // completed actor setup stays attributable in diagnostics and can still be
+  // signed out.
   actor.organizationId = organizationId;
   actor.membershipId = membershipId;
-  organizationIds.push(organizationId);
   await pool.query(
     'INSERT INTO "core"."organization" ("id", "created_at", "updated_at") VALUES ($1, NOW(), NOW())',
     [organizationId],
@@ -206,16 +205,25 @@ before(async () => {
 });
 
 after(async () => {
-  // Fixture lifecycle: every row this suite creates is parented to IDs captured
-  // below (actors[].userId, actors[].membershipId, organizationIds[]). Teardown
-  // signs each actor out over HTTP, then deletes the suite's rows in FK-safe
-  // order — assignment and membership children before their parents — strictly
-  // by those test-generated IDs. No broad pattern DELETEs; rows the suite did
-  // not create (system role definitions, permission catalog) are never touched.
-  // Actors are tracked the moment signup confirms their user, so a partially
-  // completed actor setup is still signed out and deleted. The pool closes
-  // even when cleanup fails, and every cleanup error is preserved and
-  // rethrown instead of swallowed.
+  // Teardown boundary: this suite creates role-assignment history and
+  // Organization membership rows. `core.organization_role_assignment`,
+  // `core.company_role_assignment` and `core.plant_role_assignment` reject
+  // DELETE through the `protect_role_assignment_history` trigger (SQLSTATE
+  // 55000), and their RESTRICT foreign keys make the parent memberships,
+  // Organizations and Better Auth users undeletable. Removing those rows is
+  // therefore impossible by design and is intentionally not attempted.
+  //
+  // The cleanup boundary is strict disposable-database isolation, enforced by
+  // the guards at the top of this file: explicit per-suite opt-in, loopback
+  // host only, exact port 55432, exact database `sap_core_v03_test`, the exact
+  // username, and every request pinned to `http://127.0.0.1:3000` with
+  // redirects rejected. CI provisions a fresh database per job.
+  //
+  // Teardown signs every tracked actor out (revoking the Better Auth session
+  // without deleting protected history) — actors are tracked the moment signup
+  // confirms the user, so a partially completed setup is still signed out —
+  // then closes the pool. Every teardown error is preserved and rethrown
+  // instead of swallowed.
   const errors = [];
   for (const actor of actors) {
     try {
@@ -225,47 +233,11 @@ after(async () => {
     }
   }
   try {
-    if (organizationIds.length > 0) {
-      await pool.query(
-        `DELETE FROM "core"."organization_role_assignment"
-          WHERE "organizationMembershipId" IN (
-            SELECT "id" FROM "core"."organization_membership" WHERE "organizationId" = ANY($1::uuid[]))`,
-        [organizationIds],
-      );
-      await pool.query(
-        `DELETE FROM "core"."company_role_assignment"
-          WHERE "companyMembershipId" IN (
-            SELECT "id" FROM "core"."company_membership" WHERE "organizationId" = ANY($1::uuid[]))`,
-        [organizationIds],
-      );
-      await pool.query(
-        `DELETE FROM "core"."plant_role_assignment"
-          WHERE "plantAssignmentId" IN (
-            SELECT "id" FROM "core"."plant_assignment" WHERE "organizationId" = ANY($1::uuid[]))`,
-        [organizationIds],
-      );
-      await pool.query('DELETE FROM "core"."plant_assignment" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
-      await pool.query('DELETE FROM "core"."company_membership" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
-      await pool.query('DELETE FROM "core"."plant" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
-      await pool.query('DELETE FROM "core"."company" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
-      await pool.query('DELETE FROM "core"."organization_membership" WHERE "organizationId" = ANY($1::uuid[])', [organizationIds]);
-      await pool.query('DELETE FROM "core"."organization" WHERE "id" = ANY($1::uuid[])', [organizationIds]);
-    }
-    const userIds = actors.map((actor) => actor.userId);
-    if (userIds.length > 0) {
-      await pool.query('DELETE FROM "core"."session" WHERE "userId" = ANY($1::text[])', [userIds]);
-      await pool.query('DELETE FROM "core"."account" WHERE "userId" = ANY($1::text[])', [userIds]);
-      await pool.query('DELETE FROM "core"."user" WHERE "id" = ANY($1::text[])', [userIds]);
-    }
-  } catch (error) {
-    errors.push(error);
-  }
-  try {
     await pool.end();
   } catch (error) {
     errors.push(error);
   }
-  if (errors.length) throw new AggregateError(errors, "V04 session HTTP fixture cleanup failed; the disposable database must be discarded.");
+  if (errors.length) throw new AggregateError(errors, "V04 session HTTP teardown failed; the disposable database must be discarded.");
 });
 
 test("real Better Auth HTTP sign-out waits behind a protected request that acquired the session lock first", async () => {
@@ -398,7 +370,6 @@ test("tenant HTTP routes reject cross-Organization identifiers and spoofed role-
     'INSERT INTO "core"."organization" ("id", "created_at", "updated_at") VALUES ($1, NOW(), NOW())',
     [foreignOrganizationId],
   );
-  organizationIds.push(foreignOrganizationId);
 
   const requests = [
     httpFetch(`${authURL}/api/organizations/${foreignOrganizationId}/members`, {
