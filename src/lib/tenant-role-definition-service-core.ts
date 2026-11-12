@@ -17,9 +17,18 @@ import { TenantTargetContextError } from "./tenant-target-context-core.ts";
 
 type SessionProvider = () => Promise<{ user?: { id?: string | null } | null } | null>;
 
+export interface RoleDefinitionExplicitDenyEvidence {
+  actorUserId: string;
+  actorMembershipId: string;
+  organizationId: string;
+  permission: "roles.create" | "roles.revise";
+  policyId: string | null;
+}
+
 export interface TenantRoleDefinitionAdapterDependencies {
   database: ScopedAccessDatabase;
   getCurrentSession: SessionProvider;
+  recordExplicitDeny?: (evidence: RoleDefinitionExplicitDenyEvidence) => Promise<void>;
 }
 
 interface PersistedOrganizationGrantRow {
@@ -41,7 +50,7 @@ async function loadOrganizationGrantContext(
   session: ScopedAccessSession,
   actorUserId: string,
   organizationId: string,
-): Promise<{ grants: AuthorizationRoleGrant[]; denies: ExplicitPermissionDeny[]; rows: PersistedOrganizationGrantRow[] }> {
+): Promise<{ grants: AuthorizationRoleGrant[]; denies: ExplicitPermissionDeny[]; rows: PersistedOrganizationGrantRow[]; actorMembershipId: string; denyPolicyRows: Array<{ policyId: string; permissionCode: string }> }> {
   // Only Organization-owned custom role definitions are mutable under
   // tenant RLS. Lock those assigned definitions separately; SYSTEM role
   // definitions and permission-grant snapshots are read-only catalogs.
@@ -156,8 +165,8 @@ async function loadOrganizationGrantContext(
   // Dedicated tenant DENY policies must be included here as well as in the
   // general tenant authorization loader. Role create/revise uses this adapter
   // and would otherwise bypass membership-bound DENY policies.
-  const policyDenyRows = await session.query<{ permissionCode: string }>(
-    `SELECT pd."code" AS "permissionCode"
+  const policyDenyRows = await session.query<{ policyId: string; permissionCode: string }>(
+    `SELECT p."id"::text AS "policyId", pd."code" AS "permissionCode"
        FROM "core"."tenant_deny_policy" p
        JOIN "core"."permission_definition" pd
          ON pd."id" = p."permission_definition_id"
@@ -204,10 +213,13 @@ async function loadOrganizationGrantContext(
   const denies: ExplicitPermissionDeny[] = denyPermissions.size
     ? [{ scope: "ORGANIZATION", scopeId: organizationId, permissions: [...denyPermissions] }]
     : [];
-  return { grants, denies, rows };
+  return { grants, denies, rows, actorMembershipId, denyPolicyRows: policyDenyRows };
 }
 
-function createAuthorization(sessionUserId: string) {
+function createAuthorization(
+  sessionUserId: string,
+  recordExplicitDeny?: (evidence: RoleDefinitionExplicitDenyEvidence) => Promise<void>,
+) {
   return {
     async initializeContext(
       input: { actorUserId: string; organizationId: string },
@@ -270,12 +282,23 @@ function createAuthorization(sessionUserId: string) {
       transaction: ScopedAccessSession,
     ): Promise<boolean> {
       const loaded = await loadOrganizationGrantContext(transaction, input.actorUserId, input.organizationId);
-      return evaluateAuthorization({
+      const decision = evaluateAuthorization({
         permission: "roles.create",
         target: { scope: "ORGANIZATION", organizationId: input.organizationId },
         grants: loaded.grants,
         denies: loaded.denies,
-      }).allowed;
+      });
+      if (!decision.allowed && decision.reason === "EXPLICIT_DENY" && recordExplicitDeny) {
+        const policy = loaded.denyPolicyRows.find((row) => row.permissionCode === "roles.create");
+        await recordExplicitDeny({
+          actorUserId: input.actorUserId,
+          actorMembershipId: loaded.actorMembershipId,
+          organizationId: input.organizationId,
+          permission: "roles.create",
+          policyId: policy?.policyId ?? null,
+        });
+      }
+      return decision.allowed;
     },
 
     async authorizeRevise(
@@ -283,12 +306,23 @@ function createAuthorization(sessionUserId: string) {
       transaction: ScopedAccessSession,
     ): Promise<boolean> {
       const loaded = await loadOrganizationGrantContext(transaction, input.actorUserId, input.organizationId);
-      return evaluateAuthorization({
+      const decision = evaluateAuthorization({
         permission: "roles.revise",
         target: { scope: "ORGANIZATION", organizationId: input.organizationId },
         grants: loaded.grants,
         denies: loaded.denies,
-      }).allowed;
+      });
+      if (!decision.allowed && decision.reason === "EXPLICIT_DENY" && recordExplicitDeny) {
+        const policy = loaded.denyPolicyRows.find((row) => row.permissionCode === "roles.revise");
+        await recordExplicitDeny({
+          actorUserId: input.actorUserId,
+          actorMembershipId: loaded.actorMembershipId,
+          organizationId: input.organizationId,
+          permission: "roles.revise",
+          policyId: policy?.policyId ?? null,
+        });
+      }
+      return decision.allowed;
     },
   };
 }
@@ -297,6 +331,7 @@ function createAuthorization(sessionUserId: string) {
 export function createTenantRoleDefinitionAdapter({
   database,
   getCurrentSession,
+  recordExplicitDeny,
 }: TenantRoleDefinitionAdapterDependencies) {
   async function getVerifiedActor(): Promise<string> {
     const session = await getCurrentSession();
@@ -311,7 +346,7 @@ export function createTenantRoleDefinitionAdapter({
       input: Omit<CustomRoleCreateInput, "actorUserId">,
     ): Promise<RoleDefinitionRecord> {
       const actorUserId = await getVerifiedActor();
-      return createRoleDefinitionService(database, createAuthorization(actorUserId))
+      return createRoleDefinitionService(database, createAuthorization(actorUserId, recordExplicitDeny))
         .createCustomRole({ ...input, actorUserId });
     },
 
