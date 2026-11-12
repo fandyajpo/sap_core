@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { OrganizationWorkspaceLink } from "@/components/organization-workspace-link";
+import { CreateOrganizationForm } from "@/components/create-organization-form";
 import { SignOutButton } from "@/components/sign-out-button";
 import { requireCurrentSession } from "@/lib/auth-session";
 import styles from "./home.module.css";
@@ -40,12 +41,16 @@ export default async function HomePage() {
           <div className={styles.entryHeading}>
             <div>
               <p className={styles.eyebrow}>GET STARTED</p>
-              <h2 id="workspace-entry-title">Open an organization</h2>
-              <p>Use the organization ID shared with you to continue.</p>
+              <h2 id="workspace-entry-title">Create your organization</h2>
+              <p>Set up your organization and become its initial owner.</p>
             </div>
             <span className={styles.entryMark} aria-hidden="true">↗</span>
           </div>
-          <OrganizationWorkspaceLink />
+          <CreateOrganizationForm />
+          <div className={styles.existingOrganization}>
+            <p>Already have an organization?</p>
+            <OrganizationWorkspaceLink />
+          </div>
         </section>
 
         <aside className={styles.securityNote}>
