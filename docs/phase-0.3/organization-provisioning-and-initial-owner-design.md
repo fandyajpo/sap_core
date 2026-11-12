@@ -160,14 +160,19 @@ Failed attempts are rolled back with the transaction, so they should be handled 
 
 ## 8. Organization profile/name decision
 
-The current `core.organization` model has no `name`, `slug`, or display-name field. The onboarding UI must not pretend that an Organization name is persisted when it is not.
+**Owner decision (2026-11-12): Named Organization onboarding is approved as the product direction.** Initial onboarding must collect and persist an Organization name; an ID-only Organization is not the intended user experience.
 
-Before implementation, choose one of these explicit product decisions:
+The current `core.organization` model has no `name`, `slug`, or display-name field. The following is the proposed schema contract for a separately reviewed schema increment:
 
-1. **Minimal bootstrap:** create an ID-only Organization now and defer display/profile metadata to a separately scoped schema and UI change.
-2. **Named Organization:** approve the Organization profile fields, uniqueness/normalization rules, validation, and migration as part of a dedicated schema increment before building a name-entry onboarding form.
+- Add `name` to `core.organization` as a required display name.
+- Proposed Prisma representation: `name String @db.VarChar(160)`.
+- Validate after trimming: the value must not be empty and must not exceed 160 characters.
+- Preserve the user's display casing; trimming is for boundary whitespace, not automatic title-casing.
+- Do not require Organization names to be globally unique. Distinct Organizations may legitimately use the same display name.
+- Do not add a slug in this increment. A stable public identifier or slug requires a separate product and uniqueness decision.
+- Existing Organization rows must receive an explicit migration backfill/default strategy before the column becomes NOT NULL. Do not invent names from UUIDs or silently use placeholder names.
 
-Do not silently add a name field to the existing model or migration.
+The product direction is approved, but the exact migration/backfill strategy and schema implementation still require review. The onboarding UI must not ship until the name is actually persisted.
 
 ## 9. API and UI boundary
 
@@ -224,7 +229,7 @@ This proposal does not authorize or implement:
 - a general-purpose tenant-context setter;
 - changes to existing RLS policies;
 - changes to Better Auth identity/session schema;
-- Organization name/slug schema changes;
+- Organization name/slug schema changes (the Named Organization direction is approved, but schema implementation is not);
 - migration generation or application;
 - seed changes;
 - hosted database access, role provisioning, or deployment;
