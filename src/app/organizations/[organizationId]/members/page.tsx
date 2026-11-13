@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { OrganizationMembersView } from "@/components/organization-members/organization-members-view";
-import { SignOutButton } from "@/components/sign-out-button";
+import { OrganizationShell } from "@/components/organization-shell/organization-shell";
 import { requireCurrentSession } from "@/lib/auth-session";
 
 interface OrganizationMembersPageProps {
@@ -14,19 +13,8 @@ export default async function OrganizationMembersPage({
   const { organizationId } = await params;
 
   return (
-    <main className="app-page">
-      <header className="app-header">
-        <div className="brand-lockup">
-          <span aria-hidden="true" className="brand-mark">SC</span>
-          <span className="brand-name">SAP Core</span>
-        </div>
-        <nav aria-label="Primary navigation">
-          <Link href="/">Home</Link>
-          <Link href="/account">Account</Link>
-        </nav>
-        <SignOutButton />
-      </header>
+    <OrganizationShell activeSection="members" organizationId={organizationId}>
       <OrganizationMembersView organizationId={organizationId} />
-    </main>
+    </OrganizationShell>
   );
 }

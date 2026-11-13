@@ -38,6 +38,9 @@ export function DataTable<TData extends RowData, TValue = unknown>({
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
+  // TanStack Table intentionally exposes a mutable table instance; React Compiler already skips unsafe memoization here.
+  // Keep this exception local rather than disabling the rule for the whole project.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     columns,
     data,

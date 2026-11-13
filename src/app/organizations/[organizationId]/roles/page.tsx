@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { OrganizationRolesView } from "@/components/organization-roles/organization-roles-view";
-import { SignOutButton } from "@/components/sign-out-button";
+import { OrganizationShell } from "@/components/organization-shell/organization-shell";
 import { requireCurrentSession } from "@/lib/auth-session";
 
 interface OrganizationRolesPageProps {
@@ -14,19 +13,8 @@ export default async function OrganizationRolesPage({
   const { organizationId } = await params;
 
   return (
-    <main className="app-page">
-      <header className="app-header">
-        <div className="brand-lockup">
-          <span aria-hidden="true" className="brand-mark">SC</span>
-          <span className="brand-name">SAP Core</span>
-        </div>
-        <nav aria-label="Primary navigation">
-          <Link href="/">Home</Link>
-          <Link href="/account">Account</Link>
-        </nav>
-        <SignOutButton />
-      </header>
+    <OrganizationShell activeSection="roles" organizationId={organizationId}>
       <OrganizationRolesView organizationId={organizationId} />
-    </main>
+    </OrganizationShell>
   );
 }

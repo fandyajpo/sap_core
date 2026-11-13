@@ -93,6 +93,7 @@ model User {
   issuedTenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyIssuer")
   revokedTenantDenyPolicies TenantDenyPolicy[] @relation("TenantDenyPolicyRevoker")
   tenantDenyAuditEvents TenantDenyAuditEvent[] @relation("TenantDenyAuditActor")
+  organizationLifecycleEvents OrganizationLifecycleAudit[]
 
   @@unique([email])
   @@map("user")
@@ -152,10 +153,12 @@ model Verification {
 
 model Organization {
   id          String                   @id @default(uuid()) @db.Uuid
+  name        String?                  @db.VarChar(160)
   createdAt   DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
   companies   Company[]
   memberships OrganizationMembership[]
+  lifecycleAudits OrganizationLifecycleAudit[]
 
   @@map("organization")
   @@schema("core")
@@ -512,5 +515,22 @@ model TenantDenyAuditEvent {
   @@index([policyId, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("tenant_deny_audit_event")
+  @@schema("core")
+}
+
+
+model OrganizationLifecycleAudit {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  actorUserId    String       @map("actor_user_id")
+  eventType      String       @map("event_type") @db.VarChar(64)
+  outcome        String       @db.VarChar(16)
+  occurredAt     DateTime     @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor          User         @relation(fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([organizationId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("organization_lifecycle_audit")
   @@schema("core")
 }
