@@ -44,6 +44,9 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
+      if (error.code === "MEMBERSHIP_REQUIRES_RECOVERY") {
+        return NextResponse.json({ error: error.code }, { status: 409 });
+      }
       return NextResponse.json({ error: error.code }, { status: 503 });
     }
     return NextResponse.json({ error: "PROVISIONING_FAILED" }, { status: 500 });
