@@ -3,10 +3,14 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { lockVerifiedSessionRow } from "@/lib/verified-session-lock";
+import {
+  isOrganizationMembershipSlotConflict,
+  type OrganizationProvisioningErrorCode,
+} from "@/lib/organization-provisioning-errors-core";
 
 export class OrganizationProvisioningError extends Error {
   constructor(
-    readonly code: "INVALID_NAME" | "ALREADY_HAS_ORGANIZATION" | "OWNER_ROLE_UNAVAILABLE",
+    readonly code: OrganizationProvisioningErrorCode,
     readonly organizationId?: string,
   ) {
     super(code);
@@ -14,31 +18,6 @@ export class OrganizationProvisioningError extends Error {
   }
 }
 
-function isOrganizationMembershipSlotConflict(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-
-  const candidate = error as {
-    code?: unknown;
-    constraint?: unknown;
-    meta?: { code?: unknown; constraint?: unknown; message?: unknown };
-  };
-
-  if (
-    candidate.constraint === "organization_membership_user_slot_key" ||
-    candidate.meta?.constraint === "organization_membership_user_slot_key"
-  ) {
-    return true;
-  }
-
-  // Prisma wraps PostgreSQL raw-query errors as P2010. Only translate the
-  // exact membership-slot violation; unrelated unique violations stay errors.
-  return (
-    candidate.code === "P2010" &&
-    candidate.meta?.code === "23505" &&
-    typeof candidate.meta.message === "string" &&
-    /organization_membership_user_slot_key/.test(candidate.meta.message)
-  );
-}
 
 export async function provisionInitialOrganization(input: {
   sessionId: string;
@@ -166,7 +145,7 @@ export async function provisionInitialOrganization(input: {
   } catch (error) {
     if (error instanceof OrganizationProvisioningError) throw error;
     if (isOrganizationMembershipSlotConflict(error)) {
-      throw new OrganizationProvisioningError("ALREADY_HAS_ORGANIZATION");
+      throw new OrganizationProvisioningError("MEMBERSHIP_REQUIRES_RECOVERY");
     }
     throw error;
   }
