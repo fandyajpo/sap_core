@@ -42,6 +42,11 @@ export function CreateOrganizationForm() {
         return;
       }
 
+      if (response.status === 409 && result.error === "MEMBERSHIP_REQUIRES_RECOVERY") {
+        setError("An existing organization membership is blocking workspace creation, but its workspace cannot be identified automatically. Contact your organization administrator or support to restore access.");
+        return;
+      }
+
       if (!response.ok || !result.organization?.id) {
         setError(result.error === "OWNER_ROLE_UNAVAILABLE"
           ? "Organization setup is temporarily unavailable. Please try again later."
